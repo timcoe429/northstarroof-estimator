@@ -76,6 +76,9 @@ export default function RoofScopeEstimator() {
   });
   const [showFinancials, setShowFinancials] = useState(false);
 
+  // Track uploaded image types
+  const [uploadedImages, setUploadedImages] = useState<Set<string>>(new Set());
+
   // Save financial settings
   useEffect(() => {
     localStorage.setItem('roofscope_margin', marginPercent.toString());
@@ -109,7 +112,8 @@ export default function RoofScopeEstimator() {
 
           if (showPrices) {
             extractPricesFromImage(file);
-          } else if (step === 'upload') {
+          } else if (step === 'upload' || step === 'extracted') {
+            // Allow pasting in 'extracted' step to add analysis image
             extractFromImage(file);
           }
           break;
@@ -119,7 +123,7 @@ export default function RoofScopeEstimator() {
 
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  }, [showPrices, step]);
+  }, [showPrices, step, measurements, uploadedImages]);
 
   // Extract prices from screenshot using Claude vision
   const extractPricesFromImage = async (file: File) => {
@@ -202,15 +206,35 @@ Extract EVERY line item you can see. Return only the JSON array, no other text.`
     setPriceSheetProcessing(false);
   };
 
-  // Extract roof measurements from image
-  const extractFromImage = async (file: File) => {
+  // Merge measurements intelligently
+  const mergeMeasurements = (existing: Measurements, newData: Partial<Measurements>): Measurements => {
+    return {
+      ...existing,
+      ...newData,
+      // Preserve existing values unless new ones are provided (handle undefined/null)
+      steep_squares: newData.steep_squares !== undefined && newData.steep_squares !== null 
+        ? newData.steep_squares 
+        : (existing.steep_squares ?? undefined),
+      standard_squares: newData.standard_squares !== undefined && newData.standard_squares !== null 
+        ? newData.standard_squares 
+        : (existing.standard_squares ?? undefined),
+      flat_squares: newData.flat_squares !== undefined && newData.flat_squares !== null 
+        ? newData.flat_squares 
+        : (existing.flat_squares ?? undefined),
+    };
+  };
+
+  // Extract roof measurements from summary image (basic measurements)
+  const extractSummaryImage = async (file: File) => {
     setIsProcessing(true);
 
     try {
       const base64 = await fileToBase64(file);
       const dataUrl = `data:${file.type || 'image/png'};base64,${base64}`;
 
-      const prompt = `You are extracting roof measurements from a RoofScope or EagleView report.
+      const prompt = `You are extracting roof measurements from a RoofScope or EagleView SUMMARY page.
+
+This is the main summary page that shows overall measurements. Extract:
 
 MEASUREMENTS TO EXTRACT:
 - total_squares: Total roof area in squares
@@ -223,26 +247,12 @@ MEASUREMENTS TO EXTRACT:
 - penetrations: Number of pipe penetrations
 - skylights: Number of skylights
 - chimneys: Number of chimneys
-
-SLOPE BREAKDOWN (if visible):
-- steep_squares: Area with pitch 8/12 or steeper
-- standard_squares: Area with pitch below 8/12
-- flat_squares: Flat or near-flat areas
-
-Look for a 'Totals (SQ)' section or slope summary that breaks down:
-- Steep vs Standard vs Low/Flat areas
-- This helps determine which H&R products to use (High Slope vs Regular)
-
-If you see a Roof Area Analysis with individual planes listed, sum up:
-- All planes marked 'S' (Steep) or with pitch >= 8:12 → steep_squares
-- All other sloped planes → standard_squares
-- Flat areas → flat_squares
+- complexity: Simple, Moderate, or Complex
 
 ROOFING KNOWLEDGE:
 - 1 square = 100 sq ft of roof area
 - Starter is used along eaves and rakes
 - H&R (Hip & Ridge) covers the hips and ridges
-- High slope products are required for 8/12 pitch and above for safety/warranty
 - Valleys need valley metal or ice & water shield
 - Penetrations need pipe boots/flashings
 - Labor is priced per square, varies by pitch difficulty
@@ -259,13 +269,10 @@ Return ONLY a JSON object:
   "penetrations": <count of vents/pipes>,
   "skylights": <count>,
   "chimneys": <count>,
-  "complexity": "<Simple|Moderate|Complex>",
-  "steep_squares": <number or null if not visible>,
-  "standard_squares": <number or null if not visible>,
-  "flat_squares": <number or null if not visible>
+  "complexity": "<Simple|Moderate|Complex>"
 }
 
-Use 0 for any values not visible. Use null for slope breakdown fields if not visible. Return only JSON.`;
+Use 0 for any values not visible. Return only JSON.`;
 
       const response = await fetch('/api/extract', {
         method: 'POST',
@@ -287,18 +294,126 @@ Use 0 for any values not visible. Use null for slope breakdown fields if not vis
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const extracted = JSON.parse(jsonMatch[0]);
-        setMeasurements({ ...extracted, fileName: file.name || 'Pasted image' });
-        initializeEstimateItems(extracted);
-        setStep('extracted');
+        const newMeasurements = { ...extracted, fileName: file.name || 'Pasted image' };
+        
+        if (measurements) {
+          // Merge with existing measurements
+          const merged = mergeMeasurements(measurements, newMeasurements);
+          setMeasurements(merged);
+        } else {
+          // Set initial measurements
+          setMeasurements(newMeasurements);
+          initializeEstimateItems(newMeasurements);
+          setStep('extracted');
+        }
+        
+        setUploadedImages(prev => new Set(Array.from(prev).concat('summary')));
       } else {
         throw new Error('Could not parse measurements');
       }
     } catch (error) {
       console.error('Extraction error:', error);
-      alert('Error extracting measurements. Please try a clearer image.');
+      alert('Error extracting measurements. Please try again.');
     }
 
     setIsProcessing(false);
+  };
+
+  // Extract slope breakdown from Roof Area Analysis image
+  const extractAnalysisImage = async (file: File) => {
+    setIsProcessing(true);
+
+    try {
+      const base64 = await fileToBase64(file);
+      const dataUrl = `data:${file.type || 'image/png'};base64,${base64}`;
+
+      const prompt = `You are extracting SLOPE BREAKDOWN from a RoofScope or EagleView ROOF AREA ANALYSIS page.
+
+This page shows individual roof planes with their slopes. Extract ONLY the slope breakdown:
+
+SLOPE BREAKDOWN TO EXTRACT:
+- steep_squares: Area with pitch 8/12 or steeper
+- standard_squares: Area with pitch below 8/12
+- flat_squares: Flat or near-flat areas
+
+Look for a 'Totals (SQ)' section or slope summary that breaks down:
+- Steep vs Standard vs Low/Flat areas
+- This helps determine which H&R products to use (High Slope vs Regular)
+
+If you see a Roof Area Analysis with individual planes listed, sum up:
+- All planes marked 'S' (Steep) or with pitch >= 8:12 → steep_squares
+- All other sloped planes → standard_squares
+- Flat areas → flat_squares
+
+ROOFING KNOWLEDGE:
+- 1 square = 100 sq ft of roof area
+- High slope products are required for 8/12 pitch and above for safety/warranty
+- Regular H&R is for standard pitches (below 8/12)
+
+Return ONLY a JSON object with slope breakdown:
+{
+  "steep_squares": <number>,
+  "standard_squares": <number>,
+  "flat_squares": <number>
+}
+
+Use null for any values not visible. Return only JSON.`;
+
+      const response = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: dataUrl,
+          prompt,
+          max_tokens: 1000,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to extract slope breakdown');
+      }
+
+      const data = await response.json();
+      const text = data.content?.[0]?.text || '';
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const extracted = JSON.parse(jsonMatch[0]);
+        
+        if (measurements) {
+          // Merge slope breakdown with existing measurements
+          const merged = mergeMeasurements(measurements, extracted);
+          setMeasurements(merged);
+          // Re-initialize estimate items with updated measurements
+          initializeEstimateItems(merged);
+        } else {
+          // If no existing measurements, this shouldn't happen but handle gracefully
+          alert('Please upload the RoofScope Summary first, then the Roof Area Analysis.');
+          setIsProcessing(false);
+          return;
+        }
+        
+        setUploadedImages(prev => new Set(Array.from(prev).concat('analysis')));
+      } else {
+        throw new Error('Could not parse slope breakdown');
+      }
+    } catch (error) {
+      console.error('Extraction error:', error);
+      alert('Error extracting slope breakdown. Please try again.');
+    }
+
+    setIsProcessing(false);
+  };
+
+  // Extract roof measurements from image (routes to appropriate extractor based on context)
+  const extractFromImage = async (file: File) => {
+    // If measurements already exist and summary has been uploaded, assume this is an analysis image
+    // Otherwise, assume it's a summary image
+    if (measurements && uploadedImages.has('summary') && !uploadedImages.has('analysis')) {
+      await extractAnalysisImage(file);
+    } else {
+      await extractSummaryImage(file);
+    }
   };
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -507,6 +622,7 @@ Use 0 for any values not visible. Use null for slope breakdown fields if not vis
     setItemQuantities({});
     setStep('upload');
     setCustomerInfo({ name: '', address: '', phone: '' });
+    setUploadedImages(new Set());
   };
 
   const formatCurrency = (amount) => {
@@ -888,11 +1004,38 @@ Use 0 for any values not visible. Use null for slope breakdown fields if not vis
             {/* Measurements Summary */}
             <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900">Roof Measurements</h2>
+                <div className="flex items-center gap-3">
+                  <h2 className="font-semibold text-gray-900">Roof Measurements</h2>
+                  {/* Upload indicators */}
+                  <div className="flex items-center gap-2">
+                    {uploadedImages.has('summary') && (
+                      <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                        <Check className="w-3 h-3" />
+                        RoofScope Summary
+                      </span>
+                    )}
+                    {uploadedImages.has('analysis') && (
+                      <span className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                        <Check className="w-3 h-3" />
+                        Roof Area Analysis
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <button onClick={resetEstimator} className="text-xs md:text-sm text-gray-500 hover:text-gray-700">
                   Upload Different
                 </button>
               </div>
+
+              {/* Hint for additional image */}
+              {uploadedImages.has('summary') && !uploadedImages.has('analysis') && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-700 flex items-center gap-2">
+                    <Upload className="w-4 h-4" />
+                    <span>Paste your <strong>Roof Area Analysis</strong> image to extract slope breakdown (steep vs standard squares)</span>
+                  </p>
+                </div>
+              )}
 
               {/* Customer Info */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mb-4 md:mb-6 p-3 md:p-4 bg-gray-50 rounded-xl">
