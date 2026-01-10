@@ -12,6 +12,9 @@ export interface Measurements {
   skylights: number;
   chimneys: number;
   complexity: string;
+  steep_squares?: number | null;
+  standard_squares?: number | null;
+  flat_squares?: number | null;
   fileName?: string;
 }
 

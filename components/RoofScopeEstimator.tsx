@@ -129,12 +129,36 @@ export default function RoofScopeEstimator() {
       const base64 = await fileToBase64(file);
       const dataUrl = `data:${file.type || 'image/png'};base64,${base64}`;
 
-      const prompt = `Extract ALL pricing items from this roofing price sheet. For each item, determine:
-1. The item name exactly as shown
-2. The unit type (sq, bundle, roll, lf, each, pail, box, tube, sheet, or flat)
-3. The price
-4. Coverage if applicable (e.g., "14.3 sq ft per bundle", "200 sq ft per roll", "10 linear feet")
-5. Category: "materials" (tiles, shingles, underlayment, flashing, valleys, etc.), "labor" (crew names, installation labor), "equipment" (rolloff, porto potty, fuel, delivery), or "accessories" (boots, vents, snow guards, sealants, nails, caps)
+      const prompt = `You are extracting pricing from a roofing contractor's price sheet.
+
+PRODUCT LINE RULES:
+- Brava and DaVinci are DIFFERENT product lines (never mix them on same job)
+- Brava products: Field Tile, Starter, H&R, H&R High Slope, Solids
+- DaVinci products: Multi-Width Shake, Starter, H&R Hinged
+- H&R High Slope / Hinged variants are for steep pitches (8/12 and above)
+- Regular H&R is for standard pitches (below 8/12)
+
+LABOR RULES:
+- Crew names (Hugo, Alfredo, Chris, Sergio) are labor options
+- Only ONE crew works a job - they are alternatives, not additions
+- Different prices for different pitch difficulties (12/12 pitch, lower pitch, standard)
+
+CATEGORIES:
+- materials: Tiles, shingles, underlayment, flashing, valleys, ice & water
+- labor: Crew names with per-square rates
+- equipment: Rolloff, porto potty, fuel charges, rentals
+- accessories: Boots, vents, snow guards, sealants, caulk, caps
+
+ROOFING KNOWLEDGE:
+- 1 square = 100 sq ft of roof area
+- Starter is used along eaves and rakes
+- H&R (Hip & Ridge) covers the hips and ridges
+- High slope products are required for 8/12 pitch and above for safety/warranty
+- Valleys need valley metal or ice & water shield
+- Penetrations need pipe boots/flashings
+- Labor is priced per square, varies by pitch difficulty
+
+Extract each item with: name, category, unit, price, and if it has coverage info.
 
 Return ONLY a JSON array like this:
 [
@@ -186,8 +210,44 @@ Extract EVERY line item you can see. Return only the JSON array, no other text.`
       const base64 = await fileToBase64(file);
       const dataUrl = `data:${file.type || 'image/png'};base64,${base64}`;
 
-      const prompt = `Extract roof measurements from this RoofScope, EagleView, or similar roof report. Return ONLY a JSON object:
+      const prompt = `You are extracting roof measurements from a RoofScope or EagleView report.
 
+MEASUREMENTS TO EXTRACT:
+- total_squares: Total roof area in squares
+- predominant_pitch: Main roof pitch (e.g., '10/12')
+- ridge_length: Total ridge in linear feet
+- hip_length: Total hips in linear feet
+- valley_length: Total valleys in linear feet
+- eave_length: Total eaves in linear feet
+- rake_length: Total rakes in linear feet
+- penetrations: Number of pipe penetrations
+- skylights: Number of skylights
+- chimneys: Number of chimneys
+
+SLOPE BREAKDOWN (if visible):
+- steep_squares: Area with pitch 8/12 or steeper
+- standard_squares: Area with pitch below 8/12
+- flat_squares: Flat or near-flat areas
+
+Look for a 'Totals (SQ)' section or slope summary that breaks down:
+- Steep vs Standard vs Low/Flat areas
+- This helps determine which H&R products to use (High Slope vs Regular)
+
+If you see a Roof Area Analysis with individual planes listed, sum up:
+- All planes marked 'S' (Steep) or with pitch >= 8:12 → steep_squares
+- All other sloped planes → standard_squares
+- Flat areas → flat_squares
+
+ROOFING KNOWLEDGE:
+- 1 square = 100 sq ft of roof area
+- Starter is used along eaves and rakes
+- H&R (Hip & Ridge) covers the hips and ridges
+- High slope products are required for 8/12 pitch and above for safety/warranty
+- Valleys need valley metal or ice & water shield
+- Penetrations need pipe boots/flashings
+- Labor is priced per square, varies by pitch difficulty
+
+Return ONLY a JSON object:
 {
   "total_squares": <number>,
   "predominant_pitch": "<string like 6/12>",
@@ -199,10 +259,13 @@ Extract EVERY line item you can see. Return only the JSON array, no other text.`
   "penetrations": <count of vents/pipes>,
   "skylights": <count>,
   "chimneys": <count>,
-  "complexity": "<Simple|Moderate|Complex>"
+  "complexity": "<Simple|Moderate|Complex>",
+  "steep_squares": <number or null if not visible>,
+  "standard_squares": <number or null if not visible>,
+  "flat_squares": <number or null if not visible>
 }
 
-Use 0 for any values not visible. Return only JSON.`;
+Use 0 for any values not visible. Use null for slope breakdown fields if not visible. Return only JSON.`;
 
       const response = await fetch('/api/extract', {
         method: 'POST',
