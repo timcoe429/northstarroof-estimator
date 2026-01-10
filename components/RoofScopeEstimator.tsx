@@ -161,23 +161,45 @@ export default function RoofScopeEstimator() {
             qty = m.total_squares || 0;
           }
         } else if (unitType.calcType === 'linear') {
-          // Linear-based items
-          if (name.includes('valley')) {
-            qty = m.valley_length || 0;
-          } else if (name.includes('eave') || name.includes('drip')) {
-            qty = m.eave_length || 0;
-          } else if (name.includes('rake')) {
-            qty = m.rake_length || 0;
-          } else if (name.includes('ridge')) {
-            qty = m.ridge_length || 0;
-          } else if (name.includes('hip')) {
-            qty = m.hip_length || 0;
-          } else if (name.includes('h&r')) {
-            // H&R covers both ridge and hip
-            qty = (m.ridge_length || 0) + (m.hip_length || 0);
+          // Linear-based items - use coverage if available
+          if (item.coverage && item.coverageUnit === 'lf') {
+            // Coverage-based calculation
+            if (name.includes('valley')) {
+              qty = Math.ceil((m.valley_length || 0) / item.coverage);
+            } else if (name.includes('eave') || name.includes('drip')) {
+              qty = Math.ceil((m.eave_length || 0) / item.coverage);
+            } else if (name.includes('rake')) {
+              qty = Math.ceil((m.rake_length || 0) / item.coverage);
+            } else if (name.includes('ridge')) {
+              qty = Math.ceil((m.ridge_length || 0) / item.coverage);
+            } else if (name.includes('hip')) {
+              qty = Math.ceil((m.hip_length || 0) / item.coverage);
+            } else if (name.includes('h&r')) {
+              // H&R covers both ridge and hip
+              qty = Math.ceil(((m.ridge_length || 0) + (m.hip_length || 0)) / item.coverage);
+            } else {
+              // Default linear: use eave_length
+              qty = Math.ceil((m.eave_length || 0) / item.coverage);
+            }
           } else {
-            // Default linear: use coverage if provided, otherwise 0
-            qty = item.coverage ? Math.ceil((m.eave_length || 0) / item.coverage) : 0;
+            // No coverage - use direct measurements
+            if (name.includes('valley')) {
+              qty = m.valley_length || 0;
+            } else if (name.includes('eave') || name.includes('drip')) {
+              qty = m.eave_length || 0;
+            } else if (name.includes('rake')) {
+              qty = m.rake_length || 0;
+            } else if (name.includes('ridge')) {
+              qty = m.ridge_length || 0;
+            } else if (name.includes('hip')) {
+              qty = m.hip_length || 0;
+            } else if (name.includes('h&r')) {
+              // H&R covers both ridge and hip
+              qty = (m.ridge_length || 0) + (m.hip_length || 0);
+            } else {
+              // Default linear: 0 if no match
+              qty = 0;
+            }
           }
         } else if (unitType.calcType === 'count') {
           // Count-based items
@@ -291,11 +313,21 @@ ROOFING KNOWLEDGE:
 - Penetrations need pipe boots/flashings
 - Labor is priced per square, varies by pitch difficulty
 
-Extract each item with: name, category, unit, price, and if it has coverage info.
+Extract each item with: name, category, unit, price, and coverage information if available.
+
+COVERAGE EXTRACTION:
+Look for coverage information in the item description or notes:
+- "10' length" or "10 ft" → coverage: 10, coverageUnit: "lf"
+- "2 sq per roll" or "2 squares" → coverage: 2, coverageUnit: "sq"
+- "200 sq ft per roll" or "200 sqft" → coverage: 200, coverageUnit: "sqft"
+- "4 linear feet per piece" → coverage: 4, coverageUnit: "lf"
+- "14.3 sq ft per bundle" → coverage: 14.3, coverageUnit: "sqft"
+- If no coverage info found, use coverage: null, coverageUnit: null
 
 Return ONLY a JSON array like this:
 [
   {"name": "Brava Field Tile", "unit": "bundle", "price": 43.25, "coverage": 14.3, "coverageUnit": "sqft", "category": "materials"},
+  {"name": "Copper D-Style Eave", "unit": "each", "price": 25.00, "coverage": 10, "coverageUnit": "lf", "category": "materials"},
   {"name": "Hugo (standard)", "unit": "sq", "price": 550, "coverage": null, "coverageUnit": null, "category": "labor"},
   {"name": "Rolloff", "unit": "sq", "price": 48, "coverage": null, "coverageUnit": null, "category": "equipment"},
   {"name": "4\" Boot Galv", "unit": "each", "price": 20, "coverage": null, "coverageUnit": null, "category": "accessories"}
@@ -1272,6 +1304,23 @@ Only return the JSON, no other text.`;
                                 className="w-24 px-2 py-1 border rounded"
                               />
                             </div>
+                            <input
+                              type="number"
+                              value={item.coverage || ''}
+                              onChange={(e) => updatePriceItem(item.id, { coverage: e.target.value ? parseFloat(e.target.value) : null })}
+                              placeholder="Coverage"
+                              className="w-20 px-2 py-1 border rounded text-sm"
+                            />
+                            <select
+                              value={item.coverageUnit || ''}
+                              onChange={(e) => updatePriceItem(item.id, { coverageUnit: e.target.value || null })}
+                              className="px-2 py-1 border rounded text-sm"
+                            >
+                              <option value="">Unit</option>
+                              <option value="lf">lf</option>
+                              <option value="sqft">sqft</option>
+                              <option value="sq">sq</option>
+                            </select>
                             <button
                               onClick={() => setEditingItem(null)}
                               className="p-1 text-green-600 hover:bg-green-50 rounded"
@@ -1314,6 +1363,25 @@ Only return the JSON, no other text.`;
                                 <Check className="w-4 h-4" />
                               </button>
                             </div>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                value={item.coverage || ''}
+                                onChange={(e) => updatePriceItem(item.id, { coverage: e.target.value ? parseFloat(e.target.value) : null })}
+                                placeholder="Coverage"
+                                className="flex-1 px-2 py-1 border rounded text-sm"
+                              />
+                              <select
+                                value={item.coverageUnit || ''}
+                                onChange={(e) => updatePriceItem(item.id, { coverageUnit: e.target.value || null })}
+                                className="px-2 py-1 border rounded text-sm"
+                              >
+                                <option value="">Unit</option>
+                                <option value="lf">lf</option>
+                                <option value="sqft">sqft</option>
+                                <option value="sq">sq</option>
+                              </select>
+                            </div>
                           </div>
                         </>
                       ) : (
@@ -1321,6 +1389,11 @@ Only return the JSON, no other text.`;
                           <span className="flex-1 font-medium text-sm md:text-base truncate">{item.name}</span>
                           <span className="text-gray-400 text-sm hidden md:inline">{item.unit}</span>
                           <span className="font-semibold text-sm md:text-base">{formatCurrency(item.price)}</span>
+                          {item.coverage && item.coverageUnit && (
+                            <span className="text-gray-400 text-xs hidden md:inline">
+                              ({item.coverage} {item.coverageUnit})
+                            </span>
+                          )}
                           <button
                             onClick={() => setEditingItem(item.id)}
                             className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
