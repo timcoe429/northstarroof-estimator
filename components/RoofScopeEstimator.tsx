@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText } from 'lucide-react';
 import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQuote } from '@/types';
 import { getUserId, saveQuote, loadQuotes, loadQuote, deleteQuote } from '@/lib/supabase';
@@ -113,6 +113,113 @@ export default function RoofScopeEstimator() {
   useEffect(() => {
     localStorage.setItem('roofscope_sundries', sundriesPercent.toString());
   }, [sundriesPercent]);
+
+  // Calculate quantities for ALL items based on measurements
+  const calculateItemQuantities = useCallback((m: Measurements) => {
+    const quantities: Record<string, number> = {};
+    
+    priceItems.forEach(item => {
+      const name = item.name.toLowerCase();
+      let qty = 0;
+
+      // Special cases first (by name)
+      
+      // OSB sheets: total_squares × 3
+      if (name.includes('osb') || name.includes('oriented strand')) {
+        qty = m.total_squares * 3;
+      }
+      // Starter: eave_length + rake_length (perimeter)
+      else if (name.includes('starter')) {
+        qty = (m.eave_length || 0) + (m.rake_length || 0);
+      }
+      // Flat fee items: always 1
+      else if (name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || item.unit === 'flat') {
+        qty = 1;
+      }
+      // Labor items: total_squares
+      else if (item.category === 'labor') {
+        qty = m.total_squares || 0;
+      }
+      // Regular calculation by unit type
+      else {
+        const unitType = UNIT_TYPES.find(u => u.value === item.unit);
+        if (!unitType) {
+          quantities[item.id] = 0;
+          return;
+        }
+
+        if (unitType.calcType === 'area') {
+          // Area-based items (Field Tile, Shakes, Shingles, Underlayment)
+          if (item.coverage && item.coverageUnit === 'sqft') {
+            // Convert squares to sq ft, then divide by coverage
+            qty = Math.ceil((m.total_squares * 100) / item.coverage);
+          } else if (item.coverage && item.coverageUnit === 'sq') {
+            // Coverage in squares
+            qty = Math.ceil(m.total_squares / item.coverage);
+          } else {
+            // No coverage, use total_squares directly
+            qty = m.total_squares || 0;
+          }
+        } else if (unitType.calcType === 'linear') {
+          // Linear-based items
+          if (name.includes('valley')) {
+            qty = m.valley_length || 0;
+          } else if (name.includes('eave') || name.includes('drip')) {
+            qty = m.eave_length || 0;
+          } else if (name.includes('rake')) {
+            qty = m.rake_length || 0;
+          } else if (name.includes('ridge')) {
+            qty = m.ridge_length || 0;
+          } else if (name.includes('hip')) {
+            qty = m.hip_length || 0;
+          } else if (name.includes('h&r')) {
+            // H&R covers both ridge and hip
+            qty = (m.ridge_length || 0) + (m.hip_length || 0);
+          } else {
+            // Default linear: use coverage if provided, otherwise 0
+            qty = item.coverage ? Math.ceil((m.eave_length || 0) / item.coverage) : 0;
+          }
+        } else if (unitType.calcType === 'count') {
+          // Count-based items
+          if (name.includes('boot') || name.includes('pipe') || name.includes('jack') || name.includes('flash') || name.includes('vent')) {
+            qty = m.penetrations || 0;
+          } else if (name.includes('skylight') || name.includes('velux')) {
+            qty = m.skylights || 0;
+          } else if (name.includes('chimney')) {
+            qty = m.chimneys || 0;
+          } else {
+            // Default count: 0
+            qty = 0;
+          }
+        } else if (unitType.calcType === 'flat') {
+          // Flat fee items
+          qty = 1;
+        }
+      }
+
+      quantities[item.id] = qty;
+    });
+
+    return quantities;
+  }, [priceItems]);
+
+  // Recalculate quantities whenever measurements or priceItems change
+  useEffect(() => {
+    if (measurements && priceItems.length > 0) {
+      const quantities = calculateItemQuantities(measurements);
+      setItemQuantities(prev => {
+        // Merge with existing to preserve any manual edits, but update calculated ones
+        const merged = { ...prev };
+        Object.keys(quantities).forEach(id => {
+          // Only update if the item still exists in priceItems
+          if (priceItems.find(item => item.id === id)) {
+            merged[id] = quantities[id];
+          }
+        });
+        return merged;
+      });
+    }
+  }, [measurements, priceItems, calculateItemQuantities]);
 
   // Save price items whenever they change
   useEffect(() => {
@@ -455,50 +562,8 @@ Use null for any values not visible. Return only JSON.`;
 
   // Initialize estimate with smart defaults based on measurements
   const initializeEstimateItems = (m: Measurements) => {
-    const quantities = {};
-    
-    priceItems.forEach(item => {
-      const unitType = UNIT_TYPES.find(u => u.value === item.unit);
-      if (!unitType) return;
-
-      let qty = 0;
-      
-      if (unitType.calcType === 'area') {
-        if (item.coverage && item.coverageUnit === 'sqft') {
-          // Convert squares to sq ft, then divide by coverage
-          qty = Math.ceil((m.total_squares * 100) / item.coverage);
-        } else if (item.coverage && item.coverageUnit === 'sq') {
-          qty = Math.ceil(m.total_squares / item.coverage);
-        } else {
-          qty = m.total_squares;
-        }
-      } else if (unitType.calcType === 'linear') {
-        // Smart mapping based on item name
-        const name = item.name.toLowerCase();
-        if (name.includes('ridge') || name.includes('h&r') || name.includes('hip')) {
-          qty = Math.ceil((m.ridge_length + m.hip_length) / (item.coverage || 1));
-        } else if (name.includes('valley')) {
-          qty = Math.ceil(m.valley_length / (item.coverage || 10));
-        } else if (name.includes('eave') || name.includes('drip') || name.includes('starter')) {
-          qty = Math.ceil(m.eave_length / (item.coverage || 10));
-        } else if (name.includes('rake')) {
-          qty = Math.ceil(m.rake_length / (item.coverage || 10));
-        }
-      } else if (unitType.calcType === 'count') {
-        const name = item.name.toLowerCase();
-        if (name.includes('boot') || name.includes('pipe') || name.includes('flash') || name.includes('vent')) {
-          qty = m.penetrations || 0;
-        } else if (name.includes('skylight') || name.includes('velux')) {
-          qty = m.skylights || 0;
-        }
-      }
-
-      quantities[item.id] = qty;
-    });
-
-    setItemQuantities(quantities);
-    // Auto-select items that have quantities
-    setSelectedItems(priceItems.filter(item => quantities[item.id] > 0).map(item => item.id));
+    // Quantities will be recalculated by useEffect
+    // This function is kept for backward compatibility but doesn't need to do anything
   };
 
   // Apply extracted prices to price list
