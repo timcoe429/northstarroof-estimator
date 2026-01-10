@@ -3,6 +3,73 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench } from 'lucide-react';
 
+// Type definitions
+interface Measurements {
+  total_squares: number;
+  predominant_pitch: string;
+  ridge_length: number;
+  hip_length: number;
+  valley_length: number;
+  eave_length: number;
+  rake_length: number;
+  penetrations: number;
+  skylights: number;
+  chimneys: number;
+  complexity: string;
+  fileName?: string;
+}
+
+interface PriceItem {
+  id: string;
+  name: string;
+  unit: string;
+  price: number;
+  coverage: number | null;
+  coverageUnit: string | null;
+  category: 'materials' | 'labor' | 'equipment' | 'accessories';
+}
+
+interface LineItem extends PriceItem {
+  baseQuantity: number;
+  quantity: number;
+  total: number;
+  wasteAdded: number;
+}
+
+interface CustomerInfo {
+  name: string;
+  address: string;
+  phone: string;
+}
+
+interface Estimate {
+  lineItems: LineItem[];
+  byCategory: {
+    materials: LineItem[];
+    labor: LineItem[];
+    equipment: LineItem[];
+    accessories: LineItem[];
+  };
+  totals: {
+    materials: number;
+    labor: number;
+    equipment: number;
+    accessories: number;
+  };
+  baseCost: number;
+  officeCostPercent: number;
+  officeAllocation: number;
+  totalCost: number;
+  marginPercent: number;
+  wastePercent: number;
+  sellPrice: number;
+  grossProfit: number;
+  profitMargin: number;
+  measurements: Measurements;
+  customerInfo: CustomerInfo;
+  generatedAt: string;
+}
+
 // Category definitions with icons
 const CATEGORIES = {
   materials: { label: 'Materials', icon: Package, color: 'blue' },
@@ -36,36 +103,40 @@ const CALC_MAPPINGS = {
 export default function RoofScopeEstimator() {
   // Core state
   const [step, setStep] = useState('upload');
-  const [measurements, setMeasurements] = useState(null);
-  const [estimate, setEstimate] = useState(null);
+  const [measurements, setMeasurements] = useState<Measurements | null>(null);
+  const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [customerInfo, setCustomerInfo] = useState({ name: '', address: '', phone: '' });
+  const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({ name: '', address: '', phone: '' });
 
   // Price list state
-  const [priceItems, setPriceItems] = useState(() => {
+  const [priceItems, setPriceItems] = useState<PriceItem[]>(() => {
+    if (typeof window === 'undefined') return [];
     const saved = localStorage.getItem('roofscope_price_items_v2');
     return saved ? JSON.parse(saved) : [];
   });
   const [showPrices, setShowPrices] = useState(false);
   const [priceSheetProcessing, setPriceSheetProcessing] = useState(false);
-  const [extractedItems, setExtractedItems] = useState(null);
-  const [editingItem, setEditingItem] = useState(null);
+  const [extractedItems, setExtractedItems] = useState<PriceItem[] | null>(null);
+  const [editingItem, setEditingItem] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState('materials');
 
   // Estimate builder state
-  const [selectedItems, setSelectedItems] = useState([]);
-  const [itemQuantities, setItemQuantities] = useState({});
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [itemQuantities, setItemQuantities] = useState<Record<string, number>>({});
 
   // Financial controls
   const [marginPercent, setMarginPercent] = useState(() => {
+    if (typeof window === 'undefined') return 20;
     const saved = localStorage.getItem('roofscope_margin');
     return saved ? parseFloat(saved) : 20;
   });
   const [officeCostPercent, setOfficeCostPercent] = useState(() => {
+    if (typeof window === 'undefined') return 5;
     const saved = localStorage.getItem('roofscope_office_percent');
     return saved ? parseFloat(saved) : 5;
   });
   const [wastePercent, setWastePercent] = useState(() => {
+    if (typeof window === 'undefined') return 10;
     const saved = localStorage.getItem('roofscope_waste');
     return saved ? parseFloat(saved) : 10;
   });
@@ -91,11 +162,12 @@ export default function RoofScopeEstimator() {
 
   // Global paste handler
   useEffect(() => {
-    const handlePaste = async (e) => {
+    const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
 
-      for (const item of items) {
+      const itemsArray = Array.from(items);
+      for (const item of itemsArray) {
         if (item.type.startsWith('image/')) {
           e.preventDefault();
           const file = item.getAsFile();
@@ -242,16 +314,23 @@ Use 0 for any values not visible. Return only JSON.`
     setIsProcessing(false);
   };
 
-  const fileToBase64 = (file) => {
+  const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onload = () => {
+        const result = reader.result;
+        if (typeof result === 'string') {
+          resolve(result.split(',')[1]);
+        } else {
+          throw new Error('Failed to convert file to base64 string');
+        }
+      };
       reader.readAsDataURL(file);
     });
   };
 
   // Initialize estimate with smart defaults based on measurements
-  const initializeEstimateItems = (m) => {
+  const initializeEstimateItems = (m: Measurements) => {
     const quantities = {};
     
     priceItems.forEach(item => {
@@ -318,42 +397,42 @@ Use 0 for any values not visible. Return only JSON.`
 
   // Price item management
   const addPriceItem = () => {
-    const newItem = {
+    const newItem: PriceItem = {
       id: `item_${Date.now()}`,
       name: 'New Item',
       unit: 'each',
       price: 0,
       coverage: null,
       coverageUnit: null,
-      category: activeCategory,
+      category: activeCategory as PriceItem['category'],
     };
     setPriceItems(prev => [...prev, newItem]);
     setEditingItem(newItem.id);
   };
 
-  const updatePriceItem = (id, updates) => {
+  const updatePriceItem = (id: string, updates: Partial<PriceItem>) => {
     setPriceItems(prev => prev.map(item => 
       item.id === id ? { ...item, ...updates } : item
     ));
   };
 
-  const deletePriceItem = (id) => {
+  const deletePriceItem = (id: string) => {
     setPriceItems(prev => prev.filter(item => item.id !== id));
     setSelectedItems(prev => prev.filter(itemId => itemId !== id));
   };
 
   // File handlers
-  const handleFileUpload = (e) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) extractFromImage(file);
   };
 
-  const handlePriceSheetUpload = (e) => {
+  const handlePriceSheetUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) extractPricesFromImage(file);
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
     if (file) extractFromImage(file);
@@ -361,9 +440,11 @@ Use 0 for any values not visible. Return only JSON.`
 
   // Calculate estimate
   const calculateEstimate = () => {
+    if (!measurements) return;
+    
     const wasteFactor = 1 + (wastePercent / 100);
     
-    const lineItems = selectedItems.map(id => {
+    const lineItems: LineItem[] = selectedItems.map(id => {
       const item = priceItems.find(p => p.id === id);
       if (!item) return null;
       
@@ -380,17 +461,27 @@ Use 0 for any values not visible. Return only JSON.`
         total,
         wasteAdded: item.category === 'materials' ? qty - baseQty : 0,
       };
-    }).filter(Boolean);
+    }).filter((item): item is LineItem => item !== null);
 
-    const byCategory = Object.keys(CATEGORIES).reduce((acc, cat) => {
-      acc[cat] = lineItems.filter(item => item.category === cat);
+    const byCategory: Estimate['byCategory'] = Object.keys(CATEGORIES).reduce((acc, cat) => {
+      acc[cat as keyof typeof CATEGORIES] = lineItems.filter(item => item.category === cat);
       return acc;
-    }, {});
+    }, {
+      materials: [],
+      labor: [],
+      equipment: [],
+      accessories: [],
+    });
 
-    const totals = Object.entries(byCategory).reduce((acc, [cat, items]) => {
-      acc[cat] = items.reduce((sum, item) => sum + item.total, 0);
+    const totals: Estimate['totals'] = Object.entries(byCategory).reduce((acc, [cat, items]) => {
+      acc[cat as keyof Estimate['totals']] = items.reduce((sum, item) => sum + item.total, 0);
       return acc;
-    }, {});
+    }, {
+      materials: 0,
+      labor: 0,
+      equipment: 0,
+      accessories: 0,
+    });
 
     // Calculate costs and profit
     const baseCost = Object.values(totals).reduce((sum, t) => sum + t, 0);
