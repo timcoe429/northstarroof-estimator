@@ -122,6 +122,10 @@ export default function RoofScopeEstimator() {
       const name = item.name.toLowerCase();
       let qty = 0;
 
+      // Normalize coverage to number and coverageUnit to lowercase string
+      const coverage = item.coverage ? (typeof item.coverage === 'string' ? parseFloat(item.coverage) : item.coverage) : null;
+      const coverageUnit = item.coverageUnit ? item.coverageUnit.toLowerCase() : null;
+
       // Special cases first (by name)
       
       // OSB sheets: total_squares × 3
@@ -140,7 +144,38 @@ export default function RoofScopeEstimator() {
       else if (item.category === 'labor') {
         qty = m.total_squares || 0;
       }
-      // Regular calculation by unit type
+      // Check if item has linear coverage (lf) - treat as linear regardless of unit type
+      else if (coverage && coverageUnit === 'lf') {
+        // Linear coverage calculation
+        if (name.includes('valley')) {
+          qty = Math.ceil((m.valley_length || 0) / coverage);
+        } else if (name.includes('eave') || name.includes('drip')) {
+          qty = Math.ceil((m.eave_length || 0) / coverage);
+        } else if (name.includes('rake')) {
+          qty = Math.ceil((m.rake_length || 0) / coverage);
+        } else if (name.includes('ridge')) {
+          qty = Math.ceil((m.ridge_length || 0) / coverage);
+        } else if (name.includes('hip')) {
+          qty = Math.ceil((m.hip_length || 0) / coverage);
+        } else if (name.includes('h&r')) {
+          // H&R covers both ridge and hip
+          qty = Math.ceil(((m.ridge_length || 0) + (m.hip_length || 0)) / coverage);
+        } else {
+          // Default linear: use eave_length
+          qty = Math.ceil((m.eave_length || 0) / coverage);
+        }
+      }
+      // Check if item has area coverage (sqft or sq)
+      else if (coverage && (coverageUnit === 'sqft' || coverageUnit === 'sq')) {
+        if (coverageUnit === 'sqft') {
+          // Convert squares to sq ft, then divide by coverage
+          qty = Math.ceil((m.total_squares * 100) / coverage);
+        } else if (coverageUnit === 'sq') {
+          // Coverage in squares
+          qty = Math.ceil(m.total_squares / coverage);
+        }
+      }
+      // Regular calculation by unit type (when no coverage)
       else {
         const unitType = UNIT_TYPES.find(u => u.value === item.unit);
         if (!unitType) {
@@ -150,56 +185,26 @@ export default function RoofScopeEstimator() {
 
         if (unitType.calcType === 'area') {
           // Area-based items (Field Tile, Shakes, Shingles, Underlayment)
-          if (item.coverage && item.coverageUnit === 'sqft') {
-            // Convert squares to sq ft, then divide by coverage
-            qty = Math.ceil((m.total_squares * 100) / item.coverage);
-          } else if (item.coverage && item.coverageUnit === 'sq') {
-            // Coverage in squares
-            qty = Math.ceil(m.total_squares / item.coverage);
-          } else {
-            // No coverage, use total_squares directly
-            qty = m.total_squares || 0;
-          }
+          // No coverage, use total_squares directly
+          qty = m.total_squares || 0;
         } else if (unitType.calcType === 'linear') {
-          // Linear-based items - use coverage if available
-          if (item.coverage && item.coverageUnit === 'lf') {
-            // Coverage-based calculation
-            if (name.includes('valley')) {
-              qty = Math.ceil((m.valley_length || 0) / item.coverage);
-            } else if (name.includes('eave') || name.includes('drip')) {
-              qty = Math.ceil((m.eave_length || 0) / item.coverage);
-            } else if (name.includes('rake')) {
-              qty = Math.ceil((m.rake_length || 0) / item.coverage);
-            } else if (name.includes('ridge')) {
-              qty = Math.ceil((m.ridge_length || 0) / item.coverage);
-            } else if (name.includes('hip')) {
-              qty = Math.ceil((m.hip_length || 0) / item.coverage);
-            } else if (name.includes('h&r')) {
-              // H&R covers both ridge and hip
-              qty = Math.ceil(((m.ridge_length || 0) + (m.hip_length || 0)) / item.coverage);
-            } else {
-              // Default linear: use eave_length
-              qty = Math.ceil((m.eave_length || 0) / item.coverage);
-            }
+          // Linear-based items - no coverage, use direct measurements
+          if (name.includes('valley')) {
+            qty = m.valley_length || 0;
+          } else if (name.includes('eave') || name.includes('drip')) {
+            qty = m.eave_length || 0;
+          } else if (name.includes('rake')) {
+            qty = m.rake_length || 0;
+          } else if (name.includes('ridge')) {
+            qty = m.ridge_length || 0;
+          } else if (name.includes('hip')) {
+            qty = m.hip_length || 0;
+          } else if (name.includes('h&r')) {
+            // H&R covers both ridge and hip
+            qty = (m.ridge_length || 0) + (m.hip_length || 0);
           } else {
-            // No coverage - use direct measurements
-            if (name.includes('valley')) {
-              qty = m.valley_length || 0;
-            } else if (name.includes('eave') || name.includes('drip')) {
-              qty = m.eave_length || 0;
-            } else if (name.includes('rake')) {
-              qty = m.rake_length || 0;
-            } else if (name.includes('ridge')) {
-              qty = m.ridge_length || 0;
-            } else if (name.includes('hip')) {
-              qty = m.hip_length || 0;
-            } else if (name.includes('h&r')) {
-              // H&R covers both ridge and hip
-              qty = (m.ridge_length || 0) + (m.hip_length || 0);
-            } else {
-              // Default linear: 0 if no match
-              qty = 0;
-            }
+            // Default linear: 0 if no match
+            qty = 0;
           }
         } else if (unitType.calcType === 'count') {
           // Count-based items
