@@ -1,0 +1,52 @@
+MANDATORY RULES FOR THIS PROJECT:
+
+PROJECT TYPE: Next.js 14 + Supabase + Tailwind CSS
+- This is a roofing estimate calculator app
+- Frontend: Next.js with App Router, React, TypeScript, Tailwind CSS
+- Backend: Supabase (database, auth, storage)
+- AI: Anthropic Claude API for image extraction
+- Hosting: Vercel
+
+DEVELOPER CONTEXT:
+- Web developer familiar with React basics
+- Clear explanations needed before changes
+- Explain impact before making changes
+
+FILE STRUCTURE:
+- /app - Next.js pages and layouts
+- /components - React components
+- /lib - Utility functions, Supabase client
+- /types - TypeScript type definitions
+
+KEY FILES:
+- app/page.tsx - Main entry point
+- components/RoofScopeEstimator.tsx - Main estimator component
+- lib/supabase.ts - Supabase client
+- types/index.ts - TypeScript types
+
+BEFORE MAKING CHANGES:
+1. Explain WHAT you're changing
+2. Explain WHY
+3. Explain IMPACT on other parts
+4. Ask for confirmation on multi-file changes
+
+CODING STANDARDS:
+- Use TypeScript (but strict: false for now)
+- Use Tailwind CSS for styling (no external UI libraries)
+- Use 'use client' directive for client components
+- Keep components in /components folder
+- Keep types in /types folder
+
+DO NOT:
+- Add unnecessary dependencies
+- Refactor unless asked
+- Change unrelated code
+- Use strict TypeScript without being asked
+
+TESTING:
+- Run npm run build to check for errors before pushing
+- Test locally with npm run dev
+
+DEPLOYMENT:
+- Push to GitHub → Vercel auto-deploys
+- Environment variables are in Vercel dashboard

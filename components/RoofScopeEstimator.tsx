@@ -2,73 +2,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench } from 'lucide-react';
-
-// Type definitions
-interface Measurements {
-  total_squares: number;
-  predominant_pitch: string;
-  ridge_length: number;
-  hip_length: number;
-  valley_length: number;
-  eave_length: number;
-  rake_length: number;
-  penetrations: number;
-  skylights: number;
-  chimneys: number;
-  complexity: string;
-  fileName?: string;
-}
-
-interface PriceItem {
-  id: string;
-  name: string;
-  unit: string;
-  price: number;
-  coverage: number | null;
-  coverageUnit: string | null;
-  category: 'materials' | 'labor' | 'equipment' | 'accessories';
-}
-
-interface LineItem extends PriceItem {
-  baseQuantity: number;
-  quantity: number;
-  total: number;
-  wasteAdded: number;
-}
-
-interface CustomerInfo {
-  name: string;
-  address: string;
-  phone: string;
-}
-
-interface Estimate {
-  lineItems: LineItem[];
-  byCategory: {
-    materials: LineItem[];
-    labor: LineItem[];
-    equipment: LineItem[];
-    accessories: LineItem[];
-  };
-  totals: {
-    materials: number;
-    labor: number;
-    equipment: number;
-    accessories: number;
-  };
-  baseCost: number;
-  officeCostPercent: number;
-  officeAllocation: number;
-  totalCost: number;
-  marginPercent: number;
-  wastePercent: number;
-  sellPrice: number;
-  grossProfit: number;
-  profitMargin: number;
-  measurements: Measurements;
-  customerInfo: CustomerInfo;
-  generatedAt: string;
-}
+import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate } from '@/types';
 
 // Category definitions with icons
 const CATEGORIES = {
@@ -193,23 +127,9 @@ export default function RoofScopeEstimator() {
 
     try {
       const base64 = await fileToBase64(file);
+      const dataUrl = `data:${file.type || 'image/png'};base64,${base64}`;
 
-      const response = await fetch('/api/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4000,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: { type: 'base64', media_type: file.type || 'image/png', data: base64 }
-              },
-              {
-                type: 'text',
-                text: `Extract ALL pricing items from this roofing price sheet. For each item, determine:
+      const prompt = `Extract ALL pricing items from this roofing price sheet. For each item, determine:
 1. The item name exactly as shown
 2. The unit type (sq, bundle, roll, lf, each, pail, box, tube, sheet, or flat)
 3. The price
@@ -224,11 +144,16 @@ Return ONLY a JSON array like this:
   {"name": "4\" Boot Galv", "unit": "each", "price": 20, "coverage": null, "coverageUnit": null, "category": "accessories"}
 ]
 
-Extract EVERY line item you can see. Return only the JSON array, no other text.`
-              }
-            ]
-          }]
-        })
+Extract EVERY line item you can see. Return only the JSON array, no other text.`;
+
+      const response = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: dataUrl,
+          prompt,
+          max_tokens: 4000,
+        }),
       });
 
       if (!response.ok) {
@@ -259,23 +184,9 @@ Extract EVERY line item you can see. Return only the JSON array, no other text.`
 
     try {
       const base64 = await fileToBase64(file);
+      const dataUrl = `data:${file.type || 'image/png'};base64,${base64}`;
 
-      const response = await fetch('/api/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1500,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: { type: 'base64', media_type: file.type || 'image/png', data: base64 }
-              },
-              {
-                type: 'text',
-                text: `Extract roof measurements from this RoofScope, EagleView, or similar roof report. Return ONLY a JSON object:
+      const prompt = `Extract roof measurements from this RoofScope, EagleView, or similar roof report. Return ONLY a JSON object:
 
 {
   "total_squares": <number>,
@@ -291,11 +202,16 @@ Extract EVERY line item you can see. Return only the JSON array, no other text.`
   "complexity": "<Simple|Moderate|Complex>"
 }
 
-Use 0 for any values not visible. Return only JSON.`
-              }
-            ]
-          }]
-        })
+Use 0 for any values not visible. Return only JSON.`;
+
+      const response = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: dataUrl,
+          prompt,
+          max_tokens: 1500,
+        }),
       });
 
       if (!response.ok) {

@@ -11,7 +11,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
+    const { image, prompt, max_tokens = 4000 } = await request.json();
+
+    if (!image || !prompt) {
+      return NextResponse.json(
+        { error: 'Missing required fields: image and prompt' },
+        { status: 400 }
+      );
+    }
+
+    // Determine media type from base64 or default to png
+    const mediaType = image.includes('data:image/') 
+      ? image.split(';')[0].split(':')[1] 
+      : 'image/png';
+
+    // Extract base64 data (remove data URL prefix if present)
+    const base64Data = image.includes(',') ? image.split(',')[1] : image;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -20,7 +35,27 @@ export async function POST(request: NextRequest) {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: mediaType,
+                data: base64Data
+              }
+            },
+            {
+              type: 'text',
+              text: prompt
+            }
+          ]
+        }]
+      }),
     });
 
     if (!response.ok) {
