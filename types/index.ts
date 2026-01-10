@@ -61,6 +61,8 @@ export interface Estimate {
   totalCost: number;
   marginPercent: number;
   wastePercent: number;
+  sundriesPercent: number;
+  sundriesAmount: number;
   sellPrice: number;
   grossProfit: number;
   profitMargin: number;

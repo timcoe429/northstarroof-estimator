@@ -75,6 +75,11 @@ export default function RoofScopeEstimator() {
     const saved = localStorage.getItem('roofscope_waste');
     return saved ? parseFloat(saved) : 10;
   });
+  const [sundriesPercent, setSundriesPercent] = useState(() => {
+    if (typeof window === 'undefined') return 10;
+    const saved = localStorage.getItem('roofscope_sundries');
+    return saved ? parseFloat(saved) : 10;
+  });
   const [showFinancials, setShowFinancials] = useState(false);
 
   // Track uploaded image types
@@ -85,6 +90,12 @@ export default function RoofScopeEstimator() {
   const [showSavedQuotes, setShowSavedQuotes] = useState(false);
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
   const [isSavingQuote, setIsSavingQuote] = useState(false);
+
+  // Job description and smart selection state
+  const [jobDescription, setJobDescription] = useState('');
+  const [smartSelectionReasoning, setSmartSelectionReasoning] = useState('');
+  const [smartSelectionWarnings, setSmartSelectionWarnings] = useState<string[]>([]);
+  const [isGeneratingSelection, setIsGeneratingSelection] = useState(false);
 
   // Save financial settings
   useEffect(() => {
@@ -98,6 +109,10 @@ export default function RoofScopeEstimator() {
   useEffect(() => {
     localStorage.setItem('roofscope_waste', wastePercent.toString());
   }, [wastePercent]);
+
+  useEffect(() => {
+    localStorage.setItem('roofscope_sundries', sundriesPercent.toString());
+  }, [sundriesPercent]);
 
   // Save price items whenever they change
   useEffect(() => {
@@ -547,6 +562,91 @@ Use null for any values not visible. Return only JSON.`;
     if (file) extractFromImage(file);
   };
 
+  // Generate smart selection based on job description
+  const generateSmartSelection = async () => {
+    if (!jobDescription.trim() || !measurements || priceItems.length === 0) {
+      alert('Please provide a job description and ensure you have price items.');
+      return;
+    }
+
+    setIsGeneratingSelection(true);
+    setSmartSelectionReasoning('');
+    setSmartSelectionWarnings([]);
+
+    try {
+      const prompt = `You are a roofing estimator assistant. Based on the job description and measurements, select the appropriate items from the price list.
+
+JOB DESCRIPTION:
+${jobDescription}
+
+MEASUREMENTS:
+${JSON.stringify(measurements, null, 2)}
+
+PRICE LIST:
+${JSON.stringify(priceItems, null, 2)}
+
+RULES:
+1. PRODUCT LINES: Only select ONE system (Brava OR DaVinci, never both)
+2. LABOR: Only select ONE crew (Hugo/Alfredo/Chris/Sergio). Pick the right Hugo rate based on pitch if Hugo is chosen.
+3. SLOPE-AWARE: If pitch >= 8/12, use High Slope/Hinged H&R variants. If < 8/12, use regular H&R.
+4. TEAR-OFF: If mentioned, include Rolloff and OSB. Calculate OSB as (total_squares * 3) sheets.
+5. DELIVERY: If Brava selected, include Brava Delivery.
+6. UNDERLAYMENT: Select appropriate underlayment (Ice & Water for valleys/eaves, synthetic for field)
+7. ACCESSORIES: Don't select individual accessory items (nails, caulk, etc.) - these are covered by Sundries %
+8. SPECIAL REQUESTS: If user mentions specific items (copper valleys, snowguards, skylights), select those.
+
+Return ONLY JSON:
+{
+  "selectedItemIds": ["id1", "id2", ...],
+  "reasoning": "Brief explanation of why you selected these items",
+  "warnings": ["Any concerns or things to double-check"]
+}
+
+Only return the JSON, no other text.`;
+
+      const response = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          max_tokens: 2000,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate smart selection');
+      }
+
+      const data = await response.json();
+      const text = data.content?.[0]?.text || '';
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const result = JSON.parse(jsonMatch[0]);
+        
+        // Apply the selection
+        if (result.selectedItemIds && Array.isArray(result.selectedItemIds)) {
+          setSelectedItems(result.selectedItemIds);
+        }
+        
+        // Show reasoning and warnings
+        if (result.reasoning) {
+          setSmartSelectionReasoning(result.reasoning);
+        }
+        if (result.warnings && Array.isArray(result.warnings)) {
+          setSmartSelectionWarnings(result.warnings);
+        }
+      } else {
+        throw new Error('Could not parse smart selection response');
+      }
+    } catch (error) {
+      console.error('Smart selection error:', error);
+      alert('Error generating smart selection. Please try again.');
+    } finally {
+      setIsGeneratingSelection(false);
+    }
+  };
+
   // Calculate estimate
   const calculateEstimate = () => {
     if (!measurements) return;
@@ -592,8 +692,12 @@ Use null for any values not visible. Return only JSON.`;
       accessories: 0,
     });
 
+    // Calculate Sundries (percentage of materials total only)
+    const sundriesAmount = totals.materials * (sundriesPercent / 100);
+
     // Calculate costs and profit
-    const baseCost = Object.values(totals).reduce((sum, t) => sum + t, 0);
+    // Base cost = materials + labor + equipment + accessories + sundries
+    const baseCost = Object.values(totals).reduce((sum, t) => sum + t, 0) + sundriesAmount;
     const officeAllocation = baseCost * (officeCostPercent / 100);
     const totalCost = baseCost + officeAllocation;
     
@@ -612,6 +716,8 @@ Use null for any values not visible. Return only JSON.`;
       totalCost,
       marginPercent,
       wastePercent,
+      sundriesPercent,
+      sundriesAmount,
       sellPrice,
       grossProfit,
       profitMargin,
@@ -630,6 +736,9 @@ Use null for any values not visible. Return only JSON.`;
     setStep('upload');
     setCustomerInfo({ name: '', address: '', phone: '' });
     setUploadedImages(new Set());
+    setJobDescription('');
+    setSmartSelectionReasoning('');
+    setSmartSelectionWarnings([]);
   };
 
   const formatCurrency = (amount) => {
@@ -711,6 +820,13 @@ Use null for any values not visible. Return only JSON.`;
       setMarginPercent(savedQuote.margin_percent);
       setOfficeCostPercent(savedQuote.office_percent);
       
+      // Restore sundries percent (calculate from saved estimate if available, otherwise use default)
+      // Note: We'll need to store sundriesPercent in the saved quote, but for now calculate from estimate
+      const restoredEstimateData = savedQuote as any;
+      if (restoredEstimateData.sundries_percent !== undefined) {
+        setSundriesPercent(restoredEstimateData.sundries_percent);
+      }
+      
       // Calculate waste percent from line items (materials waste)
       const materialsItems = savedQuote.line_items.filter(item => item.category === 'materials');
       let wastePercent = 10; // default
@@ -761,6 +877,8 @@ Use null for any values not visible. Return only JSON.`;
         totalCost: savedQuote.total_cost,
         marginPercent: savedQuote.margin_percent,
         wastePercent: wastePercent,
+        sundriesPercent: restoredEstimateData.sundries_percent !== undefined ? restoredEstimateData.sundries_percent : 10,
+        sundriesAmount: restoredEstimateData.sundries_amount !== undefined ? restoredEstimateData.sundries_amount : (totals.materials * 0.1),
         sellPrice: savedQuote.sell_price,
         grossProfit: savedQuote.gross_profit,
         profitMargin: savedQuote.sell_price > 0 ? (savedQuote.gross_profit / savedQuote.sell_price) * 100 : 0,
@@ -951,6 +1069,21 @@ Use null for any values not visible. Return only JSON.`;
                       className="w-14 md:w-16 px-2 py-1.5 md:py-2 text-center font-semibold outline-none"
                       min="0"
                       max="80"
+                    />
+                    <span className="px-2 text-gray-400 bg-gray-50 text-sm">%</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">Sundries</label>
+                  <div className="flex items-center bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <input
+                      type="number"
+                      value={sundriesPercent}
+                      onChange={(e) => setSundriesPercent(parseFloat(e.target.value) || 0)}
+                      className="w-14 md:w-16 px-2 py-1.5 md:py-2 text-center font-semibold outline-none"
+                      min="0"
+                      max="50"
                     />
                     <span className="px-2 text-gray-400 bg-gray-50 text-sm">%</span>
                   </div>
@@ -1321,6 +1454,53 @@ Use null for any values not visible. Return only JSON.`;
               </div>
             </div>
 
+            {/* Job Description and Smart Selection */}
+            <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
+              <h2 className="font-semibold text-gray-900 mb-4">Job Description</h2>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  placeholder="Describe this job (e.g., 'Brava tile, tear-off, Hugo's crew, copper valleys')"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                />
+                <button
+                  onClick={() => generateSmartSelection()}
+                  disabled={!jobDescription.trim() || priceItems.length === 0 || isGeneratingSelection}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium rounded-lg flex items-center justify-center gap-2 text-sm"
+                >
+                  {isGeneratingSelection ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Generating Selection...
+                    </>
+                  ) : (
+                    <>
+                      <Calculator className="w-4 h-4" />
+                      Generate Smart Selection
+                    </>
+                  )}
+                </button>
+                {smartSelectionReasoning && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm font-medium text-blue-900 mb-1">AI Reasoning:</p>
+                    <p className="text-sm text-blue-700">{smartSelectionReasoning}</p>
+                  </div>
+                )}
+                {smartSelectionWarnings.length > 0 && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-sm font-medium text-amber-900 mb-1">Warnings:</p>
+                    <ul className="list-disc list-inside text-sm text-amber-700 space-y-1">
+                      {smartSelectionWarnings.map((warning, idx) => (
+                        <li key={idx}>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Line Item Builder */}
             <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
               <h2 className="font-semibold text-gray-900 mb-4">Build Your Estimate</h2>
@@ -1487,7 +1667,27 @@ Use null for any values not visible. Return only JSON.`;
               {/* Financial Summary */}
               <div className="border-t-2 border-gray-200 pt-4 mt-4 md:mt-6 space-y-2 md:space-y-3 text-sm">
                 <div className="flex justify-between text-gray-600">
-                  <span>Base Cost ({estimate.wastePercent}% waste)</span>
+                  <span>Materials Subtotal ({estimate.wastePercent}% waste)</span>
+                  <span>{formatCurrency(estimate.totals.materials)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Labor Subtotal</span>
+                  <span>{formatCurrency(estimate.totals.labor)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Equipment Subtotal</span>
+                  <span>{formatCurrency(estimate.totals.equipment)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Accessories Subtotal</span>
+                  <span>{formatCurrency(estimate.totals.accessories)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Sundries ({estimate.sundriesPercent}%)</span>
+                  <span>{formatCurrency(estimate.sundriesAmount)}</span>
+                </div>
+                <div className="flex justify-between font-medium border-t border-gray-200 pt-2 md:pt-3">
+                  <span>Base Cost</span>
                   <span>{formatCurrency(estimate.baseCost)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">

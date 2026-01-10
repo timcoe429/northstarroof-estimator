@@ -13,20 +13,40 @@ export async function POST(request: NextRequest) {
 
     const { image, prompt, max_tokens = 4000 } = await request.json();
 
-    if (!image || !prompt) {
+    if (!prompt) {
       return NextResponse.json(
-        { error: 'Missing required fields: image and prompt' },
+        { error: 'Missing required field: prompt' },
         { status: 400 }
       );
     }
 
-    // Determine media type from base64 or default to png
-    const mediaType = image.includes('data:image/') 
-      ? image.split(';')[0].split(':')[1] 
-      : 'image/png';
+    // Build content array - include image if provided, otherwise text-only
+    const content: any[] = [];
+    
+    if (image) {
+      // Determine media type from base64 or default to png
+      const mediaType = image.includes('data:image/') 
+        ? image.split(';')[0].split(':')[1] 
+        : 'image/png';
 
-    // Extract base64 data (remove data URL prefix if present)
-    const base64Data = image.includes(',') ? image.split(',')[1] : image;
+      // Extract base64 data (remove data URL prefix if present)
+      const base64Data = image.includes(',') ? image.split(',')[1] : image;
+
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mediaType,
+          data: base64Data
+        }
+      });
+    }
+
+    // Always add the text prompt
+    content.push({
+      type: 'text',
+      text: prompt
+    });
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -40,20 +60,7 @@ export async function POST(request: NextRequest) {
         max_tokens,
         messages: [{
           role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mediaType,
-                data: base64Data
-              }
-            },
-            {
-              type: 'text',
-              text: prompt
-            }
-          ]
+          content
         }]
       }),
     });
