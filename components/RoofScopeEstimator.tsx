@@ -188,13 +188,13 @@ export default function RoofScopeEstimator() {
   }, [showPrices, step]);
 
   // Extract prices from screenshot using Claude vision
-  const extractPricesFromImage = async (file) => {
+  const extractPricesFromImage = async (file: File) => {
     setPriceSheetProcessing(true);
 
     try {
       const base64 = await fileToBase64(file);
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -231,6 +231,10 @@ Extract EVERY line item you can see. Return only the JSON array, no other text.`
         })
       });
 
+      if (!response.ok) {
+        throw new Error('Failed to extract prices');
+      }
+
       const data = await response.json();
       const text = data.content?.[0]?.text || '';
 
@@ -250,13 +254,13 @@ Extract EVERY line item you can see. Return only the JSON array, no other text.`
   };
 
   // Extract roof measurements from image
-  const extractFromImage = async (file) => {
+  const extractFromImage = async (file: File) => {
     setIsProcessing(true);
 
     try {
       const base64 = await fileToBase64(file);
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -293,6 +297,10 @@ Use 0 for any values not visible. Return only JSON.`
           }]
         })
       });
+
+      if (!response.ok) {
+        throw new Error('Failed to extract measurements');
+      }
 
       const data = await response.json();
       const text = data.content?.[0]?.text || '';
