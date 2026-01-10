@@ -91,7 +91,7 @@ export default function RoofScopeEstimator() {
 
   // Global paste handler
   useEffect(() => {
-    const handlePaste = async (e: ClipboardEvent) => {
+    const handlePaste = async (e) => {
       const items = e.clipboardData?.items;
       if (!items) return;
 
