@@ -68,3 +68,22 @@ export interface Estimate {
   customerInfo: CustomerInfo;
   generatedAt: string;
 }
+
+export interface SavedQuote {
+  id: string;
+  user_id: string;
+  customer_id: string | null;
+  name: string;
+  measurements: Measurements;
+  line_items: LineItem[];
+  base_cost: number;
+  office_percent: number;
+  office_amount: number;
+  margin_percent: number;
+  total_cost: number;
+  sell_price: number;
+  gross_profit: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}

@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench } from 'lucide-react';
-import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate } from '@/types';
+import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText } from 'lucide-react';
+import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQuote } from '@/types';
+import { getUserId, saveQuote, loadQuotes, loadQuote, deleteQuote } from '@/lib/supabase';
 
 // Category definitions with icons
 const CATEGORIES = {
@@ -78,6 +79,12 @@ export default function RoofScopeEstimator() {
 
   // Track uploaded image types
   const [uploadedImages, setUploadedImages] = useState<Set<string>>(new Set());
+
+  // Saved quotes state
+  const [savedQuotes, setSavedQuotes] = useState<SavedQuote[]>([]);
+  const [showSavedQuotes, setShowSavedQuotes] = useState(false);
+  const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
+  const [isSavingQuote, setIsSavingQuote] = useState(false);
 
   // Save financial settings
   useEffect(() => {
@@ -631,6 +638,181 @@ Use null for any values not visible. Return only JSON.`;
 
   const getCategoryItems = (category) => priceItems.filter(item => item.category === category);
 
+  // Load saved quotes from Supabase
+  const fetchSavedQuotes = async () => {
+    setIsLoadingQuotes(true);
+    try {
+      const quotes = await loadQuotes();
+      setSavedQuotes(quotes);
+    } catch (error) {
+      console.error('Failed to load quotes:', error);
+      // Don't show alert on mount, only on user action
+    } finally {
+      setIsLoadingQuotes(false);
+    }
+  };
+
+  // Save current quote
+  const saveCurrentQuote = async () => {
+    if (!estimate) return;
+
+    const defaultName = `Quote #${savedQuotes.length + 1} - ${estimate.customerInfo.name || 'Customer'}`;
+    const quoteName = prompt('Enter quote name:', defaultName);
+    
+    if (!quoteName || quoteName.trim() === '') {
+      return;
+    }
+
+    setIsSavingQuote(true);
+    try {
+      // Include customer info in measurements for storage
+      const measurementsWithCustomer = {
+        ...estimate.measurements,
+        customerInfo: estimate.customerInfo,
+      };
+      
+      const estimateWithCustomerInfo = {
+        ...estimate,
+        measurements: measurementsWithCustomer,
+      };
+      
+      await saveQuote(estimateWithCustomerInfo, quoteName.trim());
+      alert('Quote saved successfully!');
+      await fetchSavedQuotes();
+    } catch (error) {
+      console.error('Failed to save quote:', error);
+      alert(`Failed to save quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSavingQuote(false);
+    }
+  };
+
+  // Load a saved quote
+  const loadSavedQuote = async (quoteId: string) => {
+    try {
+      const savedQuote = await loadQuote(quoteId);
+      
+      // Extract customer info from measurements if stored there
+      const measurements = savedQuote.measurements as any;
+      const customerInfo = measurements.customerInfo || {
+        name: measurements.fileName?.replace('Pasted image', '') || '',
+        address: '',
+        phone: '',
+      };
+      
+      // Restore measurements (without customerInfo)
+      const { customerInfo: _, ...cleanMeasurements } = measurements;
+      setMeasurements(cleanMeasurements);
+      
+      // Restore customer info
+      setCustomerInfo(customerInfo);
+      
+      // Restore financial settings
+      setMarginPercent(savedQuote.margin_percent);
+      setOfficeCostPercent(savedQuote.office_percent);
+      
+      // Calculate waste percent from line items (materials waste)
+      const materialsItems = savedQuote.line_items.filter(item => item.category === 'materials');
+      let wastePercent = 10; // default
+      if (materialsItems.length > 0) {
+        const totalBaseQty = materialsItems.reduce((sum, item) => sum + (item.baseQuantity || item.quantity), 0);
+        const totalQty = materialsItems.reduce((sum, item) => sum + item.quantity, 0);
+        if (totalBaseQty > 0) {
+          wastePercent = ((totalQty - totalBaseQty) / totalBaseQty) * 100;
+        }
+      }
+      setWastePercent(wastePercent);
+      
+      // Restore line items and quantities
+      const restoredLineItems = savedQuote.line_items;
+      const restoredQuantities: Record<string, number> = {};
+      const restoredSelectedItems: string[] = [];
+      
+      restoredLineItems.forEach(item => {
+        restoredQuantities[item.id] = item.quantity;
+        restoredSelectedItems.push(item.id);
+      });
+      
+      setItemQuantities(restoredQuantities);
+      setSelectedItems(restoredSelectedItems);
+      
+      // Reconstruct estimate object
+      const byCategory = {
+        materials: restoredLineItems.filter(item => item.category === 'materials'),
+        labor: restoredLineItems.filter(item => item.category === 'labor'),
+        equipment: restoredLineItems.filter(item => item.category === 'equipment'),
+        accessories: restoredLineItems.filter(item => item.category === 'accessories'),
+      };
+      
+      const totals = {
+        materials: byCategory.materials.reduce((sum, item) => sum + item.total, 0),
+        labor: byCategory.labor.reduce((sum, item) => sum + item.total, 0),
+        equipment: byCategory.equipment.reduce((sum, item) => sum + item.total, 0),
+        accessories: byCategory.accessories.reduce((sum, item) => sum + item.total, 0),
+      };
+      
+      const restoredEstimate: Estimate = {
+        lineItems: restoredLineItems,
+        byCategory,
+        totals,
+        baseCost: savedQuote.base_cost,
+        officeCostPercent: savedQuote.office_percent,
+        officeAllocation: savedQuote.office_amount,
+        totalCost: savedQuote.total_cost,
+        marginPercent: savedQuote.margin_percent,
+        wastePercent: wastePercent,
+        sellPrice: savedQuote.sell_price,
+        grossProfit: savedQuote.gross_profit,
+        profitMargin: savedQuote.sell_price > 0 ? (savedQuote.gross_profit / savedQuote.sell_price) * 100 : 0,
+        measurements: cleanMeasurements,
+        customerInfo: customerInfo,
+        generatedAt: new Date(savedQuote.created_at).toLocaleString(),
+      };
+      
+      setEstimate(restoredEstimate);
+      setStep('estimate');
+      setShowSavedQuotes(false);
+    } catch (error) {
+      console.error('Failed to load quote:', error);
+      alert(`Failed to load quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Delete a saved quote
+  const deleteSavedQuote = async (quoteId: string, quoteName: string) => {
+    if (!confirm(`Are you sure you want to delete "${quoteName}"?`)) {
+      return;
+    }
+
+    try {
+      await deleteQuote(quoteId);
+      await fetchSavedQuotes();
+    } catch (error) {
+      console.error('Failed to delete quote:', error);
+      alert(`Failed to delete quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Load quotes on mount
+  useEffect(() => {
+    fetchSavedQuotes();
+  }, []);
+
+  // Close saved quotes dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showSavedQuotes && !target.closest('.saved-quotes-dropdown')) {
+        setShowSavedQuotes(false);
+      }
+    };
+
+    if (showSavedQuotes) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showSavedQuotes]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -657,6 +839,61 @@ Use null for any values not visible. Return only JSON.`;
                 ({priceItems.length})
                 {showPrices ? <ChevronUp className="w-4 h-4 hidden sm:inline" /> : <ChevronDown className="w-4 h-4 hidden sm:inline" />}
               </button>
+              <div className="relative saved-quotes-dropdown">
+                <button
+                  onClick={() => setShowSavedQuotes(!showSavedQuotes)}
+                  className={`flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 rounded-lg transition-colors text-sm ${showSavedQuotes ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 hover:bg-gray-200'}`}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span className="hidden sm:inline">Saved Quotes</span>
+                  <span className="sm:hidden">Quotes</span>
+                  ({savedQuotes.length})
+                  {showSavedQuotes ? <ChevronUp className="w-4 h-4 hidden sm:inline" /> : <ChevronDown className="w-4 h-4 hidden sm:inline" />}
+                </button>
+                {showSavedQuotes && (
+                  <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-96 overflow-auto">
+                    <div className="p-3 border-b border-gray-200">
+                      <h3 className="font-semibold text-gray-900 text-sm">Saved Quotes</h3>
+                    </div>
+                    {isLoadingQuotes ? (
+                      <div className="p-6 text-center text-gray-500 text-sm">Loading...</div>
+                    ) : savedQuotes.length === 0 ? (
+                      <div className="p-6 text-center text-gray-500 text-sm">No saved quotes yet</div>
+                    ) : (
+                      <div className="divide-y divide-gray-100">
+                        {savedQuotes.map((quote) => (
+                          <div key={quote.id} className="p-3 hover:bg-gray-50">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm text-gray-900 truncate">{quote.name}</div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {new Date(quote.created_at).toLocaleDateString()} • {formatCurrency(quote.sell_price)}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => loadSavedQuote(quote.id)}
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  title="Load quote"
+                                >
+                                  <Check className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => deleteSavedQuote(quote.id, quote.name)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  title="Delete quote"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => setShowFinancials(!showFinancials)}
                 className={`flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 rounded-lg transition-colors text-sm ${showFinancials ? 'bg-green-100 text-green-700' : 'bg-gray-100 hover:bg-gray-200'}`}
@@ -1306,6 +1543,23 @@ Use null for any values not visible. Return only JSON.`;
                 className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm md:text-base"
               >
                 Edit Estimate
+              </button>
+              <button
+                onClick={saveCurrentQuote}
+                disabled={isSavingQuote}
+                className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-semibold rounded-xl flex items-center justify-center gap-2 text-sm md:text-base"
+              >
+                {isSavingQuote ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-5 h-5" />
+                    Save Quote
+                  </>
+                )}
               </button>
               <button
                 onClick={resetEstimator}
