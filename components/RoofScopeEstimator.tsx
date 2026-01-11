@@ -4,6 +4,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText, Copy } from 'lucide-react';
 import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQuote } from '@/types';
 import { getUserId, saveQuote, loadQuotes, loadQuote, deleteQuote } from '@/lib/supabase';
+import { generateProposalPDF } from '@/lib/generateProposal';
 
 // Category definitions with icons
 const CATEGORIES = {
@@ -335,7 +336,7 @@ ROOFING KNOWLEDGE:
 - Penetrations need pipe boots/flashings
 - Labor is priced per square, varies by pitch difficulty
 
-Extract each item with: name, category, unit, price, and coverage information if available.
+Extract each item with: name, category, unit, price, coverage information if available, and proposalDescription if available.
 
 COVERAGE EXTRACTION:
 Look for coverage information in the item description or notes:
@@ -346,13 +347,18 @@ Look for coverage information in the item description or notes:
 - "14.3 sq ft per bundle" → coverage: 14.3, coverageUnit: "sqft"
 - If no coverage info found, use coverage: null, coverageUnit: null
 
+PROPOSAL DESCRIPTION EXTRACTION:
+- If the price sheet includes detailed descriptions or installation notes for items, extract them as proposalDescription
+- Look for full sentences or detailed descriptions that explain what the item is or how it's installed
+- If no description found, use proposalDescription: null
+
 Return ONLY a JSON array like this:
 [
-  {"name": "Brava Field Tile", "unit": "bundle", "price": 43.25, "coverage": 14.3, "coverageUnit": "sqft", "category": "materials"},
-  {"name": "Copper D-Style Eave", "unit": "each", "price": 25.00, "coverage": 10, "coverageUnit": "lf", "category": "materials"},
-  {"name": "Hugo (standard)", "unit": "sq", "price": 550, "coverage": null, "coverageUnit": null, "category": "labor"},
-  {"name": "Rolloff", "unit": "sq", "price": 48, "coverage": null, "coverageUnit": null, "category": "equipment"},
-  {"name": "4\" Boot Galv", "unit": "each", "price": 20, "coverage": null, "coverageUnit": null, "category": "accessories"}
+  {"name": "Brava Field Tile", "unit": "bundle", "price": 43.25, "coverage": 14.3, "coverageUnit": "sqft", "category": "materials", "proposalDescription": null},
+  {"name": "Copper D-Style Eave", "unit": "each", "price": 25.00, "coverage": 10, "coverageUnit": "lf", "category": "materials", "proposalDescription": null},
+  {"name": "Hugo (standard)", "unit": "sq", "price": 550, "coverage": null, "coverageUnit": null, "category": "labor", "proposalDescription": null},
+  {"name": "Rolloff", "unit": "sq", "price": 48, "coverage": null, "coverageUnit": null, "category": "equipment", "proposalDescription": null},
+  {"name": "4\" Boot Galv", "unit": "each", "price": 20, "coverage": null, "coverageUnit": null, "category": "accessories", "proposalDescription": null}
 ]
 
 Extract EVERY line item you can see. Return only the JSON array, no other text.`;
@@ -686,6 +692,7 @@ Use null for any values not visible. Return only JSON.`;
       coverage: item.coverage,
       coverageUnit: item.coverageUnit,
       category: item.category || 'materials',
+      proposalDescription: item.proposalDescription || null,
     }));
 
     setPriceItems(prev => [...prev, ...newItems]);
@@ -702,6 +709,7 @@ Use null for any values not visible. Return only JSON.`;
       coverage: null,
       coverageUnit: null,
       category: activeCategory as PriceItem['category'],
+      proposalDescription: null,
     };
     setPriceItems(prev => [...prev, newItem]);
     setEditingItem(newItem.id);
@@ -1445,6 +1453,52 @@ Only return the JSON, no other text.`;
                               <Check className="w-4 h-4" />
                             </button>
                           </div>
+                          <div className="hidden md:block w-full mt-2">
+                            <label className="text-xs text-gray-600 block mb-1">Proposal Description (optional)</label>
+                            <div className="flex gap-2">
+                              <textarea
+                                value={item.proposalDescription || ''}
+                                onChange={(e) => updatePriceItem(item.id, { proposalDescription: e.target.value || null })}
+                                placeholder="e.g., Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications"
+                                className="flex-1 px-2 py-1 border rounded text-sm"
+                                rows={3}
+                              />
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const response = await fetch('/api/extract', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        prompt: `Generate a professional proposal description for this roofing item:
+
+Name: ${item.name}
+Category: ${item.category}
+Unit: ${item.unit}
+
+Generate a clear, professional description suitable for a client-facing proposal. It should explain what the item is and how it's used in the roofing project. Keep it concise (1-2 sentences max).
+
+Return ONLY the description text, no other formatting.`,
+                                        max_tokens: 200,
+                                      }),
+                                    });
+                                    const data = await response.json();
+                                    const text = data.content?.[0]?.text || '';
+                                    const description = text.trim();
+                                    if (description) {
+                                      updatePriceItem(item.id, { proposalDescription: description });
+                                    }
+                                  } catch (error) {
+                                    console.error('Error generating description:', error);
+                                  }
+                                }}
+                                className="px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 rounded text-blue-700 whitespace-nowrap"
+                                title="Generate description"
+                              >
+                                ✨ Generate
+                              </button>
+                            </div>
+                          </div>
                           {/* Mobile edit layout */}
                           <div className="md:hidden flex-1 flex flex-col gap-2">
                             <input
@@ -1498,6 +1552,52 @@ Only return the JSON, no other text.`;
                                 <option value="sqft">sqft</option>
                                 <option value="sq">sq</option>
                               </select>
+                            </div>
+                            <div className="w-full mt-2">
+                              <label className="text-xs text-gray-600 block mb-1">Proposal Description (optional)</label>
+                              <div className="flex gap-2">
+                                <textarea
+                                  value={item.proposalDescription || ''}
+                                  onChange={(e) => updatePriceItem(item.id, { proposalDescription: e.target.value || null })}
+                                  placeholder="e.g., Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications"
+                                  className="flex-1 px-2 py-1 border rounded text-sm"
+                                  rows={3}
+                                />
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const response = await fetch('/api/extract', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          prompt: `Generate a professional proposal description for this roofing item:
+
+Name: ${item.name}
+Category: ${item.category}
+Unit: ${item.unit}
+
+Generate a clear, professional description suitable for a client-facing proposal. It should explain what the item is and how it's used in the roofing project. Keep it concise (1-2 sentences max).
+
+Return ONLY the description text, no other formatting.`,
+                                          max_tokens: 200,
+                                        }),
+                                      });
+                                      const data = await response.json();
+                                      const text = data.content?.[0]?.text || '';
+                                      const description = text.trim();
+                                      if (description) {
+                                        updatePriceItem(item.id, { proposalDescription: description });
+                                      }
+                                    } catch (error) {
+                                      console.error('Error generating description:', error);
+                                    }
+                                  }}
+                                  className="px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 rounded text-blue-700 whitespace-nowrap"
+                                  title="Generate description"
+                                >
+                                  ✨ Generate
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </>
@@ -1851,7 +1951,7 @@ Only return the JSON, no other text.`;
         {step === 'estimate' && estimate && (
           <div className="space-y-4 md:space-y-6">
             {/* View Mode Toggle */}
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-4 items-center">
               <button 
                 onClick={() => setViewMode('internal')}
                 className={viewMode === 'internal' ? 'bg-blue-500 text-white px-4 py-2 rounded' : 'bg-gray-200 px-4 py-2 rounded'}
@@ -1864,6 +1964,29 @@ Only return the JSON, no other text.`;
               >
                 Client View
               </button>
+              {viewMode === 'client' && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const blob = await generateProposalPDF(estimate);
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `Proposal_${estimate.customerInfo.name || 'Customer'}_${new Date().toISOString().split('T')[0]}.pdf`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    } catch (error) {
+                      console.error('Error generating PDF:', error);
+                      alert('Error generating PDF. Please try again.');
+                    }
+                  }}
+                  className="ml-auto bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center gap-2"
+                >
+                  📄 Download Proposal PDF
+                </button>
+              )}
             </div>
 
             {/* Profit Summary Card - Internal View Only */}
@@ -1906,55 +2029,137 @@ Only return the JSON, no other text.`;
               </div>
 
               {/* Line Items by Category */}
-              {Object.entries(CATEGORIES).map(([catKey, { label }]) => {
-                const items = estimate.byCategory[catKey];
-                if (!items || items.length === 0) return null;
+              {viewMode === 'client' ? (
+                <>
+                  {/* Client View: Combine Materials + Accessories */}
+                  {(() => {
+                    const materialsItems = [...estimate.byCategory.materials, ...estimate.byCategory.accessories];
+                    if (materialsItems.length > 0) {
+                      return (
+                        <div className="mb-4 md:mb-6">
+                          <h3 className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2 md:mb-3">MATERIALS</h3>
+                          <div className="space-y-2">
+                            {materialsItems.map((item, idx) => {
+                              const clientPrice = Math.round(item.total * markupMultiplier * 100) / 100;
+                              return (
+                                <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                                  <div className="flex-1 min-w-0">
+                                    <span className="font-medium text-sm block truncate">
+                                      {item.proposalDescription && item.proposalDescription.trim() ? item.proposalDescription : item.name}
+                                    </span>
+                                  </div>
+                                  <span className="font-semibold text-sm ml-2">{formatCurrency(clientPrice)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="flex justify-between mt-2 pt-2 border-t border-gray-200 text-sm">
+                            <span className="text-gray-600">Materials Subtotal</span>
+                            <span className="font-bold">
+                              {formatCurrency(
+                                Math.round((estimate.totals.materials + estimate.totals.accessories) * markupMultiplier * 100) / 100
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                  {/* Labor */}
+                  {estimate.byCategory.labor.length > 0 && (
+                    <div className="mb-4 md:mb-6">
+                      <h3 className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2 md:mb-3">{CATEGORIES.labor.label}</h3>
+                      <div className="space-y-2">
+                        {estimate.byCategory.labor.map((item, idx) => {
+                          const clientPrice = Math.round(item.total * markupMultiplier * 100) / 100;
+                          return (
+                            <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                              <div className="flex-1 min-w-0">
+                                <span className="font-medium text-sm block truncate">
+                                  {item.proposalDescription && item.proposalDescription.trim() ? item.proposalDescription : item.name}
+                                </span>
+                              </div>
+                              <span className="font-semibold text-sm ml-2">{formatCurrency(clientPrice)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex justify-between mt-2 pt-2 border-t border-gray-200 text-sm">
+                        <span className="text-gray-600">{CATEGORIES.labor.label} Subtotal</span>
+                        <span className="font-bold">
+                          {formatCurrency(Math.round(estimate.totals.labor * markupMultiplier * 100) / 100)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  {/* Equipment */}
+                  {estimate.byCategory.equipment.length > 0 && (
+                    <div className="mb-4 md:mb-6">
+                      <h3 className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2 md:mb-3">{CATEGORIES.equipment.label}</h3>
+                      <div className="space-y-2">
+                        {estimate.byCategory.equipment.map((item, idx) => {
+                          const clientPrice = Math.round(item.total * markupMultiplier * 100) / 100;
+                          return (
+                            <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                              <div className="flex-1 min-w-0">
+                                <span className="font-medium text-sm block truncate">
+                                  {item.proposalDescription && item.proposalDescription.trim() ? item.proposalDescription : item.name}
+                                </span>
+                              </div>
+                              <span className="font-semibold text-sm ml-2">{formatCurrency(clientPrice)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex justify-between mt-2 pt-2 border-t border-gray-200 text-sm">
+                        <span className="text-gray-600">{CATEGORIES.equipment.label} Subtotal</span>
+                        <span className="font-bold">
+                          {formatCurrency(Math.round(estimate.totals.equipment * markupMultiplier * 100) / 100)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* Internal View: Show all categories separately */
+                Object.entries(CATEGORIES).map(([catKey, { label }]) => {
+                  const items = estimate.byCategory[catKey];
+                  if (!items || items.length === 0) return null;
 
-                return (
-                  <div key={catKey} className="mb-4 md:mb-6">
-                    <h3 className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2 md:mb-3">{label}</h3>
-                    <div className="space-y-2">
-                      {items.map((item, idx) => {
-                        const clientPrice = viewMode === 'client' 
-                          ? Math.round(item.total * markupMultiplier * 100) / 100
-                          : item.total;
-                        
-                        return (
-                          <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
-                            <div className="flex-1 min-w-0">
-                              <span className="font-medium text-sm block truncate">
-                                {viewMode === 'client' 
-                                  ? `${item.name} (${item.quantity} ${item.unit})`
-                                  : item.name
-                                }
-                              </span>
-                              {viewMode === 'internal' && (
+                  return (
+                    <div key={catKey} className="mb-4 md:mb-6">
+                      <h3 className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2 md:mb-3">{label}</h3>
+                      <div className="space-y-2">
+                        {items.map((item, idx) => {
+                          return (
+                            <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                              <div className="flex-1 min-w-0">
+                                <span className="font-medium text-sm block truncate">
+                                  {item.name}
+                                </span>
                                 <span className="text-gray-400 text-xs">
                                   {item.quantity} {item.unit} × {formatCurrency(item.price)}
                                   {item.wasteAdded > 0 && (
                                     <span className="text-orange-500 ml-1">(+{item.wasteAdded} waste)</span>
                                   )}
                                 </span>
-                              )}
+                              </div>
+                              <span className="font-semibold text-sm ml-2">{formatCurrency(item.total)}</span>
                             </div>
-                            <span className="font-semibold text-sm ml-2">{formatCurrency(clientPrice)}</span>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
+                      <div className="flex justify-between mt-2 pt-2 border-t border-gray-200 text-sm">
+                        <span className="text-gray-600">{label} Subtotal</span>
+                        <span className="font-bold">
+                          {formatCurrency(estimate.totals[catKey])}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex justify-between mt-2 pt-2 border-t border-gray-200 text-sm">
-                      <span className="text-gray-600">{label} Subtotal</span>
-                      <span className="font-bold">
-                        {formatCurrency(
-                          viewMode === 'client' 
-                            ? Math.round(estimate.totals[catKey] * markupMultiplier * 100) / 100
-                            : estimate.totals[catKey]
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
 
               {/* Financial Summary */}
               <div className="border-t-2 border-gray-200 pt-4 mt-4 md:mt-6 space-y-2 md:space-y-3 text-sm">
@@ -1977,7 +2182,7 @@ Only return the JSON, no other text.`;
                       <span>{formatCurrency(estimate.totals.accessories)}</span>
                     </div>
                     <div className="flex justify-between text-gray-600">
-                      <span>Sundries ({estimate.sundriesPercent}%)</span>
+                      <span>Materials Allowance ({estimate.sundriesPercent}%)</span>
                       <span>{formatCurrency(estimate.sundriesAmount)}</span>
                     </div>
                     <div className="flex justify-between font-medium border-t border-gray-200 pt-2 md:pt-3">
@@ -2010,7 +2215,7 @@ Only return the JSON, no other text.`;
                   <>
                     <div className="flex justify-between text-gray-600">
                       <span>Materials Subtotal</span>
-                      <span>{formatCurrency(Math.round(estimate.totals.materials * markupMultiplier * 100) / 100)}</span>
+                      <span>{formatCurrency(Math.round((estimate.totals.materials + estimate.totals.accessories) * markupMultiplier * 100) / 100)}</span>
                     </div>
                     <div className="flex justify-between text-gray-600">
                       <span>Labor Subtotal</span>
@@ -2020,12 +2225,6 @@ Only return the JSON, no other text.`;
                       <span>Equipment Subtotal</span>
                       <span>{formatCurrency(Math.round(estimate.totals.equipment * markupMultiplier * 100) / 100)}</span>
                     </div>
-                    {estimate.totals.accessories > 0 && (
-                      <div className="flex justify-between text-gray-600">
-                        <span>Accessories Subtotal</span>
-                        <span>{formatCurrency(Math.round(estimate.totals.accessories * markupMultiplier * 100) / 100)}</span>
-                      </div>
-                    )}
                     <div className="flex justify-between items-center border-t-2 border-gray-900 pt-3 md:pt-4">
                       <div>
                         <p className="text-lg md:text-xl font-bold">TOTAL</p>
