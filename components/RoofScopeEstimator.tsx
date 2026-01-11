@@ -1501,7 +1501,7 @@ Do NOT write multiple sentences. ONE sentence only. Return ONLY the description 
                                     console.error('Error generating description:', error);
                                   }
                                 }}
-                                className="px-3 py-1 text-xs bg-blue-100 hover:bg-blue-200 rounded text-blue-700 whitespace-nowrap min-w-[90px]"
+                                className="px-4 py-1 text-xs bg-blue-100 hover:bg-blue-200 rounded text-blue-700 whitespace-nowrap min-w-[120px] flex-shrink-0"
                                 title="Generate description"
                               >
                                 ✨ Generate
@@ -1610,7 +1610,7 @@ Do NOT write multiple sentences. ONE sentence only. Return ONLY the description 
                                       console.error('Error generating description:', error);
                                     }
                                   }}
-                                  className="px-3 py-1 text-xs bg-blue-100 hover:bg-blue-200 rounded text-blue-700 whitespace-nowrap min-w-[90px]"
+                                  className="px-4 py-1 text-xs bg-blue-100 hover:bg-blue-200 rounded text-blue-700 whitespace-nowrap min-w-[120px] flex-shrink-0"
                                   title="Generate description"
                                 >
                                   ✨ Generate
