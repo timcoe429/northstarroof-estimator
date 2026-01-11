@@ -377,6 +377,10 @@ Extract EVERY line item you can see. Return only the JSON array, no other text.`
     return {
       ...existing,
       ...newData,
+      // Update predominant_pitch if new data provides it
+      predominant_pitch: newData.predominant_pitch !== undefined && newData.predominant_pitch !== null && newData.predominant_pitch !== ''
+        ? newData.predominant_pitch
+        : existing.predominant_pitch,
       // Preserve existing values unless new ones are provided (handle undefined/null)
       steep_squares: newData.steep_squares !== undefined && newData.steep_squares !== null 
         ? newData.steep_squares 
@@ -493,34 +497,47 @@ Use 0 for any values not visible. Return only JSON.`;
       const base64 = await fileToBase64(file);
       const dataUrl = `data:${file.type || 'image/png'};base64,${base64}`;
 
-      const prompt = `You are extracting SLOPE BREAKDOWN from a RoofScope or EagleView ROOF AREA ANALYSIS page.
+      const prompt = `You are extracting measurements from a RoofScope or EagleView ROOF AREA ANALYSIS page.
 
-This page shows individual roof planes with their slopes. Extract ONLY the slope breakdown:
+This page may show either:
+1. A detailed plane table with columns: Plane | Area(sf) | Pitch | Slope | High | IWB(sf)
+2. A Totals (SQ) summary table
 
-SLOPE BREAKDOWN TO EXTRACT:
-- steep_squares: Area with pitch 8/12 or steeper
-- standard_squares: Area with pitch below 8/12
-- flat_squares: Flat or near-flat areas
+PRIORITIZE the detailed plane table if both are visible.
 
-Look for a 'Totals (SQ)' section or slope summary that breaks down:
-- Steep vs Standard vs Low/Flat areas
-- This helps determine which H&R products to use (High Slope vs Regular)
+EXTRACTION RULES:
 
-If you see a Roof Area Analysis with individual planes listed, sum up:
-- All planes marked 'S' (Steep) or with pitch >= 8:12 → steep_squares
-- All other sloped planes → standard_squares
-- Flat areas → flat_squares
+1. PREDOMINANT PITCH (from detailed plane table):
+   - Group all planes by their Pitch value (e.g., 4:12, 10:12, 5:12, 24:12)
+   - Sum the Area(sf) for each pitch group
+   - The pitch with the HIGHEST total area becomes predominant_pitch
+   - Format as "X/12" (e.g., if 10:12 has most area, return "10/12")
+   - If only Totals table available, extract predominant pitch from there if visible
+
+2. SLOPE BREAKDOWN:
+   - If detailed plane table is visible:
+     * S = Steep (pitch 8/12 and above)
+     * L = Low
+     * F = Flat
+     * Sum Area(sf) for all planes with Slope="S" → convert to squares (divide by 100) → steep_squares
+     * Sum Area(sf) for all planes with Slope="L" or blank (but not S or F) → convert to squares → standard_squares
+     * Sum Area(sf) for all planes with Slope="F" → convert to squares → flat_squares
+   - If only Totals table available:
+     * Sum areas marked "Steep" or "High" → steep_squares
+     * Sum areas marked "Low" or "Standard" → standard_squares
+     * Sum areas marked "Flat" → flat_squares
 
 ROOFING KNOWLEDGE:
 - 1 square = 100 sq ft of roof area
 - High slope products are required for 8/12 pitch and above for safety/warranty
 - Regular H&R is for standard pitches (below 8/12)
 
-Return ONLY a JSON object with slope breakdown:
+Return ONLY a JSON object:
 {
-  "steep_squares": <number>,
-  "standard_squares": <number>,
-  "flat_squares": <number>
+  "predominant_pitch": "<X/12 format or null if not visible>",
+  "steep_squares": <number or null>,
+  "standard_squares": <number or null>,
+  "flat_squares": <number or null>
 }
 
 Use null for any values not visible. Return only JSON.`;
