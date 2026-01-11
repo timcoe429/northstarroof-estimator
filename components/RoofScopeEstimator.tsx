@@ -2,9 +2,11 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText, Copy, Bot } from 'lucide-react';
+import Image from 'next/image';
 import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQuote } from '@/types';
-import { getUserId, saveQuote, loadQuotes, loadQuote, deleteQuote } from '@/lib/supabase';
+import { saveQuote, loadQuotes, loadQuote, deleteQuote } from '@/lib/supabase';
 import { generateProposalPDF } from '@/lib/generateProposal';
+import { useAuth } from '@/lib/AuthContext';
 
 // Category definitions with icons
 const CATEGORIES = {
@@ -133,6 +135,8 @@ const descriptionMap: Record<string, string> = {
 };
 
 export default function RoofScopeEstimator() {
+  const { user, signOut } = useAuth();
+  
   // Core state
   const [step, setStep] = useState('upload');
   const [measurements, setMeasurements] = useState<Measurements | null>(null);
@@ -1148,7 +1152,7 @@ Only return the JSON, no other text.`;
   const fetchSavedQuotes = async () => {
     setIsLoadingQuotes(true);
     try {
-      const quotes = await loadQuotes();
+      const quotes = await loadQuotes(user?.id);
       setSavedQuotes(quotes);
     } catch (error) {
       console.error('Failed to load quotes:', error);
@@ -1182,7 +1186,7 @@ Only return the JSON, no other text.`;
         measurements: measurementsWithCustomer,
       };
       
-      await saveQuote(estimateWithCustomerInfo, quoteName.trim());
+      await saveQuote(estimateWithCustomerInfo, quoteName.trim(), user?.id);
       alert('Quote saved successfully!');
       await fetchSavedQuotes();
     } catch (error) {
@@ -1196,7 +1200,7 @@ Only return the JSON, no other text.`;
   // Load a saved quote
   const loadSavedQuote = async (quoteId: string) => {
     try {
-      const savedQuote = await loadQuote(quoteId);
+      const savedQuote = await loadQuote(quoteId, user?.id);
       
       // Extract customer info from measurements if stored there
       const measurements = savedQuote.measurements as any;
@@ -1300,7 +1304,7 @@ Only return the JSON, no other text.`;
     }
 
     try {
-      await deleteQuote(quoteId);
+      await deleteQuote(quoteId, user?.id);
       await fetchSavedQuotes();
     } catch (error) {
       console.error('Failed to delete quote:', error);
@@ -1331,19 +1335,42 @@ Only return the JSON, no other text.`;
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 md:py-4">
+      <div className="bg-[#00293f] text-white sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 md:gap-3">
-              <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Calculator className="w-5 h-5 md:w-6 md:h-6 text-white" />
-              </div>
+            <div className="flex items-center gap-3">
+              <Image
+                src="/logo.png"
+                alt="Northstar Roofing"
+                width={40}
+                height={40}
+                className="h-10 w-auto brightness-0 invert"
+              />
               <div>
-                <h1 className="font-bold text-gray-900 text-sm md:text-base">Roof Estimator Pro</h1>
-                <p className="text-xs text-gray-500 hidden sm:block">Paste RoofScope → Get Estimate</p>
+                <h1 className="text-xl font-bold">Northstar Estimator</h1>
+                <p className="text-xs text-gray-300">Roofing Estimate Calculator</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-300 hidden sm:block">
+                {user?.email}
+              </span>
+              <button
+                onClick={() => signOut()}
+                className="bg-[#B1000F] hover:bg-[#8a000c] px-3 py-1.5 rounded text-sm font-medium transition-colors"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Navigation Bar */}
+      <div className="bg-white border-b border-gray-200 sticky top-[73px] z-10">
+        <div className="max-w-5xl mx-auto px-4 py-3">
+          <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowPrices(!showPrices)}
                 className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm"

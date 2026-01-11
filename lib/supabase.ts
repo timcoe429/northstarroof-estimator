@@ -7,30 +7,11 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholde
 // Create client (will fail gracefully at runtime if env vars not set)
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Generate a simple UUID-like string for user ID
-function generateUserId(): string {
-  return 'user_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
-}
-
-// Get or create user ID from localStorage
-export function getUserId(): string {
-  if (typeof window === 'undefined') {
-    return generateUserId();
-  }
-  
-  const stored = localStorage.getItem('roofscope_user_id');
-  if (stored) {
-    return stored;
-  }
-  
-  const userId = generateUserId();
-  localStorage.setItem('roofscope_user_id', userId);
-  return userId;
-}
-
 // Save quote to Supabase
-export async function saveQuote(estimate: Estimate, quoteName: string): Promise<SavedQuote> {
-  const userId = getUserId();
+export async function saveQuote(estimate: Estimate, quoteName: string, userId: string | undefined): Promise<SavedQuote> {
+  if (!userId) {
+    throw new Error('User ID is required to save quote');
+  }
   
   const quoteData = {
     user_id: userId,
@@ -61,14 +42,15 @@ export async function saveQuote(estimate: Estimate, quoteName: string): Promise<
   return data as SavedQuote;
 }
 
-// Load all quotes for current user
-export async function loadQuotes(): Promise<SavedQuote[]> {
-  const userId = getUserId();
+// Load all quotes (all users can see all quotes)
+export async function loadQuotes(userId: string | undefined): Promise<SavedQuote[]> {
+  if (!userId) {
+    throw new Error('User ID is required to load quotes');
+  }
   
   const { data, error } = await supabase
     .from('estimates')
     .select('*')
-    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -79,14 +61,15 @@ export async function loadQuotes(): Promise<SavedQuote[]> {
 }
 
 // Load single quote by ID
-export async function loadQuote(id: string): Promise<SavedQuote> {
-  const userId = getUserId();
+export async function loadQuote(id: string, userId: string | undefined): Promise<SavedQuote> {
+  if (!userId) {
+    throw new Error('User ID is required to load quote');
+  }
   
   const { data, error } = await supabase
     .from('estimates')
     .select('*')
     .eq('id', id)
-    .eq('user_id', userId)
     .single();
 
   if (error) {
@@ -97,14 +80,15 @@ export async function loadQuote(id: string): Promise<SavedQuote> {
 }
 
 // Delete quote by ID
-export async function deleteQuote(id: string): Promise<void> {
-  const userId = getUserId();
+export async function deleteQuote(id: string, userId: string | undefined): Promise<void> {
+  if (!userId) {
+    throw new Error('User ID is required to delete quote');
+  }
   
   const { error } = await supabase
     .from('estimates')
     .delete()
-    .eq('id', id)
-    .eq('user_id', userId);
+    .eq('id', id);
 
   if (error) {
     throw new Error(`Failed to delete quote: ${error.message}`);
@@ -112,8 +96,10 @@ export async function deleteQuote(id: string): Promise<void> {
 }
 
 // Update existing quote
-export async function updateQuote(id: string, estimate: Estimate, quoteName: string): Promise<SavedQuote> {
-  const userId = getUserId();
+export async function updateQuote(id: string, estimate: Estimate, quoteName: string, userId: string | undefined): Promise<SavedQuote> {
+  if (!userId) {
+    throw new Error('User ID is required to update quote');
+  }
   
   const quoteData = {
     name: quoteName,
@@ -133,7 +119,6 @@ export async function updateQuote(id: string, estimate: Estimate, quoteName: str
     .from('estimates')
     .update(quoteData)
     .eq('id', id)
-    .eq('user_id', userId)
     .select()
     .single();
 
