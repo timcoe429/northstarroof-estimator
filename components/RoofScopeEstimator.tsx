@@ -1803,15 +1803,6 @@ Only return the JSON, no other text.`;
                   : 'Generate Descriptions'
                 }
               </button>
-
-              {priceItems.length > 0 && (
-                <button
-                  onClick={() => { setPriceItems([]); localStorage.removeItem('roofscope_price_items_v2'); }}
-                  className="sm:ml-auto text-sm text-red-500 hover:text-red-700 py-2"
-                >
-                  Clear All
-                </button>
-              )}
             </div>
 
             <p className="text-xs text-gray-400 mt-3 hidden sm:block">
