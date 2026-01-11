@@ -9,6 +9,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Save quote to Supabase
 export async function saveQuote(estimate: Estimate, quoteName: string, userId: string | undefined): Promise<SavedQuote> {
+  // Debug logging
+  console.log('saveQuote received userId:', userId);
+  console.log('saveQuote userId type:', typeof userId);
+  console.log('saveQuote userId format check:', userId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId) : 'undefined');
+  
   if (!userId) {
     throw new Error('User ID is required to save quote');
   }
@@ -29,6 +34,10 @@ export async function saveQuote(estimate: Estimate, quoteName: string, userId: s
     status: 'draft',
   };
 
+  // Debug logging - log quoteData before insert
+  console.log('saveQuote quoteData:', quoteData);
+  console.log('saveQuote user_id value:', quoteData.user_id);
+  
   const { data, error } = await supabase
     .from('estimates')
     .insert(quoteData)
@@ -36,8 +45,12 @@ export async function saveQuote(estimate: Estimate, quoteName: string, userId: s
     .single();
 
   if (error) {
+    console.error('saveQuote error:', error);
+    console.error('saveQuote error details:', JSON.stringify(error, null, 2));
     throw new Error(`Failed to save quote: ${error.message}`);
   }
+  
+  console.log('saveQuote success, saved data:', data);
 
   return data as SavedQuote;
 }

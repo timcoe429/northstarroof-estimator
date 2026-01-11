@@ -1187,7 +1187,26 @@ Only return the JSON, no other text.`;
         measurements: measurementsWithCustomer,
       };
       
-      await saveQuote(estimateWithCustomerInfo, quoteName.trim(), user?.id);
+      // Debug logging
+      console.log('Saving quote with user ID:', user?.id);
+      console.log('Full user object:', user);
+      console.log('User ID type:', typeof user?.id);
+      
+      // Validate user ID format
+      if (!user?.id) {
+        throw new Error('User is not authenticated. Please log in to save quotes.');
+      }
+      
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const isValidUUID = uuidRegex.test(user.id);
+      console.log('User ID format check:', isValidUUID ? 'Valid UUID' : 'Invalid format');
+      
+      if (!isValidUUID) {
+        console.error('Invalid user ID format:', user.id);
+        throw new Error('Invalid user ID format. Please log out and log back in.');
+      }
+      
+      await saveQuote(estimateWithCustomerInfo, quoteName.trim(), user.id);
       alert('Quote saved successfully!');
       await fetchSavedQuotes();
     } catch (error) {
