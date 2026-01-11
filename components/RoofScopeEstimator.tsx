@@ -826,23 +826,6 @@ Use null for any values not visible. Return only JSON.`;
     setSelectedItems(prev => prev.filter(itemId => itemId !== id));
   };
 
-  // Bulk update all price item descriptions from mapping (one-time use)
-  const updateAllDescriptions = () => {
-    const updatedItems = priceItems.map(item => {
-      const description = descriptionMap[item.name];
-      if (description) {
-        return { ...item, proposalDescription: description };
-      }
-      return item;
-    });
-    setPriceItems(updatedItems);
-    localStorage.setItem('roofscope_price_items_v2', JSON.stringify(updatedItems));
-    
-    // Count how many were updated
-    const updatedCount = updatedItems.filter(item => descriptionMap[item.name]).length;
-    alert(`Updated ${updatedCount} item descriptions.`);
-  };
-
   // Bulk generate proposal descriptions for items with blank descriptions
   const generateAllDescriptions = async () => {
     const itemsToGenerate = priceItems.filter(item => !item.proposalDescription || !item.proposalDescription.trim());
@@ -1784,13 +1767,6 @@ Only return the JSON, no other text.`;
                   </>
                 )}
               </label>
-
-              <button
-                onClick={updateAllDescriptions}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors text-sm"
-              >
-                Update All Descriptions (One Time)
-              </button>
 
               <button
                 onClick={generateAllDescriptions}
