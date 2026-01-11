@@ -15,12 +15,32 @@ const CONTENT_Y_END = 648; // from bottom
 const CONTENT_WIDTH = 540;
 const CONTENT_HEIGHT = 576;
 
-// Table column definitions
-const DESC_COLUMN_X = 36;
-const DESC_COLUMN_WIDTH = 400;
-const PRICE_COLUMN_X = 450;
-const PRICE_COLUMN_WIDTH = 126;
-const PRICE_TEXT_X = 568; // Right-aligned position
+// Table layout - based on Canva design measurements
+const TABLE_LEFT = 50; // Left margin
+const TABLE_WIDTH = 500; // Total table width (fits within 540pt content area)
+const TABLE_RIGHT = TABLE_LEFT + TABLE_WIDTH; // 550
+
+// Column widths (Description ~82%, Pricing ~18%)
+const DESC_COLUMN_WIDTH = 410;
+const PRICE_COLUMN_WIDTH = 90;
+const DESC_COLUMN_LEFT = TABLE_LEFT;
+const DESC_COLUMN_RIGHT = DESC_COLUMN_LEFT + DESC_COLUMN_WIDTH; // 460
+const PRICE_COLUMN_LEFT = DESC_COLUMN_RIGHT;
+const PRICE_COLUMN_RIGHT = TABLE_RIGHT; // 550
+
+// Row dimensions
+const HEADER_HEIGHT = 28;
+const ROW_HEIGHT_SINGLE = 28; // For single-line items
+const ROW_PADDING = 10; // Padding inside cells
+const LINE_HEIGHT = 14; // For text wrapping calculation
+
+// Border styling
+const BORDER_WIDTH = 1.5; // 2px
+const BORDER_COLOR = rgb(0.9, 0.9, 0.9); // #e6e6e6
+
+// Header backgrounds
+const DESC_HEADER_BG = rgb(0.84, 0.84, 0.84); // Light gray #d6d6d6
+const PRICE_HEADER_BG = rgb(0.9, 0.9, 0.9); // Slightly lighter gray #e6e6e6
 
 // Quote Total box coordinates
 const QUOTE_TOTAL_X = 580;
@@ -238,6 +258,18 @@ function wordWrap(text: string, font: any, fontSize: number, maxWidth: number): 
   return lines;
 }
 
+// Calculate row height based on text wrapping
+function calculateRowHeight(text: string, font: any, fontSize: number, maxWidth: number): number {
+  const lines = wordWrap(text, font, fontSize, maxWidth);
+  const textHeight = lines.length * (fontSize + 4); // fontSize + line spacing
+  return Math.max(ROW_HEIGHT_SINGLE, textHeight + ROW_PADDING * 2);
+}
+
+// Format currency with commas
+function formatCurrency(amount: number): string {
+  return '$' + amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 // Generate introduction page
 async function generateIntroductionPage(intro: StructuredIntro): Promise<PDFDocument> {
   const template = await loadPDFTemplate('/templates/thank-you.pdf');
@@ -449,13 +481,13 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     const sectionChanged = currentSection !== section;
     
     // Calculate space needed
-    const sectionHeaderSpace = sectionChanged ? 36 : 0; // 12 before + 10 text + 6 after + 8 buffer
     const description = item.proposalDescription && item.proposalDescription.trim() 
       ? item.proposalDescription 
       : item.name;
-    const descLines = wordWrap(description, font, 10, DESC_COLUMN_WIDTH - 8);
-    const itemHeightWithSpacing = Math.max(descLines.length * 12, 24) + 12; // Description + separator spacing
-    const spaceNeeded = sectionHeaderSpace + itemHeightWithSpacing;
+    const maxDescWidth = DESC_COLUMN_WIDTH - ROW_PADDING * 2;
+    const sectionHeaderSpace = sectionChanged ? ROW_HEIGHT_SINGLE : 0;
+    const itemHeight = calculateRowHeight(description, font, 10, maxDescWidth);
+    const spaceNeeded = sectionHeaderSpace + itemHeight;
     const spaceAvailable = currentY - CONTENT_Y_START;
     
     // Only create new page when out of space (NOT on section change)
@@ -467,13 +499,12 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
       
       // Start new page
       currentPageContent = { items: [] };
-      currentY = CONTENT_Y_END - 22 - 12; // Below header, ready for section header
+      currentY = CONTENT_Y_END - HEADER_HEIGHT; // Below header
     }
     
     // Add section header if section changed (track space but don't store header separately)
     if (sectionChanged && currentSection) {
-      currentY -= 12; // 12 points before section header
-      currentY -= 10 + 6; // Text height + 6 points after
+      currentY -= ROW_HEIGHT_SINGLE;
     }
     
     // Add item to current page content
@@ -481,13 +512,12 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     currentPageContent.items.push({
       item,
       section,
-      descLines,
+      descLines: wordWrap(description, font, 10, maxDescWidth),
       price: clientPrice,
     });
     
     // Update Y position
-    const itemHeight = Math.max(descLines.length * 12, 24);
-    currentY = currentY - itemHeight - 12; // Item height + space after separator
+    currentY = currentY - itemHeight;
     
     currentSection = section;
   }
@@ -507,35 +537,24 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     const page = pages_array[0];
     
     // Draw table header
-    drawTableHeader(page, pageBoldFont);
+    let yPos = drawTableHeader(page, CONTENT_Y_END, pageFont, pageBoldFont);
     
     // Draw page content
-    let yPos = CONTENT_Y_END - 22 - 12;
     let lastSection = '';
     
     for (const contentItem of pageContent.items) {
       // Add section header if needed
       if (contentItem.section !== lastSection) {
-        if (lastSection) {
-          yPos -= 12; // 12 points before section header
-        }
-        page.drawText(contentItem.section, {
-          x: DESC_COLUMN_X,
-          y: yPos,
-          size: 10,
-          font: pageBoldFont,
-          color: rgb(0, 0, 0),
-        });
-        yPos -= 10 + 6; // Text height + 6 points after
+        yPos = drawSectionHeader(page, yPos, contentItem.section, pageBoldFont);
         lastSection = contentItem.section;
       }
       
-      // Draw item at current Y position
-      drawLineItem(page, pageFont, contentItem, yPos);
-      
-      // Update Y position for next item
-      const itemHeight = Math.max(contentItem.descLines.length * 12, 24);
-      yPos = yPos - itemHeight - 12; // Item height + space after separator
+      // Draw item row
+      const description = contentItem.item.proposalDescription && contentItem.item.proposalDescription.trim() 
+        ? contentItem.item.proposalDescription 
+        : contentItem.item.name;
+      const priceText = formatCurrency(contentItem.price);
+      yPos = drawLineItemRow(page, yPos, description, priceText, pageFont);
     }
     
     pages.push(template);
@@ -551,40 +570,29 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     const page = pages_array[0];
     
     // Draw table header
-    drawTableHeader(page, pageBoldFont);
+    let yPos = drawTableHeader(page, CONTENT_Y_END, pageFont, pageBoldFont);
     
     // Draw page content
-    let yPos = CONTENT_Y_END - 22 - 12;
     let lastSection = '';
     
     for (const contentItem of lastPageContent.items) {
       // Add section header if needed
       if (contentItem.section !== lastSection) {
-        if (lastSection) {
-          yPos -= 12; // 12 points before section header
-        }
-        page.drawText(contentItem.section, {
-          x: DESC_COLUMN_X,
-          y: yPos,
-          size: 10,
-          font: pageBoldFont,
-          color: rgb(0, 0, 0),
-        });
-        yPos -= 10 + 6; // Text height + 6 points after
+        yPos = drawSectionHeader(page, yPos, contentItem.section, pageBoldFont);
         lastSection = contentItem.section;
       }
       
-      // Draw item at current Y position
-      drawLineItem(page, pageFont, contentItem, yPos);
-      
-      // Update Y position for next item
-      const itemHeight = Math.max(contentItem.descLines.length * 12, 24);
-      yPos = yPos - itemHeight - 12; // Item height + space after separator
+      // Draw item row
+      const description = contentItem.item.proposalDescription && contentItem.item.proposalDescription.trim() 
+        ? contentItem.item.proposalDescription 
+        : contentItem.item.name;
+      const priceText = formatCurrency(contentItem.price);
+      yPos = drawLineItemRow(page, yPos, description, priceText, pageFont);
     }
     
     // Add Quote Total amount overlay
     const totalPrice = Math.round(estimate.sellPrice * 100) / 100;
-    const priceText = `$${totalPrice.toFixed(2)}`;
+    const priceText = formatCurrency(totalPrice);
     const priceWidth = pageBoldFont.widthOfTextAtSize(priceText, 14);
     
     page.drawText(priceText, {
@@ -602,170 +610,231 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
 }
 
 // Helper function to draw table header
-function drawTableHeader(page: any, boldFont: any): void {
-  const headerY = CONTENT_Y_END; // Top of header (648 from bottom)
+function drawTableHeader(page: any, y: number, font: any, boldFont: any): number {
+  const headerBottom = y - HEADER_HEIGHT;
   
-  // Description header background: #d6d6d6, X=36 to X=436, height 22
+  // Description header background (light gray)
   page.drawRectangle({
-    x: DESC_COLUMN_X,
-    y: headerY - 22,
-    width: 400,
-    height: 22,
-    color: rgb(0.84, 0.84, 0.84), // #d6d6d6
+    x: DESC_COLUMN_LEFT,
+    y: headerBottom,
+    width: DESC_COLUMN_WIDTH,
+    height: HEADER_HEIGHT,
+    color: DESC_HEADER_BG,
   });
   
-  // Pricing header background: #e6e6e6, X=436 to X=576, height 22
+  // Pricing header background (slightly lighter gray)
   page.drawRectangle({
-    x: 436,
-    y: headerY - 22,
-    width: 140,
-    height: 22,
-    color: rgb(0.9, 0.9, 0.9), // #e6e6e6
+    x: PRICE_COLUMN_LEFT,
+    y: headerBottom,
+    width: PRICE_COLUMN_WIDTH,
+    height: HEADER_HEIGHT,
+    color: PRICE_HEADER_BG,
   });
   
-  // "Description" text: Centered horizontally and vertically
+  // Border - top of header
+  page.drawRectangle({
+    x: TABLE_LEFT,
+    y: y - BORDER_WIDTH,
+    width: TABLE_WIDTH,
+    height: BORDER_WIDTH,
+    color: BORDER_COLOR,
+  });
+  
+  // Border - bottom of header
+  page.drawRectangle({
+    x: TABLE_LEFT,
+    y: headerBottom,
+    width: TABLE_WIDTH,
+    height: BORDER_WIDTH,
+    color: BORDER_COLOR,
+  });
+  
+  // Border - left side
+  page.drawRectangle({
+    x: TABLE_LEFT,
+    y: headerBottom,
+    width: BORDER_WIDTH,
+    height: HEADER_HEIGHT,
+    color: BORDER_COLOR,
+  });
+  
+  // Border - right side
+  page.drawRectangle({
+    x: TABLE_RIGHT - BORDER_WIDTH,
+    y: headerBottom,
+    width: BORDER_WIDTH,
+    height: HEADER_HEIGHT,
+    color: BORDER_COLOR,
+  });
+  
+  // Border - vertical divider between columns
+  page.drawRectangle({
+    x: PRICE_COLUMN_LEFT - BORDER_WIDTH / 2,
+    y: headerBottom,
+    width: BORDER_WIDTH,
+    height: HEADER_HEIGHT,
+    color: BORDER_COLOR,
+  });
+  
+  // "Description" text - centered
   const descText = 'Description';
-  const descWidth = boldFont.widthOfTextAtSize(descText, 10);
-  const descCenterX = DESC_COLUMN_X + (400 / 2) - (descWidth / 2);
+  const descTextWidth = boldFont.widthOfTextAtSize(descText, 11);
+  const descTextX = DESC_COLUMN_LEFT + (DESC_COLUMN_WIDTH - descTextWidth) / 2;
+  const textY = headerBottom + (HEADER_HEIGHT - 11) / 2 + 3;
+  
   page.drawText(descText, {
-    x: descCenterX,
-    y: headerY - 11, // Vertically centered (11pt from bottom of 22pt header)
-    size: 10,
+    x: descTextX,
+    y: textY,
+    size: 11,
     font: boldFont,
     color: rgb(0, 0, 0),
   });
   
-  // "Pricing" text: Centered horizontally and vertically
+  // "Pricing" text - centered
   const pricingText = 'Pricing';
-  const pricingWidth = boldFont.widthOfTextAtSize(pricingText, 10);
-  const pricingCenterX = 436 + (140 / 2) - (pricingWidth / 2);
+  const pricingTextWidth = boldFont.widthOfTextAtSize(pricingText, 11);
+  const pricingTextX = PRICE_COLUMN_LEFT + (PRICE_COLUMN_WIDTH - pricingTextWidth) / 2;
+  
   page.drawText(pricingText, {
-    x: pricingCenterX,
-    y: headerY - 11, // Vertically centered
-    size: 10,
+    x: pricingTextX,
+    y: textY,
+    size: 11,
     font: boldFont,
     color: rgb(0, 0, 0),
   });
   
-  // Table header border: 1.5pt #e6e6e6 (top, left, right, bottom)
-  const borderColor = rgb(0.9, 0.9, 0.9);
-  const borderThickness = 1.5;
-  
-  // Top border
-  page.drawRectangle({
-    x: DESC_COLUMN_X,
-    y: headerY - borderThickness,
-    width: CONTENT_X_END - DESC_COLUMN_X,
-    height: borderThickness,
-    color: borderColor,
-  });
-  
-  // Left border
-  page.drawRectangle({
-    x: DESC_COLUMN_X,
-    y: headerY - 22,
-    width: borderThickness,
-    height: 22,
-    color: borderColor,
-  });
-  
-  // Right border
-  page.drawRectangle({
-    x: CONTENT_X_END - borderThickness,
-    y: headerY - 22,
-    width: borderThickness,
-    height: 22,
-    color: borderColor,
-  });
-  
-  // Bottom border
-  page.drawRectangle({
-    x: DESC_COLUMN_X,
-    y: headerY - 22,
-    width: CONTENT_X_END - DESC_COLUMN_X,
-    height: borderThickness,
-    color: borderColor,
-  });
-  
-  // Vertical divider between Description and Pricing
-  page.drawRectangle({
-    x: 436 - borderThickness / 2,
-    y: headerY - 22,
-    width: borderThickness,
-    height: 22,
-    color: borderColor,
-  });
+  return headerBottom; // Return Y position for next row
 }
 
-// Helper function to draw a line item
-function drawLineItem(page: any, font: any, contentItem: { item: any; section: string; descLines: string[]; price: number }, yPos: number): void {
-  // Draw description (indented: X=44)
-  let descY = yPos;
-  for (const line of contentItem.descLines) {
+// Helper function to draw a line item row
+function drawLineItemRow(
+  page: any, 
+  y: number, 
+  description: string, 
+  price: string, 
+  font: any, 
+  isSection: boolean = false
+): number {
+  const maxDescWidth = DESC_COLUMN_WIDTH - ROW_PADDING * 2;
+  const fontSize = 10;
+  
+  // Calculate row height based on text wrapping
+  const lines = wordWrap(description, font, fontSize, maxDescWidth);
+  const textHeight = lines.length * (fontSize + 4);
+  const rowHeight = Math.max(ROW_HEIGHT_SINGLE, textHeight + ROW_PADDING * 2);
+  
+  const rowBottom = y - rowHeight;
+  
+  // Row background (white/transparent - no fill needed)
+  
+  // Border - bottom of row
+  page.drawRectangle({
+    x: TABLE_LEFT,
+    y: rowBottom,
+    width: TABLE_WIDTH,
+    height: BORDER_WIDTH,
+    color: BORDER_COLOR,
+  });
+  
+  // Border - left side
+  page.drawRectangle({
+    x: TABLE_LEFT,
+    y: rowBottom,
+    width: BORDER_WIDTH,
+    height: rowHeight,
+    color: BORDER_COLOR,
+  });
+  
+  // Border - right side
+  page.drawRectangle({
+    x: TABLE_RIGHT - BORDER_WIDTH,
+    y: rowBottom,
+    width: BORDER_WIDTH,
+    height: rowHeight,
+    color: BORDER_COLOR,
+  });
+  
+  // Border - vertical divider
+  page.drawRectangle({
+    x: PRICE_COLUMN_LEFT - BORDER_WIDTH / 2,
+    y: rowBottom,
+    width: BORDER_WIDTH,
+    height: rowHeight,
+    color: BORDER_COLOR,
+  });
+  
+  // Description text - left aligned with padding
+  const textStartY = y - ROW_PADDING - fontSize;
+  let textY = textStartY;
+  
+  for (const line of lines) {
     page.drawText(line, {
-      x: 44,
-      y: descY,
-      size: 10,
-      font,
+      x: DESC_COLUMN_LEFT + ROW_PADDING,
+      y: textY,
+      size: fontSize,
+      font: isSection ? font : font, // Use boldFont for section headers if needed
       color: rgb(0, 0, 0),
     });
-    descY -= 12;
+    textY -= (fontSize + 4);
   }
   
-  // Price: right-aligned to X=568
-  const priceText = `$${contentItem.price.toFixed(2)}`;
-  const priceWidth = font.widthOfTextAtSize(priceText, 10);
-  page.drawText(priceText, {
-    x: PRICE_TEXT_X - priceWidth,
-    y: yPos,
+  // Price text - right aligned with padding
+  if (price) {
+    const priceWidth = font.widthOfTextAtSize(price, fontSize);
+    page.drawText(price, {
+      x: PRICE_COLUMN_RIGHT - ROW_PADDING - priceWidth,
+      y: textStartY,
+      size: fontSize,
+      font: font,
+      color: rgb(0, 0, 0),
+    });
+  }
+  
+  return rowBottom; // Return Y position for next row
+}
+
+// Helper function to draw section header row
+function drawSectionHeader(page: any, y: number, sectionName: string, boldFont: any): number {
+  const rowHeight = ROW_HEIGHT_SINGLE;
+  const rowBottom = y - rowHeight;
+  
+  // Border - bottom
+  page.drawRectangle({
+    x: TABLE_LEFT,
+    y: rowBottom,
+    width: TABLE_WIDTH,
+    height: BORDER_WIDTH,
+    color: BORDER_COLOR,
+  });
+  
+  // Border - left
+  page.drawRectangle({
+    x: TABLE_LEFT,
+    y: rowBottom,
+    width: BORDER_WIDTH,
+    height: rowHeight,
+    color: BORDER_COLOR,
+  });
+  
+  // Border - right
+  page.drawRectangle({
+    x: TABLE_RIGHT - BORDER_WIDTH,
+    y: rowBottom,
+    width: BORDER_WIDTH,
+    height: rowHeight,
+    color: BORDER_COLOR,
+  });
+  
+  // Section name - bold, left aligned
+  page.drawText(sectionName, {
+    x: DESC_COLUMN_LEFT + ROW_PADDING,
+    y: rowBottom + (rowHeight - 10) / 2 + 2,
     size: 10,
-    font,
+    font: boldFont,
     color: rgb(0, 0, 0),
   });
   
-  // Calculate row bottom for borders
-  const itemHeight = Math.max(contentItem.descLines.length * 12, 24);
-  const rowBottom = yPos - itemHeight;
-  
-  // Row borders: left, right, bottom (1.5pt #e6e6e6)
-  const borderColor = rgb(0.9, 0.9, 0.9);
-  const borderThickness = 1.5;
-  
-  // Left border
-  page.drawRectangle({
-    x: DESC_COLUMN_X,
-    y: rowBottom - borderThickness,
-    width: borderThickness,
-    height: itemHeight + borderThickness,
-    color: borderColor,
-  });
-  
-  // Right border
-  page.drawRectangle({
-    x: CONTENT_X_END - borderThickness,
-    y: rowBottom - borderThickness,
-    width: borderThickness,
-    height: itemHeight + borderThickness,
-    color: borderColor,
-  });
-  
-  // Bottom border
-  page.drawRectangle({
-    x: DESC_COLUMN_X,
-    y: rowBottom - borderThickness,
-    width: CONTENT_X_END - DESC_COLUMN_X,
-    height: borderThickness,
-    color: borderColor,
-  });
-  
-  // Vertical divider between Description and Pricing
-  page.drawRectangle({
-    x: 436 - borderThickness / 2,
-    y: rowBottom - borderThickness,
-    width: borderThickness,
-    height: itemHeight + borderThickness,
-    color: borderColor,
-  });
+  return rowBottom;
 }
 
 // Main function to generate proposal PDF
