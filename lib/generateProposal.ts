@@ -288,15 +288,72 @@ async function generateIntroductionPage(intro: StructuredIntro): Promise<PDFDocu
   const font = await template.embedFont(StandardFonts.Helvetica);
   const boldFont = await template.embedFont(StandardFonts.HelveticaBold);
   
-  // Start from top of content area (Y from bottom - PDF coordinates are from bottom)
-  // CONTENT_Y_END = 648 points from bottom, which is 792 - 648 = 144 from top
-  let y = CONTENT_Y_END; // 648 points from bottom
-  
   const maxLineWidth = 500;
   const textX = CONTENT_X_START + 50; // Start a bit indented
   
-  // GREETING: Helvetica, 11pt, #000000
+  // PASS 1: Calculate total content height
+  let totalHeight = 0;
+  
+  // GREETING
   const greetingLines = wordWrap(intro.greeting, font, 11, maxLineWidth);
+  totalHeight += greetingLines.length * (11 + 2); // Line height + spacing
+  totalHeight += 20; // After greeting spacing
+  
+  // OPENING
+  const openingLines = wordWrap(intro.opening, boldFont, 14, maxLineWidth);
+  totalHeight += openingLines.length * (14 + 2);
+  totalHeight += 15; // After opening spacing
+  
+  // BODY_PARA_1
+  let body1Lines: string[] = [];
+  if (intro.bodyPara1) {
+    body1Lines = wordWrap(intro.bodyPara1, font, 11, maxLineWidth);
+    totalHeight += body1Lines.length * (11 + 2);
+    totalHeight += 12; // Between paragraphs spacing
+  }
+  
+  // BODY_PARA_2
+  let body2Lines: string[] = [];
+  if (intro.bodyPara2) {
+    body2Lines = wordWrap(intro.bodyPara2, font, 11, maxLineWidth);
+    totalHeight += body2Lines.length * (11 + 2);
+    totalHeight += 15; // Before "What's Included" spacing
+  }
+  
+  // "What's Included" header
+  totalHeight += 11 + 8; // Header + spacing
+  
+  // Bullets
+  const bullets = [intro.bullet1, intro.bullet2, intro.bullet3];
+  for (const bullet of bullets) {
+    const bulletText = `• ${bullet}`;
+    const bulletLines = wordWrap(bulletText, font, 11, maxLineWidth);
+    totalHeight += bulletLines.length * (11 + 2);
+    totalHeight += 6; // Between bullets spacing
+  }
+  totalHeight -= 6; // Remove last bullet spacing
+  totalHeight += 15; // After last bullet spacing
+  
+  // CLOSING_PARA
+  const closingLines = wordWrap(intro.closingPara, font, 11, maxLineWidth);
+  totalHeight += closingLines.length * (11 + 2);
+  totalHeight += 20; // Before "Best regards," spacing
+  
+  // Signature block
+  totalHeight += 11 + 8; // "Best regards,"
+  totalHeight += 11 + 2; // "Omiah Travis"
+  totalHeight += 11 + 12; // "Northstar Roofing"
+  totalHeight += 10 + 4; // Email
+  totalHeight += 10; // Phone (last item, no spacing after)
+  
+  // Calculate available height and center content
+  const availableHeight = CONTENT_Y_END - CONTENT_Y_START;
+  const startY = CONTENT_Y_END - ((availableHeight - totalHeight) / 2);
+  
+  // PASS 2: Draw content starting from centered position
+  let y = startY;
+  
+  // GREETING: Helvetica, 11pt, #000000
   for (const line of greetingLines) {
     page.drawText(line, {
       x: textX,
@@ -310,7 +367,6 @@ async function generateIntroductionPage(intro: StructuredIntro): Promise<PDFDocu
   y -= 20 - 2; // After greeting: 20 points
   
   // OPENING: Helvetica Bold, 14pt, #00293f
-  const openingLines = wordWrap(intro.opening, boldFont, 14, maxLineWidth);
   for (const line of openingLines) {
     page.drawText(line, {
       x: textX,
@@ -324,8 +380,7 @@ async function generateIntroductionPage(intro: StructuredIntro): Promise<PDFDocu
   y -= 15 - 2; // After opening: 15 points
   
   // BODY_PARA_1: Helvetica, 11pt, #000000
-  if (intro.bodyPara1) {
-    const body1Lines = wordWrap(intro.bodyPara1, font, 11, maxLineWidth);
+  if (intro.bodyPara1 && body1Lines.length > 0) {
     for (const line of body1Lines) {
       page.drawText(line, {
         x: textX,
@@ -340,8 +395,7 @@ async function generateIntroductionPage(intro: StructuredIntro): Promise<PDFDocu
   }
   
   // BODY_PARA_2: Helvetica, 11pt, #000000
-  if (intro.bodyPara2) {
-    const body2Lines = wordWrap(intro.bodyPara2, font, 11, maxLineWidth);
+  if (intro.bodyPara2 && body2Lines.length > 0) {
     for (const line of body2Lines) {
       page.drawText(line, {
         x: textX,
@@ -367,7 +421,6 @@ async function generateIntroductionPage(intro: StructuredIntro): Promise<PDFDocu
   y -= 11 + 8; // After header: 8 points
   
   // Bullets: Helvetica, 11pt, #000000, use • character
-  const bullets = [intro.bullet1, intro.bullet2, intro.bullet3];
   for (const bullet of bullets) {
     const bulletText = `• ${bullet}`;
     const bulletLines = wordWrap(bulletText, font, 11, maxLineWidth);
@@ -386,7 +439,6 @@ async function generateIntroductionPage(intro: StructuredIntro): Promise<PDFDocu
   y -= 15 - 6; // After last bullet: 15 points
   
   // CLOSING_PARA: Helvetica, 11pt, #000000
-  const closingLines = wordWrap(intro.closingPara, font, 11, maxLineWidth);
   for (const line of closingLines) {
     page.drawText(line, {
       x: textX,
@@ -558,7 +610,8 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     
     for (const contentItem of pageContent.items) {
       // Add section header if needed
-      if (contentItem.section !== lastSection) {
+      const isFirstInSection = contentItem.section !== lastSection;
+      if (isFirstInSection) {
         yPos = drawSectionHeader(page, yPos, contentItem.section, pageBoldFont);
         lastSection = contentItem.section;
       }
@@ -568,7 +621,7 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
         ? contentItem.item.proposalDescription 
         : contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
-      yPos = drawLineItemRow(page, yPos, description, priceText, pageFont);
+      yPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection);
     }
     
     pages.push(template);
@@ -597,7 +650,8 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     
     for (const contentItem of lastPageContent.items) {
       // Add section header if needed
-      if (contentItem.section !== lastSection) {
+      const isFirstInSection = contentItem.section !== lastSection;
+      if (isFirstInSection) {
         yPos = drawSectionHeader(page, yPos, contentItem.section, pageBoldFont);
         lastSection = contentItem.section;
       }
@@ -607,7 +661,7 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
         ? contentItem.item.proposalDescription 
         : contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
-      yPos = drawLineItemRow(page, yPos, description, priceText, pageFont);
+      yPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection);
     }
     
     // Add Quote Total amount overlay - vertically centered in navy box
@@ -691,7 +745,7 @@ function drawLineItemRow(
   description: string, 
   price: string, 
   font: any, 
-  isSection: boolean = false
+  isFirstInSection: boolean = false
 ): number {
   const maxDescWidth = DESC_COLUMN_WIDTH - ROW_PADDING * 2;
   const fontSize = 10;
@@ -702,6 +756,17 @@ function drawLineItemRow(
   const rowHeight = Math.max(ROW_HEIGHT_SINGLE, textHeight + ROW_PADDING * 2);
   
   const rowBottom = y - rowHeight;
+  
+  // If first item in section, draw TOP border
+  if (isFirstInSection) {
+    page.drawRectangle({
+      x: TABLE_LEFT,
+      y: y,  // Top of this row
+      width: TABLE_WIDTH,
+      height: BORDER_WIDTH,
+      color: BORDER_COLOR,
+    });
+  }
   
   // Row background (white/transparent - no fill needed)
   
@@ -752,7 +817,7 @@ function drawLineItemRow(
       x: DESC_COLUMN_LEFT + ROW_PADDING,
       y: textY,
       size: fontSize,
-      font: isSection ? font : font, // Use boldFont for section headers if needed
+      font: font,
       color: rgb(0, 0, 0),
     });
     textY -= (fontSize + 4);
@@ -776,25 +841,25 @@ function drawLineItemRow(
 
 // Helper function to draw section header row
 function drawSectionHeader(page: any, y: number, sectionName: string, boldFont: any): number {
-  // Section headers are plain text with spacing: 20pt above, 8pt below
+  // Section headers are plain text with spacing: 20pt above, 10pt below
   const spacingAbove = 20;
-  const spacingBelow = 8;
-  const fontSize = 10;
+  const spacingBelow = 10;
+  const fontSize = 13;
   
-  // Calculate Y position: start from y, move up by spacing above, then down by half font size for centering
-  const textY = y - spacingAbove - (fontSize / 2);
+  // Calculate Y position: start from y, move up by spacing above
+  const headerY = y - spacingAbove;
   
-  // Section name - bold, left aligned, no borders
+  // Section name - bold, 13pt, left aligned, NO background, NO borders
   page.drawText(sectionName, {
-    x: DESC_COLUMN_LEFT + ROW_PADDING,
-    y: textY,
+    x: TABLE_LEFT + ROW_PADDING,
+    y: headerY,
     size: fontSize,
     font: boldFont,
     color: rgb(0, 0, 0),
   });
   
-  // Return Y position for next row (after spacing below)
-  return y - spacingAbove - spacingBelow;
+  // Return Y position with space below for first item
+  return headerY - spacingBelow;
 }
 
 // Main function to generate proposal PDF
