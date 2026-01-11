@@ -142,6 +142,7 @@ export default function RoofScopeEstimator() {
   const [measurements, setMeasurements] = useState<Measurements | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({ name: '', address: '', phone: '' });
 
   // Price list state
@@ -1312,6 +1313,29 @@ Only return the JSON, no other text.`;
     }
   };
 
+  // Handle PDF download with loading state
+  const handleDownloadProposal = async () => {
+    if (!estimate) return;
+    
+    setIsGeneratingPDF(true);
+    try {
+      const blob = await generateProposalPDF(estimate);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Proposal_${estimate.customerInfo.name || 'Customer'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Error generating PDF. Please try again.');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+
   // Load quotes on mount
   useEffect(() => {
     fetchSavedQuotes();
@@ -1340,11 +1364,11 @@ Only return the JSON, no other text.`;
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Image
-                src="/logo.png"
+                src="/logo-white.png"
                 alt="Northstar Roofing"
                 width={40}
                 height={40}
-                className="h-10 w-auto brightness-0 invert"
+                className="h-10 w-auto"
               />
               <div>
                 <h1 className="text-xl font-bold">Northstar Estimator</h1>
@@ -2098,25 +2122,15 @@ Only return the JSON, no other text.`;
               </button>
               {viewMode === 'client' && (
                 <button
-                  onClick={async () => {
-                    try {
-                      const blob = await generateProposalPDF(estimate);
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `Proposal_${estimate.customerInfo.name || 'Customer'}_${new Date().toISOString().split('T')[0]}.pdf`;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      URL.revokeObjectURL(url);
-                    } catch (error) {
-                      console.error('Error generating PDF:', error);
-                      alert('Error generating PDF. Please try again.');
-                    }
-                  }}
-                  className="ml-auto bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center gap-2"
+                  onClick={handleDownloadProposal}
+                  disabled={isGeneratingPDF}
+                  className={`ml-auto flex items-center gap-2 px-4 py-2 rounded text-white transition-colors ${
+                    isGeneratingPDF 
+                      ? 'bg-gray-400 cursor-not-allowed' 
+                      : 'bg-green-600 hover:bg-green-700'
+                  }`}
                 >
-                  📄 Download Proposal PDF
+                  {isGeneratingPDF ? 'Generating Proposal...' : '📄 Download Proposal PDF'}
                 </button>
               )}
             </div>

@@ -31,7 +31,7 @@ const PRICE_COLUMN_RIGHT = TABLE_RIGHT; // 550
 // Row dimensions
 const HEADER_HEIGHT = 28;
 const ROW_HEIGHT_SINGLE = 28; // For single-line items
-const ROW_PADDING = 10; // Padding inside cells
+const ROW_PADDING = 15; // Padding inside cells
 const LINE_HEIGHT = 14; // For text wrapping calculation
 
 // Border styling
@@ -148,13 +148,21 @@ function parseStructuredIntro(text: string, customerName: string): StructuredInt
 }
 
 // Generate introduction letter using AI
-async function generateIntroductionLetter(customerName: string, projectItems: string[]): Promise<StructuredIntro> {
-  const prompt = `You are Omiah Travis, owner of Northstar Roofing. Write a sincere, professional introduction letter for a roofing proposal.
+async function generateIntroductionLetter(customerName: string, customerAddress: string, projectItems: string[]): Promise<StructuredIntro> {
+  const prompt = `You are Omiah Travis, owner of Northstar Roofing in Aspen, Colorado. Write a sincere, professional introduction letter for a roofing proposal.
 
 CUSTOMER NAME: ${customerName}
+PROJECT ADDRESS: ${customerAddress}
 
 PROJECT ITEMS:
 ${projectItems.length > 0 ? projectItems.map(item => `- ${item}`).join('\n') : '- Standard roofing materials'}
+
+Write a warm, personalized thank you letter that:
+- Addresses the customer by name
+- References the property location/address naturally (e.g., "your beautiful home on [street]" or "your property at [address]")
+- Mentions the specific roofing system and notable features being installed
+- Sounds genuinely appreciative, not generic or salesy
+- Emphasizes Northstar's commitment to quality craftsmanship
 
 Return the letter content in this EXACT structure with labeled sections. NO markdown, NO asterisks, NO formatting characters. Plain text only.
 
@@ -162,13 +170,13 @@ GREETING
 Dear ${customerName},
 
 OPENING
-[One warm sentence thanking them sincerely for the opportunity]
+[One warm sentence thanking them sincerely, can reference the property location]
 
 BODY_PARA_1
-[2-3 sentences about the project, mention the roofing system and any notable features like copper valleys, snowguards, etc.]
+[2-3 sentences about the project, mention the roofing system, notable features, and how it will benefit their specific property]
 
 BODY_PARA_2
-[1-2 sentences about quality and care]
+[1-2 sentences about Northstar's commitment to quality and treating every project like their own home]
 
 BULLET_1
 Detailed line item estimate breaking down all materials and labor
@@ -536,8 +544,14 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     const pages_array = template.getPages();
     const page = pages_array[0];
     
-    // Draw table header
-    let yPos = drawTableHeader(page, CONTENT_Y_END, pageFont, pageBoldFont);
+    // Draw table header only on first page
+    let yPos = CONTENT_Y_END;
+    if (pageIdx === 0) {
+      yPos = drawTableHeader(page, CONTENT_Y_END, pageFont, pageBoldFont);
+    } else {
+      // For subsequent pages, start below where header would be
+      yPos = CONTENT_Y_END - HEADER_HEIGHT;
+    }
     
     // Draw page content
     let lastSection = '';
@@ -569,8 +583,14 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     const pages_array = template.getPages();
     const page = pages_array[0];
     
-    // Draw table header
-    let yPos = drawTableHeader(page, CONTENT_Y_END, pageFont, pageBoldFont);
+    // Draw table header only if this is the first (and only) page
+    let yPos = CONTENT_Y_END;
+    if (pageContents.length === 1) {
+      yPos = drawTableHeader(page, CONTENT_Y_END, pageFont, pageBoldFont);
+    } else {
+      // For last page when there are multiple pages, start below where header would be
+      yPos = CONTENT_Y_END - HEADER_HEIGHT;
+    }
     
     // Draw page content
     let lastSection = '';
@@ -590,15 +610,18 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
       yPos = drawLineItemRow(page, yPos, description, priceText, pageFont);
     }
     
-    // Add Quote Total amount overlay
+    // Add Quote Total amount overlay - vertically centered in navy box
     const totalPrice = Math.round(estimate.sellPrice * 100) / 100;
     const priceText = formatCurrency(totalPrice);
     const priceWidth = pageBoldFont.widthOfTextAtSize(priceText, 14);
+    const fontSize = 14;
+    // Increase Y position by 4 points to properly center vertically
+    const textY = QUOTE_TOTAL_Y + 4;
     
     page.drawText(priceText, {
       x: QUOTE_TOTAL_X - priceWidth,
-      y: QUOTE_TOTAL_Y,
-      size: 14,
+      y: textY,
+      size: fontSize,
       font: pageBoldFont,
       color: rgb(1, 1, 1), // #FFFFFF white
     });
@@ -622,58 +645,13 @@ function drawTableHeader(page: any, y: number, font: any, boldFont: any): number
     color: DESC_HEADER_BG,
   });
   
-  // Pricing header background (slightly lighter gray)
+  // Pricing header background (slightly lighter gray) - touch seamlessly with description header
   page.drawRectangle({
     x: PRICE_COLUMN_LEFT,
     y: headerBottom,
     width: PRICE_COLUMN_WIDTH,
     height: HEADER_HEIGHT,
     color: PRICE_HEADER_BG,
-  });
-  
-  // Border - top of header
-  page.drawRectangle({
-    x: TABLE_LEFT,
-    y: y - BORDER_WIDTH,
-    width: TABLE_WIDTH,
-    height: BORDER_WIDTH,
-    color: BORDER_COLOR,
-  });
-  
-  // Border - bottom of header
-  page.drawRectangle({
-    x: TABLE_LEFT,
-    y: headerBottom,
-    width: TABLE_WIDTH,
-    height: BORDER_WIDTH,
-    color: BORDER_COLOR,
-  });
-  
-  // Border - left side
-  page.drawRectangle({
-    x: TABLE_LEFT,
-    y: headerBottom,
-    width: BORDER_WIDTH,
-    height: HEADER_HEIGHT,
-    color: BORDER_COLOR,
-  });
-  
-  // Border - right side
-  page.drawRectangle({
-    x: TABLE_RIGHT - BORDER_WIDTH,
-    y: headerBottom,
-    width: BORDER_WIDTH,
-    height: HEADER_HEIGHT,
-    color: BORDER_COLOR,
-  });
-  
-  // Border - vertical divider between columns
-  page.drawRectangle({
-    x: PRICE_COLUMN_LEFT - BORDER_WIDTH / 2,
-    y: headerBottom,
-    width: BORDER_WIDTH,
-    height: HEADER_HEIGHT,
-    color: BORDER_COLOR,
   });
   
   // "Description" text - centered
@@ -763,8 +741,10 @@ function drawLineItemRow(
     color: BORDER_COLOR,
   });
   
-  // Description text - left aligned with padding
-  const textStartY = y - ROW_PADDING - fontSize;
+  // Description text - vertically centered
+  const totalTextHeight = lines.length * (fontSize + 4) - 4; // Subtract last line spacing
+  const centerY = rowBottom + (rowHeight / 2);
+  const textStartY = centerY + (totalTextHeight / 2) - fontSize;
   let textY = textStartY;
   
   for (const line of lines) {
@@ -778,12 +758,13 @@ function drawLineItemRow(
     textY -= (fontSize + 4);
   }
   
-  // Price text - right aligned with padding
+  // Price text - vertically centered
   if (price) {
     const priceWidth = font.widthOfTextAtSize(price, fontSize);
+    const priceY = rowBottom + (rowHeight / 2) - (fontSize / 2) + 2;
     page.drawText(price, {
       x: PRICE_COLUMN_RIGHT - ROW_PADDING - priceWidth,
-      y: textStartY,
+      y: priceY,
       size: fontSize,
       font: font,
       color: rgb(0, 0, 0),
@@ -795,46 +776,25 @@ function drawLineItemRow(
 
 // Helper function to draw section header row
 function drawSectionHeader(page: any, y: number, sectionName: string, boldFont: any): number {
-  const rowHeight = ROW_HEIGHT_SINGLE;
-  const rowBottom = y - rowHeight;
+  // Section headers are plain text with spacing: 20pt above, 8pt below
+  const spacingAbove = 20;
+  const spacingBelow = 8;
+  const fontSize = 10;
   
-  // Border - bottom
-  page.drawRectangle({
-    x: TABLE_LEFT,
-    y: rowBottom,
-    width: TABLE_WIDTH,
-    height: BORDER_WIDTH,
-    color: BORDER_COLOR,
-  });
+  // Calculate Y position: start from y, move up by spacing above, then down by half font size for centering
+  const textY = y - spacingAbove - (fontSize / 2);
   
-  // Border - left
-  page.drawRectangle({
-    x: TABLE_LEFT,
-    y: rowBottom,
-    width: BORDER_WIDTH,
-    height: rowHeight,
-    color: BORDER_COLOR,
-  });
-  
-  // Border - right
-  page.drawRectangle({
-    x: TABLE_RIGHT - BORDER_WIDTH,
-    y: rowBottom,
-    width: BORDER_WIDTH,
-    height: rowHeight,
-    color: BORDER_COLOR,
-  });
-  
-  // Section name - bold, left aligned
+  // Section name - bold, left aligned, no borders
   page.drawText(sectionName, {
     x: DESC_COLUMN_LEFT + ROW_PADDING,
-    y: rowBottom + (rowHeight - 10) / 2 + 2,
-    size: 10,
+    y: textY,
+    size: fontSize,
     font: boldFont,
     color: rgb(0, 0, 0),
   });
   
-  return rowBottom;
+  // Return Y position for next row (after spacing below)
+  return y - spacingAbove - spacingBelow;
 }
 
 // Main function to generate proposal PDF
@@ -849,8 +809,9 @@ export async function generateProposalPDF(estimate: Estimate): Promise<Blob> {
   
   // Generate introduction page
   const customerName = estimate.customerInfo.name || 'Valued Customer';
+  const customerAddress = estimate.customerInfo.address || '';
   const projectItems = extractNotableItems(estimate);
-  const intro = await generateIntroductionLetter(customerName, projectItems);
+  const intro = await generateIntroductionLetter(customerName, customerAddress, projectItems);
   const introPDF = await generateIntroductionPage(intro);
   
   // Generate line item pages
