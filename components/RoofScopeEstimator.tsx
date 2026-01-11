@@ -126,48 +126,29 @@ export default function RoofScopeEstimator() {
       const coverage = item.coverage ? (typeof item.coverage === 'string' ? parseFloat(item.coverage) : item.coverage) : null;
       const coverageUnit = item.coverageUnit ? item.coverageUnit.toLowerCase() : null;
 
-      // Special cases first (by name)
-      
-      // OSB sheets: total_squares × 3
-      if (name.includes('osb') || name.includes('oriented strand')) {
-        qty = m.total_squares * 3;
-      }
-      // Starter: eave_length + rake_length (perimeter)
-      else if (name.includes('starter')) {
-        qty = (m.eave_length || 0) + (m.rake_length || 0);
-      }
-      // Flat fee items: always 1
-      else if (name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || item.unit === 'flat') {
-        qty = 1;
-      }
-      // Labor items: total_squares
-      else if (item.category === 'labor') {
-        qty = m.total_squares || 0;
-      }
-      // Check if item has linear coverage (lf) - treat as linear regardless of unit type
-      else if (coverage && coverageUnit === 'lf') {
-        // Linear coverage calculation
-        if (name.includes('valley')) {
-          qty = Math.ceil((m.valley_length || 0) / coverage);
-        } else if (name.includes('eave') || name.includes('drip')) {
-          qty = Math.ceil((m.eave_length || 0) / coverage);
-        } else if (name.includes('rake')) {
-          qty = Math.ceil((m.rake_length || 0) / coverage);
-        } else if (name.includes('ridge')) {
-          qty = Math.ceil((m.ridge_length || 0) / coverage);
-        } else if (name.includes('hip')) {
-          qty = Math.ceil((m.hip_length || 0) / coverage);
-        } else if (name.includes('h&r')) {
-          // H&R covers both ridge and hip
-          qty = Math.ceil(((m.ridge_length || 0) + (m.hip_length || 0)) / coverage);
-        } else {
-          // Default linear: use eave_length
-          qty = Math.ceil((m.eave_length || 0) / coverage);
-        }
-      }
-      // Check if item has area coverage (sqft or sq)
-      else if (coverage && (coverageUnit === 'sqft' || coverageUnit === 'sq')) {
-        if (coverageUnit === 'sqft') {
+      // PRIORITY 1: IF item has coverage AND coverageUnit → Calculate using coverage FIRST
+      if (coverage && coverageUnit) {
+        if (coverageUnit === 'lf') {
+          // Linear coverage calculation
+          if (name.includes('starter')) {
+            // Starter uses perimeter: eave_length + rake_length
+            qty = Math.ceil(((m.eave_length || 0) + (m.rake_length || 0)) / coverage);
+          } else if (name.includes('valley')) {
+            qty = Math.ceil((m.valley_length || 0) / coverage);
+          } else if (name.includes('eave') || name.includes('drip')) {
+            qty = Math.ceil((m.eave_length || 0) / coverage);
+          } else if (name.includes('rake')) {
+            qty = Math.ceil((m.rake_length || 0) / coverage);
+          } else if (name.includes('ridge') || name.includes('h&r')) {
+            // H&R covers both ridge and hip
+            qty = Math.ceil(((m.ridge_length || 0) + (m.hip_length || 0)) / coverage);
+          } else if (name.includes('hip')) {
+            qty = Math.ceil((m.hip_length || 0) / coverage);
+          } else {
+            // Default linear: use eave_length
+            qty = Math.ceil((m.eave_length || 0) / coverage);
+          }
+        } else if (coverageUnit === 'sqft') {
           // Convert squares to sq ft, then divide by coverage
           qty = Math.ceil((m.total_squares * 100) / coverage);
         } else if (coverageUnit === 'sq') {
@@ -175,7 +156,21 @@ export default function RoofScopeEstimator() {
           qty = Math.ceil(m.total_squares / coverage);
         }
       }
-      // Regular calculation by unit type (when no coverage)
+      // PRIORITY 2: ELSE IF special cases (only when no coverage)
+      else if (name.includes('osb') || name.includes('oriented strand')) {
+        // OSB sheets: total_squares × 3
+        qty = m.total_squares * 3;
+      } else if (name.includes('starter')) {
+        // Starter: eave_length + rake_length (perimeter) - no coverage
+        qty = (m.eave_length || 0) + (m.rake_length || 0);
+      } else if (name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || item.unit === 'flat') {
+        // Flat fee items: always 1
+        qty = 1;
+      } else if (item.category === 'labor') {
+        // Labor items: total_squares
+        qty = m.total_squares || 0;
+      }
+      // PRIORITY 3: ELSE fall back to unit-based calculation
       else {
         const unitType = UNIT_TYPES.find(u => u.value === item.unit);
         if (!unitType) {
