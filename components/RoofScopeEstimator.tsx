@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText, Copy } from 'lucide-react';
+import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText, Copy, Bot } from 'lucide-react';
 import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQuote } from '@/types';
 import { getUserId, saveQuote, loadQuotes, loadQuote, deleteQuote } from '@/lib/supabase';
 import { generateProposalPDF } from '@/lib/generateProposal';
@@ -98,6 +98,10 @@ export default function RoofScopeEstimator() {
   const [smartSelectionReasoning, setSmartSelectionReasoning] = useState('');
   const [smartSelectionWarnings, setSmartSelectionWarnings] = useState<string[]>([]);
   const [isGeneratingSelection, setIsGeneratingSelection] = useState(false);
+
+  // Bulk description generation state
+  const [isGeneratingDescriptions, setIsGeneratingDescriptions] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number } | null>(null);
 
   // Save financial settings
   useEffect(() => {
@@ -724,6 +728,63 @@ Use null for any values not visible. Return only JSON.`;
   const deletePriceItem = (id: string) => {
     setPriceItems(prev => prev.filter(item => item.id !== id));
     setSelectedItems(prev => prev.filter(itemId => itemId !== id));
+  };
+
+  // Bulk generate proposal descriptions for items with blank descriptions
+  const generateAllDescriptions = async () => {
+    const itemsToGenerate = priceItems.filter(item => !item.proposalDescription || !item.proposalDescription.trim());
+    
+    if (itemsToGenerate.length === 0) {
+      return;
+    }
+
+    setIsGeneratingDescriptions(true);
+    setGenerationProgress({ current: 0, total: itemsToGenerate.length });
+
+    for (let i = 0; i < itemsToGenerate.length; i++) {
+      const item = itemsToGenerate[i];
+      
+      try {
+        const response = await fetch('/api/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: `Generate a ONE sentence proposal description for this roofing item.
+Keep it under 15 words.
+Format: "[Action verb] [product name] [brief details]"
+Item name: ${item.name}
+Category: ${item.category}
+Unit: ${item.unit}
+
+Examples:
+- "Install Brava Field Tile synthetic roofing per manufacturer specifications."
+- "Supply and install copper D-style eave flashing."
+- "Remove and dispose of existing roofing materials."
+
+Return ONLY the description, nothing else. ONE sentence only.`,
+            max_tokens: 100,
+          }),
+        });
+
+        const data = await response.json();
+        const text = data.content?.[0]?.text || '';
+        const description = text.trim();
+        
+        if (description) {
+          updatePriceItem(item.id, { proposalDescription: description });
+        }
+      } catch (error) {
+        console.error(`Error generating description for ${item.name}:`, error);
+        // Continue to next item even if this one fails
+      }
+
+      // Update progress
+      setGenerationProgress({ current: i + 1, total: itemsToGenerate.length });
+    }
+
+    // Reset state when complete
+    setIsGeneratingDescriptions(false);
+    setGenerationProgress(null);
   };
 
   // File handlers
@@ -1455,58 +1516,13 @@ Only return the JSON, no other text.`;
                           </div>
                           <div className="hidden md:block w-full mt-2">
                             <label className="text-xs text-gray-600 block mb-1">Proposal Description (optional)</label>
-                            <div className="flex gap-2">
-                              <textarea
-                                value={item.proposalDescription || ''}
-                                onChange={(e) => updatePriceItem(item.id, { proposalDescription: e.target.value || null })}
-                                placeholder="e.g., Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications"
-                                className="flex-1 px-2 py-1 border rounded text-sm"
-                                rows={3}
-                              />
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    const response = await fetch('/api/extract', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({
-                                        prompt: `Generate a ONE sentence proposal description for this roofing item.
-
-Name: ${item.name}
-Category: ${item.category}
-Unit: ${item.unit}
-
-Requirements:
-- ONE sentence only (under 15 words)
-- Format: "[Action verb] [product name] [brief details]"
-- Professional and concise
-- Suitable for client-facing proposal
-
-Examples:
-- "Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications."
-- "Supply and install copper D-style eave flashing."
-- "Remove and dispose of existing roofing materials."
-
-Do NOT write multiple sentences. ONE sentence only. Return ONLY the description text, no other formatting.`,
-                                        max_tokens: 100,
-                                      }),
-                                    });
-                                    const data = await response.json();
-                                    const text = data.content?.[0]?.text || '';
-                                    const description = text.trim();
-                                    if (description) {
-                                      updatePriceItem(item.id, { proposalDescription: description });
-                                    }
-                                  } catch (error) {
-                                    console.error('Error generating description:', error);
-                                  }
-                                }}
-                                className="px-4 py-1 text-xs bg-blue-100 hover:bg-blue-200 rounded text-blue-700 whitespace-nowrap min-w-[120px] flex-shrink-0"
-                                title="Generate description"
-                              >
-                                ✨ Generate
-                              </button>
-                            </div>
+                            <textarea
+                              value={item.proposalDescription || ''}
+                              onChange={(e) => updatePriceItem(item.id, { proposalDescription: e.target.value || null })}
+                              placeholder="e.g., Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications"
+                              className="w-full px-2 py-1 border rounded text-sm"
+                              rows={3}
+                            />
                           </div>
                           {/* Mobile edit layout */}
                           <div className="md:hidden flex-1 flex flex-col gap-2">
@@ -1564,58 +1580,13 @@ Do NOT write multiple sentences. ONE sentence only. Return ONLY the description 
                             </div>
                             <div className="w-full mt-2">
                               <label className="text-xs text-gray-600 block mb-1">Proposal Description (optional)</label>
-                              <div className="flex gap-2">
-                                <textarea
-                                  value={item.proposalDescription || ''}
-                                  onChange={(e) => updatePriceItem(item.id, { proposalDescription: e.target.value || null })}
-                                  placeholder="e.g., Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications"
-                                  className="flex-1 px-2 py-1 border rounded text-sm"
-                                  rows={3}
-                                />
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      const response = await fetch('/api/extract', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                          prompt: `Generate a ONE sentence proposal description for this roofing item.
-
-Name: ${item.name}
-Category: ${item.category}
-Unit: ${item.unit}
-
-Requirements:
-- ONE sentence only (under 15 words)
-- Format: "[Action verb] [product name] [brief details]"
-- Professional and concise
-- Suitable for client-facing proposal
-
-Examples:
-- "Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications."
-- "Supply and install copper D-style eave flashing."
-- "Remove and dispose of existing roofing materials."
-
-Do NOT write multiple sentences. ONE sentence only. Return ONLY the description text, no other formatting.`,
-                                          max_tokens: 100,
-                                        }),
-                                      });
-                                      const data = await response.json();
-                                      const text = data.content?.[0]?.text || '';
-                                      const description = text.trim();
-                                      if (description) {
-                                        updatePriceItem(item.id, { proposalDescription: description });
-                                      }
-                                    } catch (error) {
-                                      console.error('Error generating description:', error);
-                                    }
-                                  }}
-                                  className="px-4 py-1 text-xs bg-blue-100 hover:bg-blue-200 rounded text-blue-700 whitespace-nowrap min-w-[120px] flex-shrink-0"
-                                  title="Generate description"
-                                >
-                                  ✨ Generate
-                                </button>
-                              </div>
+                              <textarea
+                                value={item.proposalDescription || ''}
+                                onChange={(e) => updatePriceItem(item.id, { proposalDescription: e.target.value || null })}
+                                placeholder="e.g., Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications"
+                                className="w-full px-2 py-1 border rounded text-sm"
+                                rows={3}
+                              />
                             </div>
                           </div>
                         </>
@@ -1682,6 +1653,18 @@ Do NOT write multiple sentences. ONE sentence only. Return ONLY the description 
                   </>
                 )}
               </label>
+
+              <button
+                onClick={generateAllDescriptions}
+                disabled={isGeneratingDescriptions || priceItems.filter(item => !item.proposalDescription?.trim()).length === 0}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors text-sm"
+              >
+                <Bot className="w-4 h-4" />
+                {isGeneratingDescriptions 
+                  ? `Generating ${generationProgress?.current || 0} of ${generationProgress?.total || 0}...`
+                  : 'Generate Descriptions'
+                }
+              </button>
 
               {priceItems.length > 0 && (
                 <button
