@@ -157,6 +157,20 @@ export default function RoofScopeEstimator() {
           qty = Math.ceil(m.total_squares / coverage);
         }
       }
+      // PRIORITY 1.5: Manual-entry items (unit "each", no coverage, not flat fee) → Default to 0
+      else if (item.unit === 'each' && !coverage) {
+        // Check if it's a known flat fee item
+        const isFlatFeeItem = name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || name.includes('reprographic');
+        
+        // If not a flat fee item, default to 0 (user must enter quantity manually)
+        // This includes labor items with "each" unit that aren't per-square (like "Snowguard Install")
+        if (!isFlatFeeItem) {
+          qty = 0;
+        } else {
+          // Flat fee items: always 1
+          qty = 1;
+        }
+      }
       // PRIORITY 2: ELSE IF special cases (only when no coverage)
       else if (name.includes('osb') || name.includes('oriented strand')) {
         // OSB sheets: total_squares × 3
@@ -167,8 +181,9 @@ export default function RoofScopeEstimator() {
       } else if (name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || item.unit === 'flat') {
         // Flat fee items: always 1
         qty = 1;
-      } else if (item.category === 'labor') {
-        // Labor items: total_squares
+      } else if (item.category === 'labor' && item.unit !== 'each') {
+        // Labor items (per-square): total_squares
+        // Exclude "each" unit labor items (they're handled above as manual-entry)
         qty = m.total_squares || 0;
       }
       // PRIORITY 3: ELSE fall back to unit-based calculation
@@ -753,12 +768,30 @@ RULES:
 7. ACCESSORIES: Don't select individual accessory items (nails, caulk, etc.) - these are covered by Sundries %
 8. SPECIAL REQUESTS: If user mentions specific items (copper valleys, snowguards, skylights), select those.
 
+EXPLICIT QUANTITIES:
+If the job description specifies an exact quantity for an item, extract it in the "explicitQuantities" object.
+- Look for patterns like "250 snowguards", "3 rolloffs", "2 dumpsters", "100 snowguards"
+- Only extract when a NUMBER is directly stated with an item name
+- Use a partial item name as the key (e.g., "snowguard" for "Snowguard Install")
+- Do NOT guess quantities - only extract when explicitly stated
+- Examples:
+  * "Also give us 250 snowguards" → {"snowguard": 250}
+  * "add snowguards" → NO explicit quantity (don't include in explicitQuantities)
+  * "Brava tile" → NO explicit quantity
+  * "3 rolloffs" → {"rolloff": 3}
+
 Return ONLY JSON:
 {
   "selectedItemIds": ["id1", "id2", ...],
+  "explicitQuantities": {
+    "item_name_partial": quantity_number
+  },
   "reasoning": "Brief explanation of why you selected these items",
   "warnings": ["Any concerns or things to double-check"]
 }
+
+The "explicitQuantities" object should only contain items where a NUMBER was explicitly stated in the job description.
+If no explicit quantities are found, use an empty object: "explicitQuantities": {}
 
 Only return the JSON, no other text.`;
 
@@ -785,6 +818,29 @@ Only return the JSON, no other text.`;
         // Apply the selection
         if (result.selectedItemIds && Array.isArray(result.selectedItemIds)) {
           setSelectedItems(result.selectedItemIds);
+        }
+        
+        // Apply explicit quantities if provided
+        if (result.explicitQuantities && typeof result.explicitQuantities === 'object') {
+          setItemQuantities(prev => {
+            const updated = { ...prev };
+            
+            // Iterate through explicit quantities
+            Object.entries(result.explicitQuantities).forEach(([key, value]) => {
+              const quantity = typeof value === 'number' ? value : parseFloat(value as string);
+              if (isNaN(quantity)) return;
+              
+              // Find items whose name contains the key (case-insensitive)
+              const keyLower = key.toLowerCase();
+              priceItems.forEach(item => {
+                if (item.name.toLowerCase().includes(keyLower)) {
+                  updated[item.id] = quantity;
+                }
+              });
+            });
+            
+            return updated;
+          });
         }
         
         // Show reasoning and warnings
