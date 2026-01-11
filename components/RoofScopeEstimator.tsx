@@ -1516,7 +1516,6 @@ Only return the JSON, no other text.`;
             </div>
           </div>
         )}
-      </div>
 
       {/* Extracted Items Modal */}
       {extractedItems && (
