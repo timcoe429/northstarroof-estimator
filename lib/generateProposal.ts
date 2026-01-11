@@ -202,8 +202,15 @@ Return ONLY the structured content with section labels, no other text.`;
 // Load PDF template
 async function loadPDFTemplate(path: string): Promise<PDFDocument> {
   const response = await fetch(path);
+  if (!response.ok) {
+    throw new Error(`Failed to load template: ${path} (Status: ${response.status})`);
+  }
   const arrayBuffer = await response.arrayBuffer();
-  return PDFDocument.load(arrayBuffer);
+  try {
+    return await PDFDocument.load(arrayBuffer);
+  } catch (error) {
+    throw new Error(`Failed to parse PDF template: ${path}. Error: ${error instanceof Error ? error.message : 'Unknown error'}. This may indicate the file is corrupted or not a valid PDF.`);
+  }
 }
 
 // Word wrap helper
