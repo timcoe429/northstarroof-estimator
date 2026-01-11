@@ -1470,16 +1470,25 @@ Only return the JSON, no other text.`;
                                       method: 'POST',
                                       headers: { 'Content-Type': 'application/json' },
                                       body: JSON.stringify({
-                                        prompt: `Generate a professional proposal description for this roofing item:
+                                        prompt: `Generate a ONE sentence proposal description for this roofing item.
 
 Name: ${item.name}
 Category: ${item.category}
 Unit: ${item.unit}
 
-Generate a clear, professional description suitable for a client-facing proposal. It should explain what the item is and how it's used in the roofing project. Keep it concise (1-2 sentences max).
+Requirements:
+- ONE sentence only (under 15 words)
+- Format: "[Action verb] [product name] [brief details]"
+- Professional and concise
+- Suitable for client-facing proposal
 
-Return ONLY the description text, no other formatting.`,
-                                        max_tokens: 200,
+Examples:
+- "Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications."
+- "Supply and install copper D-style eave flashing."
+- "Remove and dispose of existing roofing materials."
+
+Do NOT write multiple sentences. ONE sentence only. Return ONLY the description text, no other formatting.`,
+                                        max_tokens: 100,
                                       }),
                                     });
                                     const data = await response.json();
@@ -1492,7 +1501,7 @@ Return ONLY the description text, no other formatting.`,
                                     console.error('Error generating description:', error);
                                   }
                                 }}
-                                className="px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 rounded text-blue-700 whitespace-nowrap"
+                                className="px-3 py-1 text-xs bg-blue-100 hover:bg-blue-200 rounded text-blue-700 whitespace-nowrap min-w-[90px]"
                                 title="Generate description"
                               >
                                 ✨ Generate
@@ -1570,16 +1579,25 @@ Return ONLY the description text, no other formatting.`,
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({
-                                          prompt: `Generate a professional proposal description for this roofing item:
+                                          prompt: `Generate a ONE sentence proposal description for this roofing item.
 
 Name: ${item.name}
 Category: ${item.category}
 Unit: ${item.unit}
 
-Generate a clear, professional description suitable for a client-facing proposal. It should explain what the item is and how it's used in the roofing project. Keep it concise (1-2 sentences max).
+Requirements:
+- ONE sentence only (under 15 words)
+- Format: "[Action verb] [product name] [brief details]"
+- Professional and concise
+- Suitable for client-facing proposal
 
-Return ONLY the description text, no other formatting.`,
-                                          max_tokens: 200,
+Examples:
+- "Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications."
+- "Supply and install copper D-style eave flashing."
+- "Remove and dispose of existing roofing materials."
+
+Do NOT write multiple sentences. ONE sentence only. Return ONLY the description text, no other formatting.`,
+                                          max_tokens: 100,
                                         }),
                                       });
                                       const data = await response.json();
@@ -1592,7 +1610,7 @@ Return ONLY the description text, no other formatting.`,
                                       console.error('Error generating description:', error);
                                     }
                                   }}
-                                  className="px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 rounded text-blue-700 whitespace-nowrap"
+                                  className="px-3 py-1 text-xs bg-blue-100 hover:bg-blue-200 rounded text-blue-700 whitespace-nowrap min-w-[90px]"
                                   title="Generate description"
                                 >
                                   ✨ Generate

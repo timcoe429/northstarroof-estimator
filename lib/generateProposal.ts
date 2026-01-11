@@ -410,7 +410,12 @@ async function generateIntroductionPage(intro: StructuredIntro): Promise<PDFDocu
   return template;
 }
 
-// Generate line item pages
+// Page content data structure for two-pass approach
+interface PageContent {
+  items: Array<{ item: any; section: string; descLines: string[]; price: number }>;
+}
+
+// Generate line item pages using two-pass approach
 async function generateLineItemPages(estimate: Estimate, markupMultiplier: number): Promise<PDFDocument[]> {
   const pages: PDFDocument[] = [];
   
@@ -430,183 +435,337 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     return pages;
   }
   
-  let currentPage: PDFDocument | null = null;
-  let currentPageItems: typeof allItems = [];
+  // PASS 1: Track content for each page (without rendering)
+  const pageContents: PageContent[] = [];
+  let currentPageContent: PageContent = { items: [] };
   let currentSection = '';
   let currentY = CONTENT_Y_END - 22; // Start below table header
   
-  const createNewPage = async (isLastPage: boolean): Promise<PDFDocument> => {
-    const template = await loadPDFTemplate(isLastPage ? '/templates/blank-page-estimate-with-total.pdf' : '/templates/blank-page-estimate.pdf');
-    const font = await template.embedFont(StandardFonts.Helvetica);
-    const boldFont = await template.embedFont(StandardFonts.HelveticaBold);
-    
-    const pages_array = template.getPages();
-    const page = pages_array[0];
-    
-    // Table header row (templates have "ROOFING ESTIMATE" title built-in)
-    // Header is at top of content area, 22 points tall
-    const headerY = CONTENT_Y_END; // Top of header (648 from bottom)
-    
-    // Description header background: #d6d6d6, X=36 to X=436, height 22
-    page.drawRectangle({
-      x: DESC_COLUMN_X,
-      y: headerY - 22, // Bottom of rectangle
-      width: 400, // X=436 - X=36
-      height: 22,
-      color: rgb(0.84, 0.84, 0.84), // #d6d6d6
-    });
-    
-    // Pricing header background: #e6e6e6, X=436 to X=576, height 22
-    page.drawRectangle({
-      x: 436,
-      y: headerY - 22, // Bottom of rectangle
-      width: 140, // X=576 - X=436
-      height: 22,
-      color: rgb(0.9, 0.9, 0.9), // #e6e6e6
-    });
-    
-    // "Description" text: Helvetica Bold, 10pt, #000000, X=44
-    // Center text vertically in header (approximately 7pt from bottom of header)
-    page.drawText('Description', {
-      x: 44,
-      y: headerY - 15, // Approximately centered in 22pt header
-      size: 10,
-      font: boldFont,
-      color: rgb(0, 0, 0),
-    });
-    
-    // "Pricing" text: Helvetica Bold, 10pt, #000000, right-aligned to X=568
-    const pricingText = 'Pricing';
-    const pricingWidth = boldFont.widthOfTextAtSize(pricingText, 10);
-    page.drawText(pricingText, {
-      x: PRICE_TEXT_X - pricingWidth,
-      y: headerY - 15, // Approximately centered in 22pt header
-      size: 10,
-      font: boldFont,
-      color: rgb(0, 0, 0),
-    });
-    
-    return template;
-  };
+  const font = await (await loadPDFTemplate('/templates/blank-page-estimate.pdf')).embedFont(StandardFonts.Helvetica);
   
+  // Track content for each page
   for (let i = 0; i < allItems.length; i++) {
     const { item, section } = allItems[i];
-    const isLastItem = i === allItems.length - 1;
     const sectionChanged = currentSection !== section;
     
-    // Check if we need a new page
-    // Calculate space needed: section header (36 points) + line item (24 points)
-    const spaceNeeded = sectionChanged ? 36 + 24 : 24;
-    const spaceAvailable = currentY - CONTENT_Y_START;
-    
-    if (!currentPage || spaceAvailable < spaceNeeded || sectionChanged) {
-      // Save previous page if it exists
-      if (currentPage && currentPageItems.length > 0) {
-        pages.push(currentPage);
-      }
-      
-      // Create new page (use total template only if it's the very last item)
-      currentPage = await createNewPage(isLastItem);
-      currentPageItems = [];
-      currentY = CONTENT_Y_END - 22 - 12; // Below header (22pt) minus 12pt before section header
-      currentSection = section;
-    }
-    
-    const pages_array = currentPage!.getPages();
-    const page = pages_array[0];
-    const font = await currentPage!.embedFont(StandardFonts.Helvetica);
-    const boldFont = await currentPage!.embedFont(StandardFonts.HelveticaBold);
-    
-    // Add section header if section changed
-    if (sectionChanged) {
-      currentY -= 12; // 12 points before section header
-      
-      // Section header: Helvetica Bold, 10pt, #000000, X=36, NO background
-      page.drawText(section, {
-        x: DESC_COLUMN_X,
-        y: currentY,
-        size: 10,
-        font: boldFont,
-        color: rgb(0, 0, 0),
-      });
-      
-      currentY -= 10 + 6; // Text height + 6 points after
-    }
-    
-    // Add line item
+    // Calculate space needed
+    const sectionHeaderSpace = sectionChanged ? 36 : 0; // 12 before + 10 text + 6 after + 8 buffer
     const description = item.proposalDescription && item.proposalDescription.trim() 
       ? item.proposalDescription 
       : item.name;
-    const clientPrice = Math.round(item.total * markupMultiplier * 100) / 100;
+    const descLines = wordWrap(description, font, 10, DESC_COLUMN_WIDTH - 8);
+    const itemHeightWithSpacing = Math.max(descLines.length * 12, 24) + 12; // Description + separator spacing
+    const spaceNeeded = sectionHeaderSpace + itemHeightWithSpacing;
+    const spaceAvailable = currentY - CONTENT_Y_START;
     
-    // Word wrap description
-    const maxDescWidth = DESC_COLUMN_WIDTH - 8; // 8pt padding
-    const descLines = wordWrap(description, font, 10, maxDescWidth);
-    
-    // Draw description (indented: X=44)
-    let descY = currentY;
-    for (const line of descLines) {
-      page.drawText(line, {
-        x: 44,
-        y: descY,
-        size: 10,
-        font,
-        color: rgb(0, 0, 0),
-      });
-      descY -= 12; // Line spacing
+    // Only create new page when out of space (NOT on section change)
+    if (currentPageContent.items.length === 0 || spaceAvailable < spaceNeeded) {
+      // Save previous page content if it exists
+      if (currentPageContent.items.length > 0) {
+        pageContents.push(currentPageContent);
+      }
+      
+      // Start new page
+      currentPageContent = { items: [] };
+      currentY = CONTENT_Y_END - 22 - 12; // Below header, ready for section header
     }
     
-    // Price: Helvetica, 10pt, #000000, right-aligned to X=568
-    const priceText = `$${clientPrice.toFixed(2)}`;
-    const priceWidth = font.widthOfTextAtSize(priceText, 10);
-    page.drawText(priceText, {
-      x: PRICE_TEXT_X - priceWidth,
-      y: currentY,
-      size: 10,
-      font,
-      color: rgb(0, 0, 0),
+    // Add section header if section changed (track space but don't store header separately)
+    if (sectionChanged && currentSection) {
+      currentY -= 12; // 12 points before section header
+      currentY -= 10 + 6; // Text height + 6 points after
+    }
+    
+    // Add item to current page content
+    const clientPrice = Math.round(item.total * markupMultiplier * 100) / 100;
+    currentPageContent.items.push({
+      item,
+      section,
+      descLines,
+      price: clientPrice,
     });
     
-    // Separator line: #e6e6e6, 0.5pt stroke, X=36 to X=576
-    const lineY = currentY - Math.max(descLines.length * 12, 24) + 12;
-    page.drawRectangle({
-      x: DESC_COLUMN_X,
-      y: lineY - 0.25,
-      width: CONTENT_X_END - DESC_COLUMN_X,
-      height: 0.5,
-      color: rgb(0.9, 0.9, 0.9), // #e6e6e6
-    });
+    // Update Y position
+    const itemHeight = Math.max(descLines.length * 12, 24);
+    currentY = currentY - itemHeight - 12; // Item height + space after separator
     
-    // Update Y position for next item
-    currentY = lineY - 12; // Space after separator
-    
-    currentPageItems.push({ item, section });
+    currentSection = section;
   }
   
-  // Save last page
-  if (currentPage && currentPageItems.length > 0) {
-    // Add Quote Total amount if last page uses total template
-    const pages_array = currentPage.getPages();
+  // Save last page content
+  if (currentPageContent.items.length > 0) {
+    pageContents.push(currentPageContent);
+  }
+  
+  // PASS 1: Render all pages except the last one
+  for (let pageIdx = 0; pageIdx < pageContents.length - 1; pageIdx++) {
+    const pageContent = pageContents[pageIdx];
+    const template = await loadPDFTemplate('/templates/blank-page-estimate.pdf');
+    const pageFont = await template.embedFont(StandardFonts.Helvetica);
+    const pageBoldFont = await template.embedFont(StandardFonts.HelveticaBold);
+    const pages_array = template.getPages();
     const page = pages_array[0];
-    const boldFont = await currentPage.embedFont(StandardFonts.HelveticaBold);
     
+    // Draw table header
+    drawTableHeader(page, pageBoldFont);
+    
+    // Draw page content
+    let yPos = CONTENT_Y_END - 22 - 12;
+    let lastSection = '';
+    
+    for (const contentItem of pageContent.items) {
+      // Add section header if needed
+      if (contentItem.section !== lastSection) {
+        if (lastSection) {
+          yPos -= 12; // 12 points before section header
+        }
+        page.drawText(contentItem.section, {
+          x: DESC_COLUMN_X,
+          y: yPos,
+          size: 10,
+          font: pageBoldFont,
+          color: rgb(0, 0, 0),
+        });
+        yPos -= 10 + 6; // Text height + 6 points after
+        lastSection = contentItem.section;
+      }
+      
+      // Draw item at current Y position
+      drawLineItem(page, pageFont, contentItem, yPos);
+      
+      // Update Y position for next item
+      const itemHeight = Math.max(contentItem.descLines.length * 12, 24);
+      yPos = yPos - itemHeight - 12; // Item height + space after separator
+    }
+    
+    pages.push(template);
+  }
+  
+  // PASS 2: Rebuild last page with Quote Total template
+  if (pageContents.length > 0) {
+    const lastPageContent = pageContents[pageContents.length - 1];
+    const template = await loadPDFTemplate('/templates/blank-page-estimate-with-total.pdf');
+    const pageFont = await template.embedFont(StandardFonts.Helvetica);
+    const pageBoldFont = await template.embedFont(StandardFonts.HelveticaBold);
+    const pages_array = template.getPages();
+    const page = pages_array[0];
+    
+    // Draw table header
+    drawTableHeader(page, pageBoldFont);
+    
+    // Draw page content
+    let yPos = CONTENT_Y_END - 22 - 12;
+    let lastSection = '';
+    
+    for (const contentItem of lastPageContent.items) {
+      // Add section header if needed
+      if (contentItem.section !== lastSection) {
+        if (lastSection) {
+          yPos -= 12; // 12 points before section header
+        }
+        page.drawText(contentItem.section, {
+          x: DESC_COLUMN_X,
+          y: yPos,
+          size: 10,
+          font: pageBoldFont,
+          color: rgb(0, 0, 0),
+        });
+        yPos -= 10 + 6; // Text height + 6 points after
+        lastSection = contentItem.section;
+      }
+      
+      // Draw item at current Y position
+      drawLineItem(page, pageFont, contentItem, yPos);
+      
+      // Update Y position for next item
+      const itemHeight = Math.max(contentItem.descLines.length * 12, 24);
+      yPos = yPos - itemHeight - 12; // Item height + space after separator
+    }
+    
+    // Add Quote Total amount overlay
     const totalPrice = Math.round(estimate.sellPrice * 100) / 100;
     const priceText = `$${totalPrice.toFixed(2)}`;
-    const priceWidth = boldFont.widthOfTextAtSize(priceText, 14);
+    const priceWidth = pageBoldFont.widthOfTextAtSize(priceText, 14);
     
-    // Only overlay dollar amount at exact position: X=580, Y=91, right-aligned, white
     page.drawText(priceText, {
       x: QUOTE_TOTAL_X - priceWidth,
       y: QUOTE_TOTAL_Y,
       size: 14,
-      font: boldFont,
+      font: pageBoldFont,
       color: rgb(1, 1, 1), // #FFFFFF white
     });
     
-    pages.push(currentPage);
+    pages.push(template);
   }
   
   return pages;
+}
+
+// Helper function to draw table header
+function drawTableHeader(page: any, boldFont: any): void {
+  const headerY = CONTENT_Y_END; // Top of header (648 from bottom)
+  
+  // Description header background: #d6d6d6, X=36 to X=436, height 22
+  page.drawRectangle({
+    x: DESC_COLUMN_X,
+    y: headerY - 22,
+    width: 400,
+    height: 22,
+    color: rgb(0.84, 0.84, 0.84), // #d6d6d6
+  });
+  
+  // Pricing header background: #e6e6e6, X=436 to X=576, height 22
+  page.drawRectangle({
+    x: 436,
+    y: headerY - 22,
+    width: 140,
+    height: 22,
+    color: rgb(0.9, 0.9, 0.9), // #e6e6e6
+  });
+  
+  // "Description" text: Centered horizontally and vertically
+  const descText = 'Description';
+  const descWidth = boldFont.widthOfTextAtSize(descText, 10);
+  const descCenterX = DESC_COLUMN_X + (400 / 2) - (descWidth / 2);
+  page.drawText(descText, {
+    x: descCenterX,
+    y: headerY - 11, // Vertically centered (11pt from bottom of 22pt header)
+    size: 10,
+    font: boldFont,
+    color: rgb(0, 0, 0),
+  });
+  
+  // "Pricing" text: Centered horizontally and vertically
+  const pricingText = 'Pricing';
+  const pricingWidth = boldFont.widthOfTextAtSize(pricingText, 10);
+  const pricingCenterX = 436 + (140 / 2) - (pricingWidth / 2);
+  page.drawText(pricingText, {
+    x: pricingCenterX,
+    y: headerY - 11, // Vertically centered
+    size: 10,
+    font: boldFont,
+    color: rgb(0, 0, 0),
+  });
+  
+  // Table header border: 1.5pt #e6e6e6 (top, left, right, bottom)
+  const borderColor = rgb(0.9, 0.9, 0.9);
+  const borderThickness = 1.5;
+  
+  // Top border
+  page.drawRectangle({
+    x: DESC_COLUMN_X,
+    y: headerY - borderThickness,
+    width: CONTENT_X_END - DESC_COLUMN_X,
+    height: borderThickness,
+    color: borderColor,
+  });
+  
+  // Left border
+  page.drawRectangle({
+    x: DESC_COLUMN_X,
+    y: headerY - 22,
+    width: borderThickness,
+    height: 22,
+    color: borderColor,
+  });
+  
+  // Right border
+  page.drawRectangle({
+    x: CONTENT_X_END - borderThickness,
+    y: headerY - 22,
+    width: borderThickness,
+    height: 22,
+    color: borderColor,
+  });
+  
+  // Bottom border
+  page.drawRectangle({
+    x: DESC_COLUMN_X,
+    y: headerY - 22,
+    width: CONTENT_X_END - DESC_COLUMN_X,
+    height: borderThickness,
+    color: borderColor,
+  });
+  
+  // Vertical divider between Description and Pricing
+  page.drawRectangle({
+    x: 436 - borderThickness / 2,
+    y: headerY - 22,
+    width: borderThickness,
+    height: 22,
+    color: borderColor,
+  });
+}
+
+// Helper function to draw a line item
+function drawLineItem(page: any, font: any, contentItem: { item: any; section: string; descLines: string[]; price: number }, yPos: number): void {
+  // Draw description (indented: X=44)
+  let descY = yPos;
+  for (const line of contentItem.descLines) {
+    page.drawText(line, {
+      x: 44,
+      y: descY,
+      size: 10,
+      font,
+      color: rgb(0, 0, 0),
+    });
+    descY -= 12;
+  }
+  
+  // Price: right-aligned to X=568
+  const priceText = `$${contentItem.price.toFixed(2)}`;
+  const priceWidth = font.widthOfTextAtSize(priceText, 10);
+  page.drawText(priceText, {
+    x: PRICE_TEXT_X - priceWidth,
+    y: yPos,
+    size: 10,
+    font,
+    color: rgb(0, 0, 0),
+  });
+  
+  // Calculate row bottom for borders
+  const itemHeight = Math.max(contentItem.descLines.length * 12, 24);
+  const rowBottom = yPos - itemHeight;
+  
+  // Row borders: left, right, bottom (1.5pt #e6e6e6)
+  const borderColor = rgb(0.9, 0.9, 0.9);
+  const borderThickness = 1.5;
+  
+  // Left border
+  page.drawRectangle({
+    x: DESC_COLUMN_X,
+    y: rowBottom - borderThickness,
+    width: borderThickness,
+    height: itemHeight + borderThickness,
+    color: borderColor,
+  });
+  
+  // Right border
+  page.drawRectangle({
+    x: CONTENT_X_END - borderThickness,
+    y: rowBottom - borderThickness,
+    width: borderThickness,
+    height: itemHeight + borderThickness,
+    color: borderColor,
+  });
+  
+  // Bottom border
+  page.drawRectangle({
+    x: DESC_COLUMN_X,
+    y: rowBottom - borderThickness,
+    width: CONTENT_X_END - DESC_COLUMN_X,
+    height: borderThickness,
+    color: borderColor,
+  });
+  
+  // Vertical divider between Description and Pricing
+  page.drawRectangle({
+    x: 436 - borderThickness / 2,
+    y: rowBottom - borderThickness,
+    width: borderThickness,
+    height: itemHeight + borderThickness,
+    color: borderColor,
+  });
 }
 
 // Main function to generate proposal PDF
