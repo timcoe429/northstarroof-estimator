@@ -1542,7 +1542,7 @@ Only return the JSON, no other text.`;
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-gray-700">Sundries</label>
+                  <label className="text-sm font-medium text-gray-700">Materials Allowance</label>
                   <div className="flex items-center bg-white rounded-lg border border-gray-200 overflow-hidden">
                     <input
                       type="number"
