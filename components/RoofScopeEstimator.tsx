@@ -1236,7 +1236,10 @@ Only return the JSON, no other text.`;
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
-  const getCategoryItems = (category) => priceItems.filter(item => item.category === category);
+  const getCategoryItems = (category) => 
+    priceItems
+      .filter(item => item.category === category)
+      .sort((a, b) => a.name.localeCompare(b.name));
 
   // Load saved quotes from Supabase
   const fetchSavedQuotes = async () => {
