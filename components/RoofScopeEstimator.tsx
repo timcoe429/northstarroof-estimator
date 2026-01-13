@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText, Copy, Bot } from 'lucide-react';
 import Image from 'next/image';
 import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQuote } from '@/types';
-import { saveQuote, loadQuotes, loadQuote, deleteQuote } from '@/lib/supabase';
+import { saveQuote, loadQuotes, loadQuote, deleteQuote, loadPriceItems, savePriceItem, savePriceItemsBulk, deletePriceItemFromDB } from '@/lib/supabase';
 import { generateProposalPDF } from '@/lib/generateProposal';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -146,16 +146,13 @@ export default function RoofScopeEstimator() {
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({ name: '', address: '', phone: '' });
 
   // Price list state
-  const [priceItems, setPriceItems] = useState<PriceItem[]>(() => {
-    if (typeof window === 'undefined') return [];
-    const saved = localStorage.getItem('roofscope_price_items_v2');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
   const [showPrices, setShowPrices] = useState(false);
   const [priceSheetProcessing, setPriceSheetProcessing] = useState(false);
   const [extractedItems, setExtractedItems] = useState<PriceItem[] | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState('materials');
+  const [isLoadingPriceItems, setIsLoadingPriceItems] = useState(false);
 
   // Estimate builder state
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
@@ -371,10 +368,25 @@ export default function RoofScopeEstimator() {
     return (1 + officeCostPercent / 100) * (1 + marginPercent / 100);
   }, [officeCostPercent, marginPercent]);
 
-  // Save price items whenever they change
+  // Load price items from Supabase when user is available
   useEffect(() => {
-    localStorage.setItem('roofscope_price_items_v2', JSON.stringify(priceItems));
-  }, [priceItems]);
+    if (!user?.id) return;
+
+    const loadItems = async () => {
+      setIsLoadingPriceItems(true);
+      try {
+        const items = await loadPriceItems(user.id);
+        setPriceItems(items);
+      } catch (error) {
+        console.error('Failed to load price items:', error);
+        alert('Failed to load price items. Please refresh the page.');
+      } finally {
+        setIsLoadingPriceItems(false);
+      }
+    };
+
+    loadItems();
+  }, [user?.id]);
 
   // Global paste handler
   useEffect(() => {
@@ -786,8 +798,13 @@ Use null for any values not visible. Return only JSON.`;
   };
 
   // Apply extracted prices to price list
-  const applyExtractedPrices = () => {
+  const applyExtractedPrices = async () => {
     if (!extractedItems) return;
+    
+    if (!user?.id) {
+      alert('You must be logged in to add price items');
+      return;
+    }
 
     const newItems = extractedItems.map((item, idx) => ({
       id: `item_${Date.now()}_${idx}`,
@@ -800,12 +817,29 @@ Use null for any values not visible. Return only JSON.`;
       proposalDescription: item.proposalDescription || null,
     }));
 
+    // Update local state immediately
     setPriceItems(prev => [...prev, ...newItems]);
     setExtractedItems(null);
+
+    // Bulk save to Supabase
+    try {
+      await savePriceItemsBulk(newItems, user.id);
+    } catch (error) {
+      console.error('Failed to save extracted price items:', error);
+      alert('Failed to save extracted price items. Please try again.');
+      // Revert local state on error
+      setPriceItems(prev => prev.filter(item => !newItems.some(newItem => newItem.id === item.id)));
+      setExtractedItems(extractedItems);
+    }
   };
 
   // Price item management
-  const addPriceItem = () => {
+  const addPriceItem = async () => {
+    if (!user?.id) {
+      alert('You must be logged in to add price items');
+      return;
+    }
+
     const newItem: PriceItem = {
       id: `item_${Date.now()}`,
       name: 'New Item',
@@ -816,19 +850,74 @@ Use null for any values not visible. Return only JSON.`;
       category: activeCategory as PriceItem['category'],
       proposalDescription: null,
     };
+    
+    // Update local state immediately
     setPriceItems(prev => [...prev, newItem]);
     setEditingItem(newItem.id);
+
+    // Save to Supabase
+    try {
+      await savePriceItem(newItem, user.id);
+    } catch (error) {
+      console.error('Failed to save price item:', error);
+      alert('Failed to save price item. Please try again.');
+      // Revert local state on error
+      setPriceItems(prev => prev.filter(item => item.id !== newItem.id));
+    }
   };
 
-  const updatePriceItem = (id: string, updates: Partial<PriceItem>) => {
+  const updatePriceItem = async (id: string, updates: Partial<PriceItem>) => {
+    if (!user?.id) {
+      alert('You must be logged in to update price items');
+      return;
+    }
+
+    // Find the item to update
+    const currentItem = priceItems.find(item => item.id === id);
+    if (!currentItem) return;
+
+    // Create updated item
+    const updatedItem = { ...currentItem, ...updates };
+
+    // Update local state immediately
     setPriceItems(prev => prev.map(item => 
-      item.id === id ? { ...item, ...updates } : item
+      item.id === id ? updatedItem : item
     ));
+
+    // Save to Supabase
+    try {
+      await savePriceItem(updatedItem, user.id);
+    } catch (error) {
+      console.error('Failed to update price item:', error);
+      alert('Failed to update price item. Please try again.');
+      // Revert local state on error
+      setPriceItems(prev => prev.map(item => 
+        item.id === id ? currentItem : item
+      ));
+    }
   };
 
-  const deletePriceItem = (id: string) => {
-    setPriceItems(prev => prev.filter(item => item.id !== id));
-    setSelectedItems(prev => prev.filter(itemId => itemId !== id));
+  const deletePriceItem = async (id: string) => {
+    if (!user?.id) {
+      alert('You must be logged in to delete price items');
+      return;
+    }
+
+    // Store item for potential rollback
+    const itemToDelete = priceItems.find(item => item.id === id);
+    if (!itemToDelete) return;
+
+    try {
+      // Delete from Supabase first
+      await deletePriceItemFromDB(id, user.id);
+      
+      // Only update local state if delete succeeds
+      setPriceItems(prev => prev.filter(item => item.id !== id));
+      setSelectedItems(prev => prev.filter(itemId => itemId !== id));
+    } catch (error) {
+      console.error('Failed to delete price item:', error);
+      alert('Failed to delete price item. Please try again.');
+    }
   };
 
   // Bulk generate proposal descriptions for items with blank descriptions
