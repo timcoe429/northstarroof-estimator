@@ -46,6 +46,19 @@ const PRICE_HEADER_BG = rgb(0.9, 0.9, 0.9); // Slightly lighter gray #e6e6e6
 const QUOTE_TOTAL_X = 580;
 const QUOTE_TOTAL_Y = 91;
 
+// Content Area Boundaries (measured from PDF templates)
+// Regular page: blank-page-estimate.pdf
+const REGULAR_PAGE_CONTENT_HEIGHT = 558;  // 7.75 inches × 72
+const REGULAR_PAGE_BOTTOM_MARGIN = 115;   // 1.6 inches × 72 (min Y from bottom)
+
+// Quote total page: blank-page-estimate-with-total.pdf  
+const QUOTE_PAGE_CONTENT_HEIGHT = 504;    // 7 inches × 72
+const QUOTE_PAGE_BOTTOM_MARGIN = 144;     // 2 inches × 72 (min Y from bottom)
+
+// Quote Total Box (measured from template)
+const QUOTE_TOTAL_BOX_WIDTH = 117;   // 1.626 inches × 72
+const QUOTE_TOTAL_BOX_HEIGHT = 46;   // 0.632 inches × 72
+
 // Helper function to extract notable items from estimate
 function extractNotableItems(estimate: Estimate): string[] {
   const items: string[] = [];
@@ -531,7 +544,7 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
   const pageContents: PageContent[] = [];
   let currentPageContent: PageContent = { items: [] };
   let currentSection = '';
-  let currentY = CONTENT_Y_END - 22; // Start below table header
+  let currentY = CONTENT_Y_END; // Start from top of content area
   
   const font = await (await loadPDFTemplate('/templates/blank-page-estimate.pdf')).embedFont(StandardFonts.Helvetica);
   
@@ -548,7 +561,16 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     const sectionHeaderSpace = sectionChanged ? ROW_HEIGHT_SINGLE : 0;
     const itemHeight = calculateRowHeight(description, font, 10, maxDescWidth);
     const spaceNeeded = sectionHeaderSpace + itemHeight;
-    const spaceAvailable = currentY - CONTENT_Y_START;
+    
+    // Determine bottom margin: if this is the last item and would fit on current page,
+    // use quote page margin (since it will be the last page). Otherwise use regular margin.
+    // We need to check if this item would be the last item on what becomes the last page.
+    // For now, use regular margin for all pages except when we know it's the final page.
+    // The last page will be handled specially in PASS 2.
+    const isLastItem = i === allItems.length - 1;
+    const wouldBeLastPage = isLastItem && currentPageContent.items.length > 0;
+    const bottomMargin = wouldBeLastPage ? QUOTE_PAGE_BOTTOM_MARGIN : REGULAR_PAGE_BOTTOM_MARGIN;
+    const spaceAvailable = currentY - bottomMargin;
     
     // Only create new page when out of space (NOT on section change)
     if (currentPageContent.items.length === 0 || spaceAvailable < spaceNeeded) {
@@ -559,7 +581,17 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
       
       // Start new page
       currentPageContent = { items: [] };
-      currentY = CONTENT_Y_END - HEADER_HEIGHT; // Below header
+      currentY = CONTENT_Y_END; // Start from top of content area
+      
+      // If this is the last item and we're starting a new page, it will be the last page
+      // So use quote page margin for space calculation
+      if (isLastItem) {
+        const spaceAvailableForLastPage = currentY - QUOTE_PAGE_BOTTOM_MARGIN;
+        if (spaceAvailableForLastPage < spaceNeeded) {
+          // This shouldn't happen if margins are correct, but handle it
+          console.warn('Last item would not fit on final page with quote margin');
+        }
+      }
     }
     
     // Add section header if section changed (track space but don't store header separately)
@@ -596,14 +628,8 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     const pages_array = template.getPages();
     const page = pages_array[0];
     
-    // Draw table header only on first page
+    // Start from top of content area (no table header)
     let yPos = CONTENT_Y_END;
-    if (pageIdx === 0) {
-      yPos = drawTableHeader(page, CONTENT_Y_END, pageFont, pageBoldFont);
-    } else {
-      // For subsequent pages, start below where header would be
-      yPos = CONTENT_Y_END - HEADER_HEIGHT;
-    }
     
     // Draw page content
     let lastSection = '';
@@ -616,12 +642,19 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
         lastSection = contentItem.section;
       }
       
-      // Draw item row
+      // Draw item row - ensure we don't go below regular page bottom margin
       const description = contentItem.item.proposalDescription && contentItem.item.proposalDescription.trim() 
         ? contentItem.item.proposalDescription 
         : contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
-      yPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection);
+      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection);
+      
+      // Ensure we don't exceed the bottom margin
+      if (newYPos < REGULAR_PAGE_BOTTOM_MARGIN) {
+        // This shouldn't happen if PASS 1 logic is correct, but prevent overlap
+        break;
+      }
+      yPos = newYPos;
     }
     
     pages.push(template);
@@ -636,14 +669,8 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     const pages_array = template.getPages();
     const page = pages_array[0];
     
-    // Draw table header only if this is the first (and only) page
+    // Start from top of content area (no table header)
     let yPos = CONTENT_Y_END;
-    if (pageContents.length === 1) {
-      yPos = drawTableHeader(page, CONTENT_Y_END, pageFont, pageBoldFont);
-    } else {
-      // For last page when there are multiple pages, start below where header would be
-      yPos = CONTENT_Y_END - HEADER_HEIGHT;
-    }
     
     // Draw page content
     let lastSection = '';
@@ -656,12 +683,19 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
         lastSection = contentItem.section;
       }
       
-      // Draw item row
+      // Draw item row - ensure we don't go below quote page bottom margin
       const description = contentItem.item.proposalDescription && contentItem.item.proposalDescription.trim() 
         ? contentItem.item.proposalDescription 
         : contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
-      yPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection);
+      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection);
+      
+      // Ensure we don't exceed the bottom margin (quote page has larger margin for the box)
+      if (newYPos < QUOTE_PAGE_BOTTOM_MARGIN) {
+        // This shouldn't happen if PASS 1 logic is correct, but prevent overlap
+        break;
+      }
+      yPos = newYPos;
     }
     
     // Add Quote Total amount overlay - vertically centered in navy box

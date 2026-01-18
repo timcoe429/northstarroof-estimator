@@ -941,35 +941,37 @@ Use null for any values not visible. Return only JSON.`;
           body: JSON.stringify({
             prompt: `You are a professional roofing contractor writing proposal descriptions for a client-facing estimate.
 
-Write a detailed, professional description for this roofing item. The description should:
-- Explain what the product is and its purpose
-- Include relevant specifications or features when applicable
-- Be 1-2 sentences (15-40 words)
-- Sound professional and informative, not salesy
-- NOT start with "Install" - vary the sentence structure
+Write a SHORT, professional description for this roofing item in this EXACT format:
+
+Format: Product Name - 6-13 word description
+
+The description must:
+- Start with the product name (bold/emphasized conceptually), followed by a dash
+- Be exactly 6-13 words after the dash
+- Be concise and informative, not salesy
+- Focus on key features or purpose
 
 Item name: ${item.name}
 Category: ${item.category}
 Unit: ${item.unit}
 
-Examples of GOOD descriptions:
-- "Brava composite slate field tiles - durable, lightweight synthetic roofing with Class A fire rating and 50-year limited warranty."
-- "16oz copper D-style drip edge for eave protection - develops natural patina over time."
-- "Grace Ice & Water HT self-adhering membrane for high-temperature applications and critical areas."
-- "Complete roof installation labor for steep pitch roofing (12/12) - includes tear-off, deck prep, underlayment, and finish roofing."
-- "30-yard roll-off dumpster for roofing debris removal and disposal."
-- "Rocky Mountain Snow Guard Yeti series - powder-coated snow retention for controlled snow release."
+Examples of CORRECT format:
+- "Copper Valley - premium copper flashing for lifetime leak protection in roof valleys"
+- "Titanium PSU 30 - high-temperature synthetic underlayment with superior tear strength"
+- "Brava Field Tile - durable lightweight synthetic slate with authentic appearance"
+- "Complete Roof Labor - includes tear-off deck prep underlayment and finish roofing"
+- "Rolloff Dumpster - 30-yard container for roofing debris removal and disposal"
 
-Examples of BAD descriptions (do NOT write like this):
-- "Install Brava Field Tile per manufacturer specifications." (too generic, starts with Install)
-- "Supply and install roofing materials." (too vague)
-- "Roofing labor." (not descriptive enough)
+Examples of INCORRECT format (do NOT write like this):
+- "Premium copper valley flashing providing superior water channeling and leak protection with natural antimicrobial properties and lifetime durability." (too long, no product name format)
+- "Install Brava Field Tile per manufacturer specifications." (starts with Install, not in required format)
+- "Roofing labor." (too short, not descriptive enough, missing format)
 
-For LABOR items: Describe what work is included (tear-off, deck prep, underlayment, finish roofing, etc.)
-For MATERIALS: Describe the product features, specifications, or benefits
-For EQUIPMENT/FEES: Describe what is being provided
+For LABOR items: Use format "Labor Name - brief description of work included"
+For MATERIALS: Use format "Product Name - key features or specifications"
+For EQUIPMENT/FEES: Use format "Item Name - what is being provided"
 
-Return ONLY the description text, nothing else.`,
+CRITICAL: Return ONLY the description in the format "Product Name - 6-13 word description". Do not include any other text.`,
             max_tokens: 100,
           }),
         });
@@ -993,6 +995,25 @@ Return ONLY the description text, nothing else.`,
     // Reset state when complete
     setIsGeneratingDescriptions(false);
     setGenerationProgress(null);
+  };
+
+  // Rebuild all descriptions: clear all existing descriptions, then regenerate with new format
+  const rebuildAllDescriptions = async () => {
+    if (priceItems.length === 0) {
+      return;
+    }
+
+    // Clear all proposalDescription fields
+    for (const item of priceItems) {
+      if (item.proposalDescription) {
+        updatePriceItem(item.id, { proposalDescription: null });
+      }
+    }
+
+    // Wait a moment for state updates to propagate, then regenerate
+    setTimeout(() => {
+      generateAllDescriptions();
+    }, 100);
   };
 
   // File handlers
@@ -1938,6 +1959,18 @@ Only return the JSON, no other text.`;
                 {isGeneratingDescriptions 
                   ? `Generating ${generationProgress?.current || 0} of ${generationProgress?.total || 0}...`
                   : 'Generate Descriptions'
+                }
+              </button>
+
+              <button
+                onClick={rebuildAllDescriptions}
+                disabled={isGeneratingDescriptions || priceItems.length === 0}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors text-sm"
+              >
+                <Bot className="w-4 h-4" />
+                {isGeneratingDescriptions 
+                  ? `Rebuilding ${generationProgress?.current || 0} of ${generationProgress?.total || 0}...`
+                  : 'Rebuild All Descriptions'
                 }
               </button>
             </div>
