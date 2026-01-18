@@ -997,25 +997,6 @@ CRITICAL: Return ONLY the description in the format "Product Name - 6-13 word de
     setGenerationProgress(null);
   };
 
-  // Rebuild all descriptions: clear all existing descriptions, then regenerate with new format
-  const rebuildAllDescriptions = async () => {
-    if (priceItems.length === 0) {
-      return;
-    }
-
-    // Clear all proposalDescription fields
-    for (const item of priceItems) {
-      if (item.proposalDescription) {
-        updatePriceItem(item.id, { proposalDescription: null });
-      }
-    }
-
-    // Wait a moment for state updates to propagate, then regenerate
-    setTimeout(() => {
-      generateAllDescriptions();
-    }, 100);
-  };
-
   // File handlers
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1959,18 +1940,6 @@ Only return the JSON, no other text.`;
                 {isGeneratingDescriptions 
                   ? `Generating ${generationProgress?.current || 0} of ${generationProgress?.total || 0}...`
                   : 'Generate Descriptions'
-                }
-              </button>
-
-              <button
-                onClick={rebuildAllDescriptions}
-                disabled={isGeneratingDescriptions || priceItems.length === 0}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors text-sm"
-              >
-                <Bot className="w-4 h-4" />
-                {isGeneratingDescriptions 
-                  ? `Rebuilding ${generationProgress?.current || 0} of ${generationProgress?.total || 0}...`
-                  : 'Rebuild All Descriptions'
                 }
               </button>
             </div>
