@@ -1081,33 +1081,30 @@ Use null for any values not visible. Return only JSON.`;
     const includesAny = (patterns: string[]) => patterns.some(pattern => name.includes(pattern));
 
     if (vendorCategory === 'delivery' || includesAny(['DELIVERY', 'FREIGHT', 'TRAVEL', 'JOB SITE PANEL RUN', 'FABCHOPDROP'])) {
-      return { name: vendor === 'schafer' ? 'Delivery' : 'Snow Retention Delivery', category: 'equipment' as PriceItem['category'] };
+      return { name: 'Delivery', category: 'equipment' as PriceItem['category'] };
     }
 
     if (vendor === 'schafer') {
-      if (includesAny(['COIL', 'STANDING SEAM'])) {
-        return { name: 'Standing Seam Metal Panels (24ga)', category: 'materials' as PriceItem['category'] };
+      if (includesAny(['COIL', 'STANDING SEAM', 'SS150', 'PANEL', 'PANEL FAB', 'FABRICATION', 'PANEL CLIP', 'SCFAPCMECH', 'PANCAKE', 'SCREW', 'FASTENER', 'CLIP'])) {
+        return { name: 'Panels', category: 'materials' as PriceItem['category'] };
       }
-      if (includesAny(['PANEL FAB', 'FABRICATION', 'PANEL CLIP', 'SCFAPCMECH', 'PANCAKE', 'SCREW', 'FASTENER', 'CLIP'])) {
-        return { name: 'Panel Fabrication & Hardware', category: 'materials' as PriceItem['category'] };
-      }
-      if (includesAny(['COPPER', 'SHEET'])) {
-        return { name: 'Copper Roofing Sheets', category: 'materials' as PriceItem['category'] };
-      }
-      if (includesAny(['FAB-EAVE', 'FAB-RAKE', 'FAB-DRIPEDGE'])) {
-        return { name: 'Eave & Rake Flashing', category: 'materials' as PriceItem['category'] };
-      }
-      if (includesAny(['FAB-HEADWALL', 'FAB-SIDEWALL', 'FAB-ZFLASH', 'FAB-CZFLSHNG'])) {
-        return { name: 'Wall Flashing Package', category: 'materials' as PriceItem['category'] };
-      }
-      if (includesAny(['FAB-PARAPET'])) {
-        return { name: 'Parapet Flashing Package', category: 'materials' as PriceItem['category'] };
-      }
-      if (includesAny(['FAB-HIPRDGE', 'FAB-WVALLEYSS', 'FAB-TRANSITION'])) {
-        return { name: 'Ridge & Valley Flashing', category: 'materials' as PriceItem['category'] };
-      }
-      if (includesAny(['FAB-STRTR', 'FABTRIMSCHA', 'LINE FAB'])) {
-        return { name: 'Starter & Trim', category: 'materials' as PriceItem['category'] };
+      if (includesAny([
+        'FAB-EAVE',
+        'FAB-RAKE',
+        'FAB-DRIPEDGE',
+        'FAB-HEADWALL',
+        'FAB-SIDEWALL',
+        'FAB-ZFLASH',
+        'FAB-CZFLSHNG',
+        'FAB-PARAPET',
+        'FAB-HIPRDGE',
+        'FAB-WVALLEYSS',
+        'FAB-TRANSITION',
+        'FAB-STRTR',
+        'FABTRIMSCHA',
+        'LINE FAB',
+      ])) {
+        return { name: 'Flashing', category: 'materials' as PriceItem['category'] };
       }
       return { name: 'Other Vendor Items', category: 'materials' as PriceItem['category'] };
     }
@@ -1119,7 +1116,7 @@ Use null for any values not visible. Return only JSON.`;
       return { name: 'Snow Guard System', category: 'accessories' as PriceItem['category'] };
     }
 
-    return { name: 'Snow Guard System', category: 'accessories' as PriceItem['category'] };
+    return { name: 'Other Vendor Items', category: 'accessories' as PriceItem['category'] };
   };
 
   const buildGroupedVendorItems = useCallback((descriptions: Record<string, string>) => {
@@ -1166,69 +1163,55 @@ Use null for any values not visible. Return only JSON.`;
     return buildGroupedVendorItems({});
   }, [buildGroupedVendorItems]);
 
+  const selectedVendorItemsTotal = useMemo(() => {
+    return vendorQuoteItems.reduce((sum, item) => {
+      if (!selectedItems.includes(item.id)) return sum;
+      const quantity = itemQuantities[item.id] ?? item.quantity ?? 0;
+      const adjustedPrice = vendorAdjustedPriceMap.get(item.id) ?? item.price ?? 0;
+      return sum + quantity * adjustedPrice;
+    }, 0);
+  }, [vendorQuoteItems, selectedItems, itemQuantities, vendorAdjustedPriceMap]);
+
+  const groupedVendorItemsTotal = useMemo(() => {
+    return groupedVendorItems.reduce((sum, group) => sum + group.total, 0);
+  }, [groupedVendorItems]);
+
   useEffect(() => {
-    if (isGeneratingGroupDescriptions) return;
+    if (groupedVendorItems.length === 0) return;
+    const diff = Math.abs(groupedVendorItemsTotal - selectedVendorItemsTotal);
+    if (diff > 0.01) {
+      console.warn('Grouped vendor totals mismatch', {
+        groupedVendorItemsTotal,
+        selectedVendorItemsTotal,
+        diff,
+      });
+    }
+  }, [groupedVendorItems, groupedVendorItemsTotal, selectedVendorItemsTotal]);
+
+  useEffect(() => {
     const missing = groupedVendorItemsForDescription.filter(group => !groupedVendorDescriptions[group.id]);
     if (missing.length === 0) return;
 
-    setIsGeneratingGroupDescriptions(true);
-    generateGroupedVendorDescriptions(missing)
-      .catch((error) => {
-        console.error('Failed to generate grouped descriptions:', error);
-      })
-      .finally(() => setIsGeneratingGroupDescriptions(false));
-  }, [groupedVendorItemsForDescription, groupedVendorDescriptions, isGeneratingGroupDescriptions]);
+    const templateDescriptions: Record<string, string> = {
+      Panels: 'Standing seam metal panels with clips and fasteners',
+      Flashing: 'Custom fabricated metal flashing including eave, rake, ridge, and trim pieces',
+      Delivery: 'Delivery and travel charges',
+    };
 
-  const generateGroupedVendorDescriptions = async (groups: GroupedVendorItem[]) => {
-    if (groups.length === 0) return;
-
-    const prompt = `You are a professional roofing contractor writing client-facing proposal descriptions.
-
-Write one short, professional description for each group name.
-Format each description EXACTLY as: "Group Name - description"
-- 1 sentence, 14-28 words
-- Professional, client-friendly, not overly technical
-
-Return ONLY JSON in this format:
-[
-  {"id": "group_id", "description": "Group Name - description..."},
-  ...
-]
-
-GROUPS:
-${groups.map(group => `ID: ${group.id}\nNAME: ${group.name}\nITEMS: ${group.itemNames.join('; ')}`).join('\n\n')}
-`;
-
-    const response = await fetch('/api/extract', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt,
-        max_tokens: 2000,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to generate grouped descriptions');
-    }
-
-    const data = await response.json();
-    const text = data.content?.[0]?.text || '';
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      throw new Error('Could not parse group descriptions');
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
     setGroupedVendorDescriptions(prev => {
       const updated = { ...prev };
-      parsed.forEach(entry => {
-        if (entry.id && entry.description) {
-          updated[entry.id] = entry.description;
+      missing.forEach(group => {
+        const template = templateDescriptions[group.name];
+        if (template) {
+          updated[group.id] = `${group.name} - ${template}`;
         }
       });
       return updated;
     });
+  }, [groupedVendorItemsForDescription, groupedVendorDescriptions]);
+
+  const generateGroupedVendorDescriptions = async (_groups: GroupedVendorItem[]) => {
+    return;
   };
 
   const extractVendorQuoteFromPdf = async (file: File) => {
