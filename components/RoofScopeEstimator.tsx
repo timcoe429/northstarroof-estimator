@@ -20,6 +20,7 @@ type SelectableItem = PriceItem & {
   isVendorItem?: boolean;
   vendorQuoteId?: string;
   vendorCategory?: VendorQuoteItem['vendor_category'];
+  isCustomItem?: boolean;
 };
 
 type GroupedVendorItem = {
@@ -30,6 +31,10 @@ type GroupedVendorItem = {
   description: string;
   itemIds: string[];
   itemNames: string[];
+};
+
+type CustomItem = PriceItem & {
+  isCustomItem: true;
 };
 
 type QuickSelectOption = {
@@ -230,6 +235,20 @@ export default function RoofScopeEstimator() {
   const [smartSelectionWarnings, setSmartSelectionWarnings] = useState<string[]>([]);
   const [isGeneratingSelection, setIsGeneratingSelection] = useState(false);
   const [quickSelections, setQuickSelections] = useState<QuickSelectOption[]>([]);
+  const [customItems, setCustomItems] = useState<CustomItem[]>([]);
+  const [customItemDraft, setCustomItemDraft] = useState<{
+    category: PriceItem['category'];
+    name: string;
+    quantity: number;
+    unit: string;
+    price: number;
+  } | null>(null);
+  const [sectionSort, setSectionSort] = useState<Record<string, { key: 'name' | 'price' | 'total'; direction: 'asc' | 'desc' }>>({
+    materials: { key: 'name', direction: 'asc' },
+    labor: { key: 'name', direction: 'asc' },
+    equipment: { key: 'name', direction: 'asc' },
+    accessories: { key: 'name', direction: 'asc' },
+  });
 
   // Bulk description generation state
   const [isGeneratingDescriptions, setIsGeneratingDescriptions] = useState(false);
@@ -469,8 +488,8 @@ export default function RoofScopeEstimator() {
   }, [vendorQuoteItems]);
 
   const allSelectableItems: SelectableItem[] = useMemo(() => {
-    return [...priceItems, ...vendorSelectableItems];
-  }, [priceItems, vendorSelectableItems]);
+    return [...priceItems, ...vendorSelectableItems, ...customItems];
+  }, [priceItems, vendorSelectableItems, customItems]);
 
   const vendorItemCount = vendorQuoteItems.length;
 
@@ -976,8 +995,17 @@ Use null for any values not visible. Return only JSON.`;
     const pitchNum = parseInt(pitch.split(/[/:]/)[0], 10) || 0;
     const complexity = (m.complexity || '').toLowerCase();
     const descriptionText = (descriptionOverride ?? jobDescription).toLowerCase();
+    const hasSchaferQuote = vendorQuotes.some(quote => quote.vendor === 'schafer');
 
     const options: QuickSelectOption[] = [
+      {
+        id: 'metal',
+        label: 'Metal Roof',
+        keyword: 'metal roof',
+        suggested: hasSchaferQuote,
+        selected: hasSchaferQuote,
+        icon: '🔩',
+      },
       {
         id: 'tear-off',
         label: 'Tear-Off',
@@ -1033,7 +1061,20 @@ Use null for any values not visible. Return only JSON.`;
         return prev ? `${prev}, steep pitch` : 'steep pitch';
       });
     }
+
+    if (hasSchaferQuote && descriptionOverride === undefined) {
+      setJobDescription(prev => {
+        if (prev.toLowerCase().includes('metal roof')) return prev;
+        return prev ? `${prev}, metal roof` : 'metal roof';
+      });
+    }
   };
+
+  useEffect(() => {
+    if (measurements) {
+      analyzeJobForQuickSelections(measurements);
+    }
+  }, [vendorQuotes, measurements]);
 
   const getVendorGroupForItem = (vendor: VendorQuote['vendor'], itemName: string, vendorCategory: VendorQuoteItem['vendor_category']) => {
     const name = itemName.toUpperCase();
@@ -1808,19 +1849,20 @@ PRICE LIST:
 ${JSON.stringify(selectionItems, null, 2)}
 
 RULES:
-1. PRODUCT LINES: Only select ONE system (Brava OR DaVinci, never both)
-2. LABOR: Only select ONE crew (Hugo/Alfredo/Chris/Sergio). Pick the right Hugo rate based on pitch if Hugo is chosen.
-3. SLOPE-AWARE: If pitch >= 8/12, use High Slope/Hinged H&R variants. If < 8/12, use regular H&R.
-4. TEAR-OFF: If mentioned, include Rolloff and OSB. Calculate OSB as (total_squares * 3) sheets.
-5. DELIVERY: If Brava selected, include Brava Delivery.
-6. UNDERLAYMENT: Select appropriate underlayment (Ice & Water for valleys/eaves, synthetic for field)
-7. ACCESSORIES/CONSUMABLES: Do NOT select items like caulk, sealant, spray paint, nails, screws unless they are:
+1. METAL ROOF: If the job description mentions "metal roof", do NOT select Brava or DaVinci products.
+2. PRODUCT LINES: Only select ONE system (Brava OR DaVinci, never both)
+3. LABOR: Only select ONE crew (Hugo/Alfredo/Chris/Sergio). Pick the right Hugo rate based on pitch if Hugo is chosen.
+4. SLOPE-AWARE: If pitch >= 8/12, use High Slope/Hinged H&R variants. If < 8/12, use regular H&R.
+5. TEAR-OFF: If mentioned, include Rolloff and OSB. Calculate OSB as (total_squares * 3) sheets.
+6. DELIVERY: If Brava selected, include Brava Delivery.
+7. UNDERLAYMENT: Select appropriate underlayment (Ice & Water for valleys/eaves, synthetic for field)
+8. ACCESSORIES/CONSUMABLES: Do NOT select items like caulk, sealant, spray paint, nails, screws unless they are:
    a) Explicitly mentioned in job description (e.g., "need 5 tubes of sealant")
    b) Part of a vendor quote (vendor items always get selected)
    These items are typically covered by the Sundries/Misc Materials percentage.
-8. ZERO QUANTITY RULE: Do NOT select any item that would result in 0 quantity. If you can't calculate a quantity for an item and it's not a flat-fee item (delivery, rolloff), don't select it.
-9. SPECIAL REQUESTS: If user mentions specific items (copper valleys, snowguards, skylights), select those.
-10. VENDOR ITEMS: Vendor items already have quantities from the quote. Do NOT infer quantities unless explicitly stated.
+9. ZERO QUANTITY RULE: Do NOT select any item that would result in 0 quantity. If you can't calculate a quantity for an item and it's not a flat-fee item (delivery, rolloff), don't select it.
+10. SPECIAL REQUESTS: If user mentions specific items (copper valleys, snowguards, skylights), select those.
+11. VENDOR ITEMS: Vendor items already have quantities from the quote. Do NOT infer quantities unless explicitly stated.
 
 EXPLICIT QUANTITIES:
 If the job description specifies an exact quantity for an item, extract it in the "explicitQuantities" object.
@@ -1943,6 +1985,7 @@ Only return the JSON, no other text.`;
       if (!item) return null;
 
       const isVendorItem = item.isVendorItem === true;
+      const isCustomItem = item.isCustomItem === true;
       const baseQty = itemQuantities[id] ?? 0;
       // Apply waste factor only to non-vendor materials
       const qty = !isVendorItem && item.category === 'materials' ? Math.ceil(baseQty * wasteFactor) : baseQty;
@@ -1950,7 +1993,7 @@ Only return the JSON, no other text.`;
       const baseTotal = baseQty * itemPrice;
       const total = qty * itemPrice;
 
-      const { isVendorItem: _, vendorQuoteId: __, vendorCategory: ___, ...baseItem } = item;
+      const { isVendorItem: _, vendorQuoteId: __, vendorCategory: ___, isCustomItem: ____, ...baseItem } = item;
 
       return {
         ...baseItem,
@@ -1959,6 +2002,7 @@ Only return the JSON, no other text.`;
         quantity: qty,
         total,
         wasteAdded: !isVendorItem && item.category === 'materials' ? qty - baseQty : 0,
+        isCustomItem,
       };
     }).filter((item): item is LineItem => item !== null);
 
@@ -2032,16 +2076,92 @@ Only return the JSON, no other text.`;
     setVendorQuotes([]);
     setVendorQuoteItems([]);
     setShowVendorBreakdown(false);
+    setCustomItems([]);
+    setCustomItemDraft(null);
   };
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
-  const getCategoryItems = (category) => 
-    allSelectableItems
+  const getPriceListItems = (category) =>
+    priceItems
       .filter(item => item.category === category)
       .sort((a, b) => a.name.localeCompare(b.name));
+
+  const getItemQuantity = (item: SelectableItem) => {
+    if (itemQuantities[item.id] !== undefined) {
+      return itemQuantities[item.id];
+    }
+    if (item.isVendorItem) {
+      return vendorItemMap.get(item.id)?.quantity ?? 0;
+    }
+    return 0;
+  };
+
+  const toggleSectionSort = (category: string, key: 'name' | 'price' | 'total') => {
+    setSectionSort(prev => {
+      const current = prev[category] || { key: 'name', direction: 'asc' };
+      const direction = current.key === key && current.direction === 'asc' ? 'desc' : 'asc';
+      return {
+        ...prev,
+        [category]: { key, direction },
+      };
+    });
+  };
+
+  const getEstimateCategoryItems = (category: string) => {
+    const items = allSelectableItems.filter(item => item.category === category);
+    const sort = sectionSort[category] || { key: 'name', direction: 'asc' };
+    const multiplier = sort.direction === 'asc' ? 1 : -1;
+
+    return [...items].sort((a, b) => {
+      if (sort.key === 'name') {
+        return a.name.localeCompare(b.name) * multiplier;
+      }
+      if (sort.key === 'price') {
+        return ((a.price || 0) - (b.price || 0)) * multiplier;
+      }
+      const totalA = getItemQuantity(a) * (a.price || 0);
+      const totalB = getItemQuantity(b) * (b.price || 0);
+      return (totalA - totalB) * multiplier;
+    });
+  };
+
+  const startCustomItem = (category: PriceItem['category']) => {
+    setCustomItemDraft({
+      category,
+      name: '',
+      quantity: 1,
+      unit: 'each',
+      price: 0,
+    });
+  };
+
+  const cancelCustomItem = () => setCustomItemDraft(null);
+
+  const addCustomItem = () => {
+    if (!customItemDraft || !customItemDraft.name.trim()) return;
+    const newItem: CustomItem = {
+      id: generateId(),
+      name: customItemDraft.name.trim(),
+      unit: customItemDraft.unit.trim() || 'each',
+      price: Number.isFinite(customItemDraft.price) ? customItemDraft.price : 0,
+      coverage: null,
+      coverageUnit: null,
+      category: customItemDraft.category,
+      proposalDescription: null,
+      isCustomItem: true,
+    };
+
+    setCustomItems(prev => [...prev, newItem]);
+    setSelectedItems(prev => Array.from(new Set([...prev, newItem.id])));
+    setItemQuantities(prev => ({
+      ...prev,
+      [newItem.id]: customItemDraft.quantity || 0,
+    }));
+    setCustomItemDraft(null);
+  };
 
   // Load saved quotes from Supabase
   const fetchSavedQuotes = async () => {
@@ -2181,14 +2301,29 @@ Only return the JSON, no other text.`;
       const restoredLineItems = savedQuote.line_items;
       const restoredQuantities: Record<string, number> = {};
       const restoredSelectedItems: string[] = [];
+      const restoredCustomItems: CustomItem[] = [];
       
       restoredLineItems.forEach(item => {
         restoredQuantities[item.id] = item.quantity;
         restoredSelectedItems.push(item.id);
+        if ((item as any).isCustomItem) {
+          restoredCustomItems.push({
+            id: item.id,
+            name: item.name,
+            unit: item.unit,
+            price: item.price,
+            coverage: null,
+            coverageUnit: null,
+            category: item.category,
+            proposalDescription: item.proposalDescription ?? null,
+            isCustomItem: true,
+          });
+        }
       });
       
       setItemQuantities(restoredQuantities);
       setSelectedItems(restoredSelectedItems);
+      setCustomItems(restoredCustomItems);
       
       // Reconstruct estimate object
       const byCategory = {
@@ -2549,18 +2684,18 @@ Only return the JSON, no other text.`;
                   } : {}}
                 >
                   <Icon className="w-4 h-4" />
-                  {label} ({getCategoryItems(key).length})
+                  {label} ({getPriceListItems(key).length})
                 </button>
               ))}
             </div>
 
             {/* Items List */}
             <div className="bg-gray-50 rounded-xl p-3 md:p-4 max-h-64 overflow-auto">
-              {getCategoryItems(activeCategory).length === 0 ? (
+              {getPriceListItems(activeCategory).length === 0 ? (
                 <p className="text-center text-gray-400 py-8 text-sm">No items yet. Paste a price sheet or add manually.</p>
               ) : (
                 <div className="space-y-2">
-                  {getCategoryItems(activeCategory).map(item => {
+                  {getPriceListItems(activeCategory).map(item => {
                     const isVendorItem = item.isVendorItem === true;
                     return (
                     <div key={item.id} className="flex items-center gap-2 md:gap-3 bg-white rounded-lg p-2 md:p-3 border border-gray-200">
@@ -3165,18 +3300,101 @@ Only return the JSON, no other text.`;
               ) : (
                 <div className="space-y-4">
                   {Object.entries(CATEGORIES).map(([catKey, { label, icon: Icon }]) => {
-                    const items = getCategoryItems(catKey);
-                    if (items.length === 0) return null;
+                    const items = getEstimateCategoryItems(catKey);
 
                     return (
                       <div key={catKey}>
-                        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-2">
-                          <Icon className="w-4 h-4" />
-                          {label}
-                        </h3>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+                            <Icon className="w-4 h-4" />
+                            {label}
+                          </h3>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => startCustomItem(catKey as PriceItem['category'])}
+                              className="p-1 rounded text-gray-500 hover:bg-gray-100"
+                              title="Add custom item"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => toggleSectionSort(catKey, 'name')}
+                              className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
+                            >
+                              Name
+                            </button>
+                            <button
+                              onClick={() => toggleSectionSort(catKey, 'price')}
+                              className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
+                            >
+                              Price
+                            </button>
+                            <button
+                              onClick={() => toggleSectionSort(catKey, 'total')}
+                              className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
+                            >
+                              Total
+                            </button>
+                          </div>
+                        </div>
+
+                        {customItemDraft?.category === catKey && (
+                          <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                              <input
+                                type="text"
+                                value={customItemDraft.name}
+                                onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, name: e.target.value } : prev)}
+                                placeholder="Item name"
+                                className="px-2 py-1 border border-gray-200 rounded text-sm"
+                              />
+                              <input
+                                type="number"
+                                value={customItemDraft.quantity}
+                                onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, quantity: parseFloat(e.target.value) || 0 } : prev)}
+                                placeholder="Qty"
+                                className="px-2 py-1 border border-gray-200 rounded text-sm"
+                              />
+                              <input
+                                type="text"
+                                value={customItemDraft.unit}
+                                onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, unit: e.target.value } : prev)}
+                                placeholder="Unit"
+                                className="px-2 py-1 border border-gray-200 rounded text-sm"
+                              />
+                              <input
+                                type="number"
+                                value={customItemDraft.price}
+                                onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, price: parseFloat(e.target.value) || 0 } : prev)}
+                                placeholder="Unit price"
+                                className="px-2 py-1 border border-gray-200 rounded text-sm"
+                              />
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <button
+                                onClick={addCustomItem}
+                                className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm"
+                              >
+                                Add
+                              </button>
+                              <button
+                                onClick={cancelCustomItem}
+                                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-sm"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {items.length === 0 ? (
+                          <div className="text-sm text-gray-400 py-3">
+                            No items yet for this section.
+                          </div>
+                        ) : (
                         <div className="space-y-2">
                           {items.map(item => {
                             const isVendorItem = item.isVendorItem === true;
+                            const isCustomItem = item.isCustomItem === true;
                             const isSelected = selectedItems.includes(item.id);
                             const qty = itemQuantities[item.id] ?? (isVendorItem ? (vendorItemMap.get(item.id)?.quantity ?? 0) : 0);
 
@@ -3215,6 +3433,11 @@ Only return the JSON, no other text.`;
                                           Vendor
                                         </span>
                                       )}
+                                    {isCustomItem && (
+                                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">
+                                        Custom
+                                      </span>
+                                    )}
                                     </div>
                                   </div>
                                   <input
@@ -3235,6 +3458,7 @@ Only return the JSON, no other text.`;
                             );
                           })}
                         </div>
+                        )}
                       </div>
                     );
                   })}
