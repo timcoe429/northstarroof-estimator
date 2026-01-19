@@ -250,6 +250,12 @@ export default function RoofScopeEstimator() {
     accessories: { key: 'name', direction: 'asc' },
   });
 
+  const isTearOff = useMemo(() => {
+    const desc = jobDescription.toLowerCase();
+    const quickTearOff = quickSelections.find(option => option.id === 'tear-off')?.selected ?? false;
+    return desc.includes('tear-off') || quickTearOff;
+  }, [jobDescription, quickSelections]);
+
   // Bulk description generation state
   const [isGeneratingDescriptions, setIsGeneratingDescriptions] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number } | null>(null);
@@ -335,8 +341,12 @@ export default function RoofScopeEstimator() {
         // Starter: eave_length + rake_length (perimeter) - no coverage
         qty = (m.eave_length || 0) + (m.rake_length || 0);
       } else if (name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || item.unit === 'flat') {
-        // Flat fee items: always 1
-        qty = 1;
+        if (name.includes('rolloff') && isTearOff) {
+          qty = Math.ceil((m.total_squares || 0) / 15);
+        } else {
+          // Flat fee items: always 1
+          qty = 1;
+        }
       } else if (item.category === 'labor' && item.unit !== 'each') {
         // Labor items (per-square): total_squares
         // Exclude "each" unit labor items (they're handled above as manual-entry)
@@ -395,7 +405,7 @@ export default function RoofScopeEstimator() {
     });
 
     return quantities;
-  }, [priceItems]);
+  }, [priceItems, isTearOff]);
 
   // Recalculate quantities whenever measurements or priceItems change
   useEffect(() => {
@@ -414,6 +424,23 @@ export default function RoofScopeEstimator() {
       });
     }
   }, [measurements, priceItems, calculateItemQuantities]);
+
+  useEffect(() => {
+    if (!measurements || !isTearOff) return;
+    const rolloffIds = priceItems
+      .filter(item => item.name.toLowerCase().includes('rolloff'))
+      .map(item => item.id);
+    if (rolloffIds.length === 0) return;
+    const rolloffQty = Math.ceil((measurements.total_squares || 0) / 15);
+    setSelectedItems(prev => Array.from(new Set([...prev, ...rolloffIds])));
+    setItemQuantities(prev => {
+      const updated = { ...prev };
+      rolloffIds.forEach(id => {
+        updated[id] = rolloffQty;
+      });
+      return updated;
+    });
+  }, [measurements, isTearOff, priceItems]);
 
   const vendorItemMap = useMemo(() => {
     return new Map(vendorQuoteItems.map(item => [item.id, item]));
@@ -1076,80 +1103,189 @@ Use null for any values not visible. Return only JSON.`;
     }
   }, [vendorQuotes, measurements]);
 
-  const getVendorGroupForItem = (vendor: VendorQuote['vendor'], itemName: string, vendorCategory: VendorQuoteItem['vendor_category']) => {
-    const name = itemName.toUpperCase();
-    const includesAny = (patterns: string[]) => patterns.some(pattern => name.includes(pattern));
-
-    if (vendorCategory === 'delivery' || includesAny(['DELIVERY', 'FREIGHT', 'TRAVEL', 'JOB SITE PANEL RUN', 'FABCHOPDROP'])) {
-      return { name: 'Delivery', category: 'equipment' as PriceItem['category'] };
-    }
-
-    if (vendor === 'schafer') {
-      if (includesAny(['COIL', 'STANDING SEAM', 'SS150', 'PANEL', 'PANEL FAB', 'FABRICATION', 'PANEL CLIP', 'SCFAPCMECH', 'PANCAKE', 'SCREW', 'FASTENER', 'CLIP'])) {
-        return { name: 'Panels', category: 'materials' as PriceItem['category'] };
-      }
-      if (includesAny([
-        'FAB-EAVE',
-        'FAB-RAKE',
-        'FAB-DRIPEDGE',
-        'FAB-HEADWALL',
-        'FAB-SIDEWALL',
-        'FAB-ZFLASH',
-        'FAB-CZFLSHNG',
-        'FAB-PARAPET',
-        'FAB-HIPRDGE',
-        'FAB-WVALLEYSS',
-        'FAB-TRANSITION',
-        'FAB-STRTR',
-        'FABTRIMSCHA',
-        'LINE FAB',
-      ])) {
-        return { name: 'Flashing', category: 'materials' as PriceItem['category'] };
-      }
-      return { name: 'Other Vendor Items', category: 'materials' as PriceItem['category'] };
-    }
-
-    if (includesAny(['FENCE', 'TUBE', 'COLLAR', 'END CAP'])) {
-      return { name: 'Snow Fence System', category: 'accessories' as PriceItem['category'] };
-    }
-    if (includesAny(['GUARD', 'CLIP', 'C22Z'])) {
-      return { name: 'Snow Guard System', category: 'accessories' as PriceItem['category'] };
-    }
-
-    return { name: 'Other Vendor Items', category: 'accessories' as PriceItem['category'] };
-  };
-
-  const buildGroupedVendorItems = useCallback((descriptions: Record<string, string>) => {
+  const buildGroupedVendorItems = useCallback((_descriptions: Record<string, string>) => {
     const groups = new Map<string, GroupedVendorItem>();
+    const includeMatch = (itemName: string, patterns: string[]) => {
+      const name = itemName.toUpperCase();
+      return patterns.some(pattern => name.includes(pattern));
+    };
 
-    vendorQuoteItems.forEach(item => {
-      if (!selectedItems.includes(item.id)) return;
-      const quote = vendorQuoteMap.get(item.vendor_quote_id);
-      if (!quote) return;
+    const vendorKits: Record<VendorQuote['vendor'], Array<{
+      name: string;
+      description: string;
+      category: PriceItem['category'];
+      patterns: string[];
+    }>> = {
+      schafer: [
+        {
+          name: 'Schafer Panel System',
+          description: 'Standing seam metal panels including coil, fabrication, clips, and fasteners',
+          category: 'materials',
+          patterns: [
+            'COIL',
+            'PANEL FABRICATION',
+            'FAB-PANEL',
+            'PANEL CLIP',
+            'PCMECH',
+            'PANCAKESCREW',
+            'PCSCGA',
+          ],
+        },
+        {
+          name: 'Schafer Flashing Kit',
+          description: 'Custom fabricated metal flashing including eave, rake, ridge, valley, sidewall, headwall, starter, and trim pieces',
+          category: 'materials',
+          patterns: [
+            'FAB EAVE',
+            'FAB-EAVE',
+            'FAB RAKE',
+            'FAB-RAKE',
+            'FAB RIDGE',
+            'FAB-HIPRDGE',
+            'HALF RIDGE',
+            'FAB CZ',
+            'FAB-CZFLSHNG',
+            'FAB HEAD WALL',
+            'FAB-HEADWALL',
+            'FAB SIDE WALL',
+            'FAB-SIDEWALL',
+            'FAB STARTER',
+            'FAB-STRTR',
+            'FAB VALLEY',
+            'FAB-WVALLEY',
+            'FAB TRANSITION',
+            'FAB-TRANSITION',
+            'FAB DRIP EDGE',
+            'FAB-DRIPEDGE',
+            'FAB Z',
+            'FAB-ZFLASH',
+            'FAB PARAPET',
+            'FAB-PARAPET',
+            'FAB RAKE CLIP',
+            'FAB-RAKECLP',
+            'SHEET 4X10',
+            'SHEET 3X10',
+            'SCSH',
+            'LINE FABRICATION',
+            'FABTRIMSCHA',
+          ],
+        },
+        {
+          name: 'Schafer Delivery',
+          description: 'Delivery and travel charges',
+          category: 'equipment',
+          patterns: [
+            'FABCHOPDROP',
+            'JOB SITE PANEL',
+            'TRAVEL',
+            'DELFEE',
+            'DELIVERY FEE',
+            'OVERNIGHT STAY',
+          ],
+        },
+        {
+          name: 'Schafer Accessories',
+          description: 'Sealants, rivets, and finishing materials',
+          category: 'accessories',
+          patterns: [
+            'SEALANT',
+            'NOVA SEAL',
+            'POPRIVET',
+            'POP RIVET',
+            'WOODGRIP',
+          ],
+        },
+      ],
+      tra: [
+        {
+          name: 'TRA Snow Retention System',
+          description: 'Engineered snow retention including clamps, tubes, collars, and end caps',
+          category: 'accessories',
+          patterns: ['C22Z', 'CLAMP', 'SNOW FENCE TUBE', 'SNOW FENCE COLLAR', 'SNOW FENCE END CAP'],
+        },
+        {
+          name: 'TRA Freight',
+          description: 'Shipping and freight charges',
+          category: 'equipment',
+          patterns: ['FREIGHT'],
+        },
+      ],
+      'rocky-mountain': [
+        {
+          name: 'Rocky Mountain Snow Guards',
+          description: 'Everest Guard snow retention system for reliable snow management',
+          category: 'accessories',
+          patterns: ['EVEREST GUARD', 'EG10', 'SNOW GUARD'],
+        },
+      ],
+    };
 
-      const { name: groupName, category } = getVendorGroupForItem(quote.vendor, item.name, item.vendor_category);
-      const groupId = `${quote.vendor}:${groupName}`;
-      const quantity = itemQuantities[item.id] ?? item.quantity ?? 0;
-      const adjustedPrice = vendorAdjustedPriceMap.get(item.id) ?? item.price ?? 0;
-      const total = adjustedPrice * quantity;
-
+    const addGroupItem = (
+      groupId: string,
+      groupName: string,
+      description: string,
+      category: PriceItem['category'],
+      item: VendorQuoteItem,
+      total: number,
+    ) => {
       if (!groups.has(groupId)) {
         groups.set(groupId, {
           id: groupId,
           name: groupName,
           category,
           total: 0,
-          description: descriptions[groupId] || '',
+          description: description ? `${groupName} - ${description}` : '',
           itemIds: [],
           itemNames: [],
         });
       }
-
       const group = groups.get(groupId);
       if (!group) return;
       group.total += total;
       group.itemIds.push(item.id);
       group.itemNames.push(item.name);
+    };
+
+    const vendorItemsByVendor = new Map<VendorQuote['vendor'], VendorQuoteItem[]>();
+    vendorQuoteItems.forEach(item => {
+      if (!selectedItems.includes(item.id)) return;
+      const quote = vendorQuoteMap.get(item.vendor_quote_id);
+      if (!quote) return;
+      const list = vendorItemsByVendor.get(quote.vendor) || [];
+      list.push(item);
+      vendorItemsByVendor.set(quote.vendor, list);
+    });
+
+    vendorItemsByVendor.forEach((items, vendor) => {
+      let remaining = [...items];
+      const kits = vendorKits[vendor] || [];
+
+      kits.forEach(kit => {
+        const matched = remaining.filter(item => includeMatch(item.name, kit.patterns));
+        if (matched.length === 0) return;
+        matched.forEach(item => {
+          const quantity = itemQuantities[item.id] ?? item.quantity ?? 0;
+          const adjustedPrice = vendorAdjustedPriceMap.get(item.id) ?? item.price ?? 0;
+          const total = adjustedPrice * quantity;
+          const groupId = `${vendor}:${kit.name}`;
+          addGroupItem(groupId, kit.name, kit.description, kit.category, item, total);
+        });
+        const matchedIds = new Set(matched.map(item => item.id));
+        remaining = remaining.filter(item => !matchedIds.has(item.id));
+      });
+
+      if (remaining.length > 0) {
+        const vendorName = formatVendorName(vendor);
+        const groupName = `${vendorName} Additional Items`;
+        remaining.forEach(item => {
+          const quantity = itemQuantities[item.id] ?? item.quantity ?? 0;
+          const adjustedPrice = vendorAdjustedPriceMap.get(item.id) ?? item.price ?? 0;
+          const total = adjustedPrice * quantity;
+          const groupId = `${vendor}:${groupName}`;
+          const category = item.category || 'materials';
+          addGroupItem(groupId, groupName, 'Additional materials and supplies', category, item, total);
+        });
+      }
     });
 
     return Array.from(groups.values()).filter(group => group.total > 0);
@@ -1943,8 +2079,16 @@ Only return the JSON, no other text.`;
         if (result.reasoning) {
           setSmartSelectionReasoning(result.reasoning);
         }
-        if (result.warnings && Array.isArray(result.warnings)) {
-          setSmartSelectionWarnings(result.warnings);
+        if (Array.isArray(result.warnings)) {
+          const warnings = [...result.warnings];
+          if (isTearOff && measurements) {
+            const rolloffQty = Math.ceil((measurements.total_squares || 0) / 15);
+            warnings.push(`Rolloff quantity calculated as ${rolloffQty} based on ${measurements.total_squares || 0} squares tear-off`);
+          }
+          setSmartSelectionWarnings(warnings);
+        } else if (isTearOff && measurements) {
+          const rolloffQty = Math.ceil((measurements.total_squares || 0) / 15);
+          setSmartSelectionWarnings([`Rolloff quantity calculated as ${rolloffQty} based on ${measurements.total_squares || 0} squares tear-off`]);
         }
       } else {
         throw new Error('Could not parse smart selection response');
@@ -2085,7 +2229,13 @@ Only return the JSON, no other text.`;
   const toggleSectionSort = (category: string, key: 'name' | 'price' | 'total') => {
     setSectionSort(prev => {
       const current = prev[category] || { key: 'name', direction: 'asc' };
-      const direction = current.key === key && current.direction === 'asc' ? 'desc' : 'asc';
+      if (current.key !== key) {
+        return {
+          ...prev,
+          [category]: { key, direction: 'desc' },
+        };
+      }
+      const direction = current.direction === 'desc' ? 'asc' : 'desc';
       return {
         ...prev,
         [category]: { key, direction },
@@ -3300,24 +3450,24 @@ Only return the JSON, no other text.`;
                             >
                               <Plus className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => toggleSectionSort(catKey, 'name')}
-                              className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
-                            >
-                              Name
-                            </button>
-                            <button
-                              onClick={() => toggleSectionSort(catKey, 'price')}
-                              className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
-                            >
-                              Price
-                            </button>
-                            <button
-                              onClick={() => toggleSectionSort(catKey, 'total')}
-                              className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
-                            >
-                              Total
-                            </button>
+                            {(['name', 'price', 'total'] as const).map((key) => {
+                              const sortState = sectionSort[catKey];
+                              const isActive = sortState?.key === key;
+                              const arrow = isActive ? (sortState.direction === 'desc' ? '↓' : '↑') : '';
+                              return (
+                                <button
+                                  key={key}
+                                  onClick={() => toggleSectionSort(catKey, key)}
+                                  className={`text-xs px-2 py-1 rounded border transition-colors ${
+                                    isActive
+                                      ? 'bg-blue-500 text-white border-blue-500'
+                                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  {key === 'name' ? 'Name' : key === 'price' ? 'Price' : 'Total'} {arrow}
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
 
