@@ -32,6 +32,15 @@ type GroupedVendorItem = {
   itemNames: string[];
 };
 
+type QuickSelectOption = {
+  id: string;
+  label: string;
+  keyword: string;
+  suggested: boolean;
+  selected: boolean;
+  icon?: string;
+};
+
 // Unit types for calculations
 const UNIT_TYPES = [
   { value: 'sq', label: 'per square', calcType: 'area' },
@@ -220,6 +229,7 @@ export default function RoofScopeEstimator() {
   const [smartSelectionReasoning, setSmartSelectionReasoning] = useState('');
   const [smartSelectionWarnings, setSmartSelectionWarnings] = useState<string[]>([]);
   const [isGeneratingSelection, setIsGeneratingSelection] = useState(false);
+  const [quickSelections, setQuickSelections] = useState<QuickSelectOption[]>([]);
 
   // Bulk description generation state
   const [isGeneratingDescriptions, setIsGeneratingDescriptions] = useState(false);
@@ -498,6 +508,17 @@ export default function RoofScopeEstimator() {
 
       const itemsArray = Array.from(items);
       for (const item of itemsArray) {
+        if (item.type === 'application/pdf') {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (!file) return;
+
+          if (step === 'upload' || step === 'extracted') {
+            extractFromImage(file);
+          }
+          break;
+        }
+
         if (item.type.startsWith('image/')) {
           e.preventDefault();
           const file = item.getAsFile();
@@ -661,6 +682,10 @@ MEASUREMENTS TO EXTRACT:
 - chimneys: Number of chimneys
 - complexity: Simple, Moderate, or Complex
 
+PROJECT INFORMATION (found at top of RoofScope report):
+- project_address: The FULL project address including street, city, state, zip (e.g., "39 W Lupine Dr, Aspen, CO 81611") - DO NOT include "USA"
+- street_name: Just the street number and name for the customer name field (e.g., "39 W Lupine Dr")
+
 ROOFING KNOWLEDGE:
 - 1 square = 100 sq ft of roof area
 - Starter is used along eaves and rakes
@@ -671,6 +696,8 @@ ROOFING KNOWLEDGE:
 
 Return ONLY a JSON object:
 {
+  "project_address": "<full address - street, city, state zip>",
+  "street_name": "<just street number and name>",
   "total_squares": <number>,
   "predominant_pitch": "<string like 6/12>",
   "ridge_length": <number in feet>,
@@ -684,7 +711,7 @@ Return ONLY a JSON object:
   "complexity": "<Simple|Moderate|Complex>"
 }
 
-Use 0 for any values not visible. Return only JSON.`;
+Use 0 for any values not visible. Use empty string for address fields if not visible. Return only JSON.`;
 
       const response = await fetch('/api/extract', {
         method: 'POST',
@@ -706,15 +733,24 @@ Use 0 for any values not visible. Return only JSON.`;
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const extracted = JSON.parse(jsonMatch[0]);
+        if (extracted.street_name || extracted.project_address) {
+          setCustomerInfo(prev => ({
+            ...prev,
+            name: extracted.street_name || prev.name || '',
+            address: extracted.project_address || prev.address || '',
+          }));
+        }
         const newMeasurements = { ...extracted, fileName: file.name || 'Pasted image' };
         
         if (measurements) {
           // Merge with existing measurements
           const merged = mergeMeasurements(measurements, newMeasurements);
           setMeasurements(merged);
+          analyzeJobForQuickSelections(merged);
         } else {
           // Set initial measurements
           setMeasurements(newMeasurements);
+          analyzeJobForQuickSelections(newMeasurements);
           initializeEstimateItems(newMeasurements);
           setStep('extracted');
         }
@@ -832,6 +868,34 @@ Use null for any values not visible. Return only JSON.`;
 
   // Extract roof measurements from image (routes to appropriate extractor based on context)
   const extractFromImage = async (file: File) => {
+    if (file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf')) {
+      setIsExtractingVendorQuote(true);
+      try {
+        const { quote, items } = await extractVendorQuoteFromPdf(file);
+        if (quote) {
+          setVendorQuotes(prev => [...prev, quote]);
+        }
+        if (items.length > 0) {
+          const newItemIds = items.map(item => item.id);
+          setVendorQuoteItems(prev => [...prev, ...items]);
+          setSelectedItems(prev => Array.from(new Set([...prev, ...newItemIds])));
+          setItemQuantities(prev => {
+            const updated = { ...prev };
+            items.forEach(item => {
+              updated[item.id] = item.quantity || 0;
+            });
+            return updated;
+          });
+        }
+      } catch (error) {
+        console.error('Vendor quote extraction error:', error);
+        alert('Error extracting vendor quote. Please try again.');
+      } finally {
+        setIsExtractingVendorQuote(false);
+      }
+      return;
+    }
+
     // If measurements already exist and summary has been uploaded, assume this is an analysis image
     // Otherwise, assume it's a summary image
     if (measurements && uploadedImages.has('summary') && !uploadedImages.has('analysis')) {
@@ -884,6 +948,91 @@ Use null for any values not visible. Return only JSON.`;
       return Number.isFinite(parsed) ? parsed : 0;
     }
     return 0;
+  };
+
+  const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const removeKeywordFromDescription = (description: string, keyword: string) => {
+    if (!description) return '';
+    const escaped = escapeRegExp(keyword);
+    const withCommas = new RegExp(`(^|,\\s*)${escaped}(?=\\s*,|$)`, 'i');
+    let updated = description;
+    if (withCommas.test(updated)) {
+      updated = updated.replace(withCommas, '');
+    } else {
+      updated = updated.replace(new RegExp(escaped, 'i'), '');
+    }
+    return updated
+      .replace(/\s*,\s*,\s*/g, ', ')
+      .replace(/^,\s*/g, '')
+      .replace(/\s*,\s*$/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  };
+
+  const analyzeJobForQuickSelections = (m: Measurements, descriptionOverride?: string) => {
+    const totalSquares = m.total_squares || 0;
+    const pitch = m.predominant_pitch || '';
+    const pitchNum = parseInt(pitch.split(/[/:]/)[0], 10) || 0;
+    const complexity = (m.complexity || '').toLowerCase();
+    const descriptionText = (descriptionOverride ?? jobDescription).toLowerCase();
+
+    const options: QuickSelectOption[] = [
+      {
+        id: 'tear-off',
+        label: 'Tear-Off',
+        keyword: 'tear-off',
+        suggested: false,
+        selected: false,
+        icon: '🗑️',
+      },
+      {
+        id: 'overnights',
+        label: 'Overnights',
+        keyword: 'overnights',
+        suggested: totalSquares > 25,
+        selected: false,
+        icon: '🌙',
+      },
+      {
+        id: 'multi-day',
+        label: 'Multi-Day',
+        keyword: 'multi-day job',
+        suggested: totalSquares > 15,
+        selected: false,
+        icon: '📅',
+      },
+      {
+        id: 'steep',
+        label: 'Steep Pitch',
+        keyword: 'steep pitch high-slope products',
+        suggested: pitchNum >= 8,
+        selected: pitchNum >= 8,
+        icon: '⛰️',
+      },
+      {
+        id: 'complex',
+        label: 'Complex Roof',
+        keyword: 'complex roof',
+        suggested: complexity === 'complex',
+        selected: false,
+        icon: '🔷',
+      },
+    ];
+
+    const normalizedOptions = options.map(option => {
+      const hasKeyword = descriptionText.includes(option.keyword.toLowerCase());
+      return { ...option, selected: option.selected || hasKeyword };
+    });
+
+    setQuickSelections(normalizedOptions);
+
+    if (pitchNum >= 8 && descriptionOverride === undefined) {
+      setJobDescription(prev => {
+        if (prev.toLowerCase().includes('steep')) return prev;
+        return prev ? `${prev}, steep pitch` : 'steep pitch';
+      });
+    }
   };
 
   const getVendorGroupForItem = (vendor: VendorQuote['vendor'], itemName: string, vendorCategory: VendorQuoteItem['vendor_category']) => {
@@ -1184,9 +1333,7 @@ Return only the JSON object, no other text.`;
         setItemQuantities(prev => {
           const updated = { ...prev };
           newItems.forEach(item => {
-            if (updated[item.id] === undefined) {
-              updated[item.id] = item.quantity || 0;
-            }
+            updated[item.id] = item.quantity || 0;
           });
           return updated;
         });
@@ -1667,9 +1814,13 @@ RULES:
 4. TEAR-OFF: If mentioned, include Rolloff and OSB. Calculate OSB as (total_squares * 3) sheets.
 5. DELIVERY: If Brava selected, include Brava Delivery.
 6. UNDERLAYMENT: Select appropriate underlayment (Ice & Water for valleys/eaves, synthetic for field)
-7. ACCESSORIES: Don't select individual accessory items (nails, caulk, etc.) - these are covered by Sundries %
-8. SPECIAL REQUESTS: If user mentions specific items (copper valleys, snowguards, skylights), select those.
-9. VENDOR ITEMS: Vendor items already have quantities from the quote. Do NOT infer quantities unless explicitly stated.
+7. ACCESSORIES/CONSUMABLES: Do NOT select items like caulk, sealant, spray paint, nails, screws unless they are:
+   a) Explicitly mentioned in job description (e.g., "need 5 tubes of sealant")
+   b) Part of a vendor quote (vendor items always get selected)
+   These items are typically covered by the Sundries/Misc Materials percentage.
+8. ZERO QUANTITY RULE: Do NOT select any item that would result in 0 quantity. If you can't calculate a quantity for an item and it's not a flat-fee item (delivery, rolloff), don't select it.
+9. SPECIAL REQUESTS: If user mentions specific items (copper valleys, snowguards, skylights), select those.
+10. VENDOR ITEMS: Vendor items already have quantities from the quote. Do NOT infer quantities unless explicitly stated.
 
 EXPLICIT QUANTITIES:
 If the job description specifies an exact quantity for an item, extract it in the "explicitQuantities" object.
@@ -1718,34 +1869,50 @@ Only return the JSON, no other text.`;
       if (jsonMatch) {
         const result = JSON.parse(jsonMatch[0]);
         
-        // Apply the selection
-        if (result.selectedItemIds && Array.isArray(result.selectedItemIds)) {
-          setSelectedItems(result.selectedItemIds);
-          ensureVendorItemQuantities(result.selectedItemIds);
-        }
-        
+        const vendorItemIds = vendorQuoteItems.map(item => item.id);
+        const selectedFromAI = Array.isArray(result.selectedItemIds) ? result.selectedItemIds : [];
+        const mergedSelection = Array.from(new Set([...selectedFromAI, ...vendorItemIds]));
+        const updatedQuantities = { ...itemQuantities };
+
         // Apply explicit quantities if provided
         if (result.explicitQuantities && typeof result.explicitQuantities === 'object') {
-          setItemQuantities(prev => {
-            const updated = { ...prev };
-            
-            // Iterate through explicit quantities
-            Object.entries(result.explicitQuantities).forEach(([key, value]) => {
-              const quantity = typeof value === 'number' ? value : parseFloat(value as string);
-              if (isNaN(quantity)) return;
-              
-              // Find items whose name contains the key (case-insensitive)
-              const keyLower = key.toLowerCase();
-              allSelectableItems.forEach(item => {
-                if (item.name.toLowerCase().includes(keyLower)) {
-                  updated[item.id] = quantity;
-                }
-              });
+          // Iterate through explicit quantities
+          Object.entries(result.explicitQuantities).forEach(([key, value]) => {
+            const quantity = typeof value === 'number' ? value : parseFloat(value as string);
+            if (isNaN(quantity)) return;
+
+            // Find items whose name contains the key (case-insensitive)
+            const keyLower = key.toLowerCase();
+            allSelectableItems.forEach(item => {
+              if (item.name.toLowerCase().includes(keyLower)) {
+                updatedQuantities[item.id] = quantity;
+              }
             });
-            
-            return updated;
           });
         }
+
+        // Ensure vendor item quantities are always set
+        mergedSelection.forEach(id => {
+          if (updatedQuantities[id] === undefined) {
+            const vendorItem = vendorItemMap.get(id);
+            if (vendorItem) {
+              updatedQuantities[id] = vendorItem.quantity || 0;
+            }
+          }
+        });
+
+        // Remove zero-quantity items (keep vendor + flat-fee)
+        const cleanedSelection = mergedSelection.filter(id => {
+          const item = allSelectableItems.find(i => i.id === id);
+          const qty = updatedQuantities[id] ?? 0;
+          if (item?.isVendorItem) return true;
+          const name = item?.name?.toLowerCase() || '';
+          if (name.includes('delivery') || name.includes('rolloff') || name.includes('dumpster')) return true;
+          return qty > 0;
+        });
+
+        setItemQuantities(updatedQuantities);
+        setSelectedItems(cleanedSelection);
         
         // Show reasoning and warnings
         if (result.reasoning) {
@@ -1970,6 +2137,12 @@ Only return the JSON, no other text.`;
       
       // Restore customer info
       setCustomerInfo(customerInfo);
+
+      const restoredJobDescription = (savedQuote as any).job_description || (savedQuote as any).jobDescription || '';
+      if (restoredJobDescription) {
+        setJobDescription(restoredJobDescription);
+      }
+      analyzeJobForQuickSelections(cleanMeasurements, restoredJobDescription || jobDescription);
 
       // Load vendor quotes tied to this estimate
       try {
@@ -2769,6 +2942,68 @@ Only return the JSON, no other text.`;
                 </div>
               )}
 
+              {/* Vendor Quote Upload */}
+              <div
+                onClick={() => document.getElementById('vendor-quote-upload').click()}
+                className="border-2 border-dashed border-gray-200 rounded-2xl p-4 md:p-6 bg-white hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer mb-4"
+              >
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  multiple
+                  onChange={handleVendorQuoteUpload}
+                  className="hidden"
+                  id="vendor-quote-upload"
+                />
+                <div className="text-center">
+                  <div className="w-12 h-12 md:w-14 md:h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <FileText className="w-6 h-6 md:w-7 md:h-7 text-blue-600" />
+                  </div>
+                  <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-1">
+                    Upload Vendor Quotes
+                  </h3>
+                  <p className="text-gray-500 mb-2 text-sm">
+                    Optional - Schafer, TRA, Rocky Mountain
+                  </p>
+                  {isExtractingVendorQuote && (
+                    <div className="flex items-center justify-center gap-2 text-sm text-blue-600">
+                      <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      Extracting quote...
+                    </div>
+                  )}
+                </div>
+
+                {vendorQuotes.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {vendorQuotes.map((quote) => {
+                      const itemCount = vendorQuoteItems.filter(item => item.vendor_quote_id === quote.id).length;
+                      return (
+                        <div key={quote.id} className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm text-gray-900 truncate">
+                              {formatVendorName(quote.vendor)} {quote.quote_number ? `• ${quote.quote_number}` : ''}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {itemCount} items • {formatCurrency((vendorQuoteTotals.get(quote.id) ?? quote.subtotal ?? 0))}
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeVendorQuoteFromState(quote.id);
+                            }}
+                            className="p-1 text-red-500 hover:bg-red-50 rounded"
+                            title="Remove quote"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* Customer Info */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mb-4 md:mb-6 p-3 md:p-4 bg-gray-50 rounded-xl">
                 <input
@@ -2793,6 +3028,56 @@ Only return the JSON, no other text.`;
                   className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
                 />
               </div>
+
+              {/* Quick Selection Options */}
+              {measurements && quickSelections.length > 0 && (
+                <div className="bg-white rounded-2xl p-4 border border-gray-200 mb-4 md:mb-6">
+                  <h3 className="font-medium text-gray-900 mb-3 text-sm">Quick Options</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {quickSelections.map(option => (
+                      <button
+                        key={option.id}
+                        onClick={() => {
+                          const nextSelected = !option.selected;
+                          setQuickSelections(prev => prev.map(opt => (
+                            opt.id === option.id ? { ...opt, selected: nextSelected } : opt
+                          )));
+
+                          setJobDescription(prev => {
+                            const hasKeyword = prev.toLowerCase().includes(option.keyword.toLowerCase());
+                            if (!nextSelected) {
+                              return removeKeywordFromDescription(prev, option.keyword);
+                            }
+                            if (hasKeyword) return prev;
+                            return prev ? `${prev}, ${option.keyword}` : option.keyword;
+                          });
+                        }}
+                        className={`
+                          px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+                          flex items-center gap-1.5
+                          ${option.selected
+                            ? 'bg-blue-600 text-white'
+                            : option.suggested
+                              ? 'bg-amber-50 border-2 border-amber-300 text-amber-800'
+                              : 'bg-gray-100 border border-gray-300 text-gray-700 hover:bg-gray-200'
+                          }
+                        `}
+                      >
+                        <span>{option.icon}</span>
+                        <span>{option.label}</span>
+                        {option.suggested && !option.selected && (
+                          <span className="text-xs opacity-75">(Suggested)</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  {quickSelections.some(option => option.suggested && !option.selected) && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      💡 Amber buttons are AI suggestions based on job measurements
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Measurements Grid */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
