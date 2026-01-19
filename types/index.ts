@@ -34,6 +34,7 @@ export interface LineItem extends PriceItem {
   quantity: number;
   total: number;
   wasteAdded: number;
+  isCustomItem?: boolean;
 }
 
 export interface CustomerInfo {
