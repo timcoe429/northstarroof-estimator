@@ -1980,7 +1980,7 @@ Only return the JSON, no other text.`;
     
     const wasteFactor = 1 + (wastePercent / 100);
     
-    const lineItems: LineItem[] = selectedItems.map(id => {
+    const lineItems: LineItem[] = selectedItems.map<LineItem | null>(id => {
       const item = allSelectableItems.find(p => p.id === id);
       if (!item) return null;
 
@@ -2002,8 +2002,8 @@ Only return the JSON, no other text.`;
         quantity: qty,
         total,
         wasteAdded: !isVendorItem && item.category === 'materials' ? qty - baseQty : 0,
-        isCustomItem,
-      };
+        isCustomItem: isCustomItem || false,
+      } as LineItem;
     }).filter((item): item is LineItem => item !== null);
 
     const byCategory: Estimate['byCategory'] = Object.keys(CATEGORIES).reduce((acc, cat) => {
@@ -2696,7 +2696,7 @@ Only return the JSON, no other text.`;
               ) : (
                 <div className="space-y-2">
                   {getPriceListItems(activeCategory).map(item => {
-                    const isVendorItem = item.isVendorItem === true;
+                    const isVendorItem = false;
                     return (
                     <div key={item.id} className="flex items-center gap-2 md:gap-3 bg-white rounded-lg p-2 md:p-3 border border-gray-200">
                       {editingItem === item.id ? (
