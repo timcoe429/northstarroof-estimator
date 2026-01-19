@@ -90,3 +90,28 @@ export interface SavedQuote {
   created_at: string;
   updated_at: string;
 }
+
+export interface VendorQuote {
+  id: string;
+  estimate_id: string;
+  vendor: 'schafer' | 'tra' | 'rocky-mountain';
+  quote_number: string;
+  quote_date: string;
+  project_address: string;
+  file_name: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+}
+
+export interface VendorQuoteItem {
+  id: string;
+  vendor_quote_id: string;
+  name: string;
+  unit: string;
+  price: number;
+  quantity: number;
+  extended_price: number;
+  category: 'materials' | 'equipment' | 'accessories';
+  vendor_category: 'panels' | 'flashing' | 'fasteners' | 'snow-retention' | 'delivery';
+}

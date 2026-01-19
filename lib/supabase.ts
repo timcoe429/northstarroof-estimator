@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { SavedQuote, Estimate, Measurements, LineItem, CustomerInfo, PriceItem } from '@/types';
+import type { SavedQuote, Estimate, Measurements, LineItem, CustomerInfo, PriceItem, VendorQuote, VendorQuoteItem } from '@/types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
@@ -105,6 +105,150 @@ export async function deleteQuote(id: string, userId: string | undefined): Promi
 
   if (error) {
     throw new Error(`Failed to delete quote: ${error.message}`);
+  }
+}
+
+export async function saveVendorQuotes(
+  estimateId: string,
+  quotes: VendorQuote[],
+  items: VendorQuoteItem[]
+): Promise<{ quotes: VendorQuote[]; items: VendorQuoteItem[] }> {
+  const quoteRows = quotes.map(quote => ({
+    id: quote.id,
+    estimate_id: estimateId,
+    vendor: quote.vendor,
+    quote_number: quote.quote_number,
+    quote_date: quote.quote_date,
+    project_address: quote.project_address,
+    file_name: quote.file_name,
+    subtotal: quote.subtotal,
+    tax: quote.tax,
+    total: quote.total,
+  }));
+
+  const { data: savedQuotes, error: quotesError } = await supabase
+    .from('vendor_quotes')
+    .upsert(quoteRows, { onConflict: 'id' })
+    .select();
+
+  if (quotesError) {
+    throw new Error(`Failed to save vendor quotes: ${quotesError.message}`);
+  }
+
+  const itemRows = items.map(item => ({
+    id: item.id,
+    vendor_quote_id: item.vendor_quote_id,
+    name: item.name,
+    unit: item.unit,
+    price: item.price,
+    quantity: item.quantity,
+    extended_price: item.extended_price,
+    category: item.category,
+    vendor_category: item.vendor_category,
+  }));
+
+  const { data: savedItems, error: itemsError } = await supabase
+    .from('vendor_quote_items')
+    .upsert(itemRows, { onConflict: 'id' })
+    .select();
+
+  if (itemsError) {
+    throw new Error(`Failed to save vendor quote items: ${itemsError.message}`);
+  }
+
+  const mappedQuotes = (savedQuotes || []).map(row => ({
+    id: row.id,
+    estimate_id: row.estimate_id,
+    vendor: row.vendor,
+    quote_number: row.quote_number || '',
+    quote_date: row.quote_date || '',
+    project_address: row.project_address || '',
+    file_name: row.file_name || '',
+    subtotal: row.subtotal || 0,
+    tax: row.tax || 0,
+    total: row.total || 0,
+  })) as VendorQuote[];
+
+  const mappedItems = (savedItems || []).map(row => ({
+    id: row.id,
+    vendor_quote_id: row.vendor_quote_id,
+    name: row.name,
+    unit: row.unit || '',
+    price: row.price || 0,
+    quantity: row.quantity || 0,
+    extended_price: row.extended_price || 0,
+    category: row.category as VendorQuoteItem['category'],
+    vendor_category: row.vendor_category as VendorQuoteItem['vendor_category'],
+  })) as VendorQuoteItem[];
+
+  return { quotes: mappedQuotes, items: mappedItems };
+}
+
+export async function loadVendorQuotes(
+  estimateId: string
+): Promise<{ quotes: VendorQuote[]; items: VendorQuoteItem[] }> {
+  const { data: quoteRows, error: quotesError } = await supabase
+    .from('vendor_quotes')
+    .select('*')
+    .eq('estimate_id', estimateId)
+    .order('created_at', { ascending: true });
+
+  if (quotesError) {
+    throw new Error(`Failed to load vendor quotes: ${quotesError.message}`);
+  }
+
+  const quoteIds = (quoteRows || []).map(row => row.id);
+
+  if (quoteIds.length === 0) {
+    return { quotes: [], items: [] };
+  }
+
+  const { data: itemRows, error: itemsError } = await supabase
+    .from('vendor_quote_items')
+    .select('*')
+    .in('vendor_quote_id', quoteIds)
+    .order('created_at', { ascending: true });
+
+  if (itemsError) {
+    throw new Error(`Failed to load vendor quote items: ${itemsError.message}`);
+  }
+
+  const quotes = (quoteRows || []).map(row => ({
+    id: row.id,
+    estimate_id: row.estimate_id,
+    vendor: row.vendor,
+    quote_number: row.quote_number || '',
+    quote_date: row.quote_date || '',
+    project_address: row.project_address || '',
+    file_name: row.file_name || '',
+    subtotal: row.subtotal || 0,
+    tax: row.tax || 0,
+    total: row.total || 0,
+  })) as VendorQuote[];
+
+  const items = (itemRows || []).map(row => ({
+    id: row.id,
+    vendor_quote_id: row.vendor_quote_id,
+    name: row.name,
+    unit: row.unit || '',
+    price: row.price || 0,
+    quantity: row.quantity || 0,
+    extended_price: row.extended_price || 0,
+    category: row.category as VendorQuoteItem['category'],
+    vendor_category: row.vendor_category as VendorQuoteItem['vendor_category'],
+  })) as VendorQuoteItem[];
+
+  return { quotes, items };
+}
+
+export async function deleteVendorQuote(quoteId: string): Promise<void> {
+  const { error } = await supabase
+    .from('vendor_quotes')
+    .delete()
+    .eq('id', quoteId);
+
+  if (error) {
+    throw new Error(`Failed to delete vendor quote: ${error.message}`);
   }
 }
 
