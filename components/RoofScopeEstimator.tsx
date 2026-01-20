@@ -14,6 +14,7 @@ const CATEGORIES = {
   labor: { label: 'Labor', icon: Users, color: 'green' },
   equipment: { label: 'Equipment & Fees', icon: Truck, color: 'orange' },
   accessories: { label: 'Accessories', icon: Wrench, color: 'purple' },
+  schafer: { label: 'Schafer', icon: Package, color: 'blue' },
 };
 
 type SelectableItem = PriceItem & {
@@ -49,6 +50,7 @@ type QuickSelectOption = {
 // Unit types for calculations
 const UNIT_TYPES = [
   { value: 'sq', label: 'per square', calcType: 'area' },
+  { value: 'sf', label: 'per sq ft', calcType: 'area' },
   { value: 'bundle', label: 'per bundle', calcType: 'area', needsCoverage: true },
   { value: 'roll', label: 'per roll', calcType: 'area', needsCoverage: true },
   { value: 'lf', label: 'per linear ft', calcType: 'linear' },
@@ -248,6 +250,7 @@ export default function RoofScopeEstimator() {
     labor: { key: 'name', direction: 'asc' },
     equipment: { key: 'name', direction: 'asc' },
     accessories: { key: 'name', direction: 'asc' },
+    schafer: { key: 'name', direction: 'asc' },
   });
 
   const isTearOff = useMemo(() => {
@@ -255,6 +258,56 @@ export default function RoofScopeEstimator() {
     const quickTearOff = quickSelections.find(option => option.id === 'tear-off')?.selected ?? false;
     return desc.includes('tear-off') || quickTearOff;
   }, [jobDescription, quickSelections]);
+
+  const buildSchaferDefaults = () => {
+    const baseItems = [
+      { name: 'Schafer Coil 20" 24ga', unit: 'sf', price: 1.70 },
+      { name: 'Schafer Coil 48" 24ga Galvanized', unit: 'sf', price: 1.30 },
+      { name: 'Schafer Panel Fabrication Steel SS150', unit: 'lf', price: 0.40 },
+      { name: 'Schafer Panel Clip Mech 1-1/2" 24ga', unit: 'each', price: 0.25 },
+      { name: 'Schafer Panel Clip Mech 1" 24ga', unit: 'each', price: 0.26 },
+      { name: 'Schafer Pancake Screw 1" Galv/Zinc', unit: 'each', price: 0.08 },
+      { name: 'Schafer Sheet 4x10 24ga', unit: 'sf', price: 68.00 },
+      { name: 'Schafer Sheet 4x10 Galv 24ga', unit: 'sf', price: 46.00 },
+      { name: 'Schafer Sheet 3x10 Copper 24oz', unit: 'sf', price: 300.00 },
+      { name: 'Schafer Fab Eave', unit: 'lf', price: 1.15 },
+      { name: 'Schafer Fab Rake', unit: 'lf', price: 1.15 },
+      { name: 'Schafer Fab Rake Clip', unit: 'lf', price: 0.66 },
+      { name: 'Schafer Fab Ridge', unit: 'lf', price: 0.99 },
+      { name: 'Schafer Fab Half Ridge', unit: 'lf', price: 0.99 },
+      { name: 'Schafer Fab CZ Flashing', unit: 'lf', price: 0.83 },
+      { name: 'Schafer Fab Head Wall', unit: 'lf', price: 0.66 },
+      { name: 'Schafer Fab Side Wall', unit: 'lf', price: 0.66 },
+      { name: 'Schafer Fab Starter', unit: 'lf', price: 0.66 },
+      { name: 'Schafer Fab W Valley', unit: 'lf', price: 1.50 },
+      { name: 'Schafer Fab Transition', unit: 'lf', price: 0.51 },
+      { name: 'Schafer Fab Drip Edge', unit: 'lf', price: 0.85 },
+      { name: 'Schafer Fab Z Flash', unit: 'lf', price: 0.51 },
+      { name: 'Schafer Fab Parapet Cap', unit: 'lf', price: 1.50 },
+      { name: 'Schafer Fab Parapet Cleat', unit: 'lf', price: 0.50 },
+      { name: 'Schafer Fab Line Fabrication', unit: 'each', price: 1.00 },
+      { name: 'Schafer Job Site Panel Run (per mile)', unit: 'each', price: 3.00 },
+      { name: 'Schafer Job Site Panel Run (base)', unit: 'each', price: 200.00 },
+      { name: 'Schafer Retail Delivery Fee', unit: 'each', price: 0.28 },
+      { name: 'Schafer Overnight Stay', unit: 'each', price: 500.00 },
+      { name: 'Schafer Nova Seal Sealant', unit: 'each', price: 10.00 },
+      { name: 'Schafer Pop Rivet 1/8"', unit: 'each', price: 0.12 },
+      { name: 'Schafer Pop Rivet 1/8" Stainless', unit: 'each', price: 0.12 },
+      { name: 'Schafer Woodgrip 1-1/2" Galv', unit: 'each', price: 0.12 },
+    ];
+    const timestamp = Date.now();
+    let counter = 0;
+    return baseItems.map(item => ({
+      id: `schafer_${timestamp}_${counter++}`,
+      name: item.name,
+      unit: item.unit,
+      price: item.price,
+      coverage: null,
+      coverageUnit: null,
+      category: 'schafer' as PriceItem['category'],
+      proposalDescription: null,
+    }));
+  };
 
   // Bulk description generation state
   const [isGeneratingDescriptions, setIsGeneratingDescriptions] = useState(false);
@@ -361,9 +414,13 @@ export default function RoofScopeEstimator() {
         }
 
         if (unitType.calcType === 'area') {
-          // Area-based items (Field Tile, Shakes, Shingles, Underlayment)
-          // No coverage, use total_squares directly
-          qty = m.total_squares || 0;
+          if (item.unit === 'sf') {
+            qty = (m.total_squares || 0) * 100;
+          } else {
+            // Area-based items (Field Tile, Shakes, Shingles, Underlayment)
+            // No coverage, use total_squares directly
+            qty = m.total_squares || 0;
+          }
         } else if (unitType.calcType === 'linear') {
           // Linear-based items - no coverage, use direct measurements
           if (name.includes('valley')) {
@@ -415,10 +472,12 @@ export default function RoofScopeEstimator() {
         // Merge with existing to preserve any manual edits, but update calculated ones
         const merged = { ...prev };
         Object.keys(quantities).forEach(id => {
-          // Only update if the item still exists in priceItems
-          if (priceItems.find(item => item.id === id)) {
-            merged[id] = quantities[id];
+          const priceItem = priceItems.find(item => item.id === id);
+          if (!priceItem) return;
+          if (priceItem.category === 'schafer' && merged[id] !== undefined) {
+            return;
           }
+          merged[id] = quantities[id];
         });
         return merged;
       });
@@ -534,7 +593,19 @@ export default function RoofScopeEstimator() {
       setIsLoadingPriceItems(true);
       try {
         const items = await loadPriceItems(user.id);
-        setPriceItems(items);
+        const hasSchaferItems = items.some(item => item.category === 'schafer');
+        if (!hasSchaferItems) {
+          const defaults = buildSchaferDefaults();
+          try {
+            await savePriceItemsBulk(defaults, user.id);
+            setPriceItems([...items, ...defaults]);
+          } catch (seedError) {
+            console.error('Failed to seed Schafer items:', seedError);
+            setPriceItems(items);
+          }
+        } else {
+          setPriceItems(items);
+        }
       } catch (error) {
         console.error('Failed to load price items:', error);
         alert('Failed to load price items. Please refresh the page.');
@@ -922,16 +993,43 @@ Use null for any values not visible. Return only JSON.`;
           setVendorQuotes(prev => [...prev, quote]);
         }
         if (items.length > 0) {
-          const newItemIds = items.map(item => item.id);
-          setVendorQuoteItems(prev => [...prev, ...items]);
-          setSelectedItems(prev => Array.from(new Set([...prev, ...newItemIds])));
-          setItemQuantities(prev => {
-            const updated = { ...prev };
-            items.forEach(item => {
-              updated[item.id] = item.quantity || 0;
+          if (quote.vendor === 'schafer') {
+            const matched = await applySchaferQuoteMatching(items);
+            const unmatchedItems = matched.unmatchedItems;
+            if (unmatchedItems.length > 0) {
+              const newItemIds = unmatchedItems.map(item => item.id);
+              setVendorQuoteItems(prev => [...prev, ...unmatchedItems]);
+              setSelectedItems(prev => Array.from(new Set([...prev, ...newItemIds])));
+              setItemQuantities(prev => {
+                const updated = { ...prev };
+                unmatchedItems.forEach(item => {
+                  updated[item.id] = item.quantity || 0;
+                });
+                return updated;
+              });
+            }
+            if (matched.matchedIds.length > 0) {
+              setSelectedItems(prev => Array.from(new Set([...prev, ...matched.matchedIds])));
+              setItemQuantities(prev => {
+                const updated = { ...prev };
+                Object.entries(matched.matchedQuantities).forEach(([id, quantity]) => {
+                  updated[id] = quantity;
+                });
+                return updated;
+              });
+            }
+          } else {
+            const newItemIds = items.map(item => item.id);
+            setVendorQuoteItems(prev => [...prev, ...items]);
+            setSelectedItems(prev => Array.from(new Set([...prev, ...newItemIds])));
+            setItemQuantities(prev => {
+              const updated = { ...prev };
+              items.forEach(item => {
+                updated[item.id] = item.quantity || 0;
+              });
+              return updated;
             });
-            return updated;
-          });
+          }
         }
       } catch (error) {
         console.error('Vendor quote extraction error:', error);
@@ -1220,12 +1318,22 @@ Use null for any values not visible. Return only JSON.`;
       ],
     };
 
+    type GroupedSourceItem = {
+      id: string;
+      name: string;
+      category: PriceItem['category'];
+      quantity: number;
+      price: number;
+      vendor: VendorQuote['vendor'];
+      isVendorQuoteItem: boolean;
+    };
+
     const addGroupItem = (
       groupId: string,
       groupName: string,
       description: string,
       category: PriceItem['category'],
-      item: VendorQuoteItem,
+      item: GroupedSourceItem,
       total: number,
     ) => {
       if (!groups.has(groupId)) {
@@ -1246,17 +1354,44 @@ Use null for any values not visible. Return only JSON.`;
       group.itemNames.push(item.name);
     };
 
-    const vendorItemsByVendor = new Map<VendorQuote['vendor'], VendorQuoteItem[]>();
+    const sourceItems: GroupedSourceItem[] = [];
     vendorQuoteItems.forEach(item => {
       if (!selectedItems.includes(item.id)) return;
       const quote = vendorQuoteMap.get(item.vendor_quote_id);
       if (!quote) return;
-      const list = vendorItemsByVendor.get(quote.vendor) || [];
-      list.push(item);
-      vendorItemsByVendor.set(quote.vendor, list);
+      sourceItems.push({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        quantity: itemQuantities[item.id] ?? item.quantity ?? 0,
+        price: item.price ?? 0,
+        vendor: quote.vendor,
+        isVendorQuoteItem: true,
+      });
     });
 
-    vendorItemsByVendor.forEach((items, vendor) => {
+    priceItems.forEach(item => {
+      if (item.category !== 'schafer') return;
+      if (!selectedItems.includes(item.id)) return;
+      sourceItems.push({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        quantity: itemQuantities[item.id] ?? 0,
+        price: item.price ?? 0,
+        vendor: 'schafer',
+        isVendorQuoteItem: false,
+      });
+    });
+
+    const itemsByVendor = new Map<VendorQuote['vendor'], GroupedSourceItem[]>();
+    sourceItems.forEach(item => {
+      const list = itemsByVendor.get(item.vendor) || [];
+      list.push(item);
+      itemsByVendor.set(item.vendor, list);
+    });
+
+    itemsByVendor.forEach((items, vendor) => {
       let remaining = [...items];
       const kits = vendorKits[vendor] || [];
 
@@ -1264,9 +1399,10 @@ Use null for any values not visible. Return only JSON.`;
         const matched = remaining.filter(item => includeMatch(item.name, kit.patterns));
         if (matched.length === 0) return;
         matched.forEach(item => {
-          const quantity = itemQuantities[item.id] ?? item.quantity ?? 0;
-          const adjustedPrice = vendorAdjustedPriceMap.get(item.id) ?? item.price ?? 0;
-          const total = adjustedPrice * quantity;
+          const itemPrice = item.isVendorQuoteItem
+            ? (vendorAdjustedPriceMap.get(item.id) ?? item.price ?? 0)
+            : item.price;
+          const total = itemPrice * (item.quantity || 0);
           const groupId = `${vendor}:${kit.name}`;
           addGroupItem(groupId, kit.name, kit.description, kit.category, item, total);
         });
@@ -1278,18 +1414,19 @@ Use null for any values not visible. Return only JSON.`;
         const vendorName = formatVendorName(vendor);
         const groupName = `${vendorName} Additional Items`;
         remaining.forEach(item => {
-          const quantity = itemQuantities[item.id] ?? item.quantity ?? 0;
-          const adjustedPrice = vendorAdjustedPriceMap.get(item.id) ?? item.price ?? 0;
-          const total = adjustedPrice * quantity;
+          const itemPrice = item.isVendorQuoteItem
+            ? (vendorAdjustedPriceMap.get(item.id) ?? item.price ?? 0)
+            : item.price;
+          const total = itemPrice * (item.quantity || 0);
           const groupId = `${vendor}:${groupName}`;
-          const category = item.category || 'materials';
+          const category = item.category === 'schafer' ? 'materials' : item.category || 'materials';
           addGroupItem(groupId, groupName, 'Additional materials and supplies', category, item, total);
         });
       }
     });
 
     return Array.from(groups.values()).filter(group => group.total > 0);
-  }, [vendorQuoteItems, vendorQuoteMap, vendorAdjustedPriceMap, itemQuantities, selectedItems]);
+  }, [vendorQuoteItems, vendorQuoteMap, vendorAdjustedPriceMap, itemQuantities, selectedItems, priceItems]);
 
   const groupedVendorItems = useMemo(() => {
     return buildGroupedVendorItems(groupedVendorDescriptions);
@@ -1300,13 +1437,20 @@ Use null for any values not visible. Return only JSON.`;
   }, [buildGroupedVendorItems]);
 
   const selectedVendorItemsTotal = useMemo(() => {
-    return vendorQuoteItems.reduce((sum, item) => {
+    const vendorTotal = vendorQuoteItems.reduce((sum, item) => {
       if (!selectedItems.includes(item.id)) return sum;
       const quantity = itemQuantities[item.id] ?? item.quantity ?? 0;
       const adjustedPrice = vendorAdjustedPriceMap.get(item.id) ?? item.price ?? 0;
       return sum + quantity * adjustedPrice;
     }, 0);
-  }, [vendorQuoteItems, selectedItems, itemQuantities, vendorAdjustedPriceMap]);
+    const schaferTotal = priceItems.reduce((sum, item) => {
+      if (item.category !== 'schafer') return sum;
+      if (!selectedItems.includes(item.id)) return sum;
+      const quantity = itemQuantities[item.id] ?? 0;
+      return sum + quantity * (item.price || 0);
+    }, 0);
+    return vendorTotal + schaferTotal;
+  }, [vendorQuoteItems, selectedItems, itemQuantities, vendorAdjustedPriceMap, priceItems]);
 
   const groupedVendorItemsTotal = useMemo(() => {
     return groupedVendorItems.reduce((sum, group) => sum + group.total, 0);
@@ -1467,6 +1611,138 @@ Return only the JSON object, no other text.`;
     return { quote, items };
   };
 
+  const findSchaferMatch = (itemName: string, schaferItems: PriceItem[]) => {
+    const name = itemName.toUpperCase();
+    const byName = (target: string) => schaferItems.find(item => item.name === target) || null;
+
+    if (name.includes('SCCL20') || name.includes('COIL 20')) {
+      return byName('Schafer Coil 20" 24ga');
+    }
+    if (name.includes('SCCL48') || name.includes('COIL 48')) {
+      return byName('Schafer Coil 48" 24ga Galvanized');
+    }
+    if (name.includes('PANEL FABRICATION') || name.includes('FAB-PANEL') || name.includes('SCFA') || name.includes('PANEL FAB')) {
+      return byName('Schafer Panel Fabrication Steel SS150');
+    }
+    if (name.includes('PANEL CLIP') && (name.includes('1-1/2') || name.includes('1.5'))) {
+      return byName('Schafer Panel Clip Mech 1-1/2" 24ga');
+    }
+    if (name.includes('PANEL CLIP') && (name.includes('1"') || name.includes('1 IN'))) {
+      return byName('Schafer Panel Clip Mech 1" 24ga');
+    }
+    if (name.includes('PANCAKE') || name.includes('PCSCGA')) {
+      return byName('Schafer Pancake Screw 1" Galv/Zinc');
+    }
+    if (name.includes('SHEET 4X10') && name.includes('GALV')) {
+      return byName('Schafer Sheet 4x10 Galv 24ga');
+    }
+    if (name.includes('SHEET 4X10') || name.includes('SCSH')) {
+      return byName('Schafer Sheet 4x10 24ga');
+    }
+    if (name.includes('SHEET 3X10') && (name.includes('COPPER') || name.includes('24OZ'))) {
+      return byName('Schafer Sheet 3x10 Copper 24oz');
+    }
+    if (name.includes('FAB-EAVE') || name.includes('FAB EAVE')) {
+      return byName('Schafer Fab Eave');
+    }
+    if (name.includes('FAB-RAKECLP') || name.includes('FAB RAKE CLIP')) {
+      return byName('Schafer Fab Rake Clip');
+    }
+    if (name.includes('FAB-RAKE') || name.includes('FAB RAKE')) {
+      return byName('Schafer Fab Rake');
+    }
+    if (name.includes('FAB-HIPRDGE') || name.includes('FAB RIDGE')) {
+      return byName('Schafer Fab Ridge');
+    }
+    if (name.includes('HALF RIDGE')) {
+      return byName('Schafer Fab Half Ridge');
+    }
+    if (name.includes('FAB-CZFLSHNG') || name.includes('FAB CZ')) {
+      return byName('Schafer Fab CZ Flashing');
+    }
+    if (name.includes('FAB-HEADWALL') || name.includes('FAB HEAD WALL')) {
+      return byName('Schafer Fab Head Wall');
+    }
+    if (name.includes('FAB-SIDEWALL') || name.includes('FAB SIDE WALL')) {
+      return byName('Schafer Fab Side Wall');
+    }
+    if (name.includes('FAB-STRTR') || name.includes('FAB STARTER')) {
+      return byName('Schafer Fab Starter');
+    }
+    if (name.includes('FAB-WVALLEY') || name.includes('FAB VALLEY')) {
+      return byName('Schafer Fab W Valley');
+    }
+    if (name.includes('FAB-TRANSITION') || name.includes('FAB TRANSITION')) {
+      return byName('Schafer Fab Transition');
+    }
+    if (name.includes('FAB-DRIPEDGE') || name.includes('FAB DRIP EDGE')) {
+      return byName('Schafer Fab Drip Edge');
+    }
+    if (name.includes('FAB-ZFLASH') || name.includes('FAB Z')) {
+      return byName('Schafer Fab Z Flash');
+    }
+    if (name.includes('FAB-PARAPET')) {
+      return name.includes('CLEAT')
+        ? byName('Schafer Fab Parapet Cleat')
+        : byName('Schafer Fab Parapet Cap');
+    }
+    if (name.includes('LINE FABRICATION') || name.includes('FABTRIMSCHA')) {
+      return byName('Schafer Fab Line Fabrication');
+    }
+    if (name.includes('PANEL RUN') && name.includes('MILE')) {
+      return byName('Schafer Job Site Panel Run (per mile)');
+    }
+    if (name.includes('PANEL RUN')) {
+      return byName('Schafer Job Site Panel Run (base)');
+    }
+    if (name.includes('DELIVERY FEE') || name.includes('DELFEE')) {
+      return byName('Schafer Retail Delivery Fee');
+    }
+    if (name.includes('OVERNIGHT')) {
+      return byName('Schafer Overnight Stay');
+    }
+    if (name.includes('NOVA SEAL') || name.includes('SEALANT')) {
+      return byName('Schafer Nova Seal Sealant');
+    }
+    if (name.includes('POP RIVET') && name.includes('STAINLESS')) {
+      return byName('Schafer Pop Rivet 1/8" Stainless');
+    }
+    if (name.includes('POP RIVET')) {
+      return byName('Schafer Pop Rivet 1/8"');
+    }
+    if (name.includes('WOODGRIP')) {
+      return byName('Schafer Woodgrip 1-1/2" Galv');
+    }
+    return null;
+  };
+
+  const applySchaferQuoteMatching = async (items: VendorQuoteItem[]) => {
+    const schaferItems = priceItems.filter(item => item.category === 'schafer');
+    if (schaferItems.length === 0) {
+      return { unmatchedItems: items, matchedIds: [] as string[], matchedQuantities: {} as Record<string, number> };
+    }
+
+    const unmatchedItems: VendorQuoteItem[] = [];
+    const matchedIds: string[] = [];
+    const matchedQuantities: Record<string, number> = {};
+
+    for (const item of items) {
+      const match = findSchaferMatch(item.name, schaferItems);
+      if (match) {
+        const quotePrice = toNumber(item.price);
+        if (quotePrice > 0 && Math.abs(quotePrice - match.price) > 0.001) {
+          await updatePriceItem(match.id, { price: quotePrice });
+        }
+        matchedIds.push(match.id);
+        matchedQuantities[match.id] = item.quantity || 0;
+      } else {
+        unmatchedItems.push(item);
+      }
+    }
+
+    return { unmatchedItems, matchedIds, matchedQuantities };
+  };
+
   const handleVendorQuoteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
     if (files.length === 0) return;
@@ -1475,11 +1751,20 @@ Return only the JSON object, no other text.`;
     try {
       const newQuotes: VendorQuote[] = [];
       const newItems: VendorQuoteItem[] = [];
+      const matchedIds: string[] = [];
+      const matchedQuantities: Record<string, number> = {};
 
       for (const file of files) {
         const { quote, items } = await extractVendorQuoteFromPdf(file);
         newQuotes.push(quote);
-        newItems.push(...items);
+        if (quote.vendor === 'schafer') {
+          const matched = await applySchaferQuoteMatching(items);
+          newItems.push(...matched.unmatchedItems);
+          matchedIds.push(...matched.matchedIds);
+          Object.assign(matchedQuantities, matched.matchedQuantities);
+        } else {
+          newItems.push(...items);
+        }
       }
 
       if (newQuotes.length > 0) {
@@ -1494,6 +1779,17 @@ Return only the JSON object, no other text.`;
           const updated = { ...prev };
           newItems.forEach(item => {
             updated[item.id] = item.quantity || 0;
+          });
+          return updated;
+        });
+      }
+
+      if (matchedIds.length > 0) {
+        setSelectedItems(prev => Array.from(new Set([...prev, ...matchedIds])));
+        setItemQuantities(prev => {
+          const updated = { ...prev };
+          Object.entries(matchedQuantities).forEach(([id, quantity]) => {
+            updated[id] = quantity;
           });
           return updated;
         });
@@ -1626,6 +1922,7 @@ Return only the JSON object, no other text.`;
       labor,
       equipment,
       accessories: [],
+      schafer: [],
     };
 
     const totals = {
@@ -1633,6 +1930,7 @@ Return only the JSON object, no other text.`;
       labor: labor.reduce((sum, item) => sum + item.total, 0),
       equipment: equipment.reduce((sum, item) => sum + item.total, 0),
       accessories: 0,
+      schafer: 0,
     };
 
     return {
@@ -2115,7 +2413,8 @@ Only return the JSON, no other text.`;
       const isCustomItem = item.isCustomItem === true;
       const baseQty = itemQuantities[id] ?? 0;
       // Apply waste factor only to non-vendor materials
-      const qty = !isVendorItem && item.category === 'materials' ? Math.ceil(baseQty * wasteFactor) : baseQty;
+      const isMaterialCategory = item.category === 'materials' || item.category === 'schafer';
+      const qty = !isVendorItem && isMaterialCategory ? Math.ceil(baseQty * wasteFactor) : baseQty;
       const itemPrice = isVendorItem ? (vendorAdjustedPriceMap.get(item.id) ?? item.price) : item.price;
       const baseTotal = baseQty * itemPrice;
       const total = qty * itemPrice;
@@ -2128,7 +2427,7 @@ Only return the JSON, no other text.`;
         baseQuantity: baseQty,
         quantity: qty,
         total,
-        wasteAdded: !isVendorItem && item.category === 'materials' ? qty - baseQty : 0,
+        wasteAdded: !isVendorItem && isMaterialCategory ? qty - baseQty : 0,
         isCustomItem: isCustomItem || false,
       } as LineItem;
     }).filter((item): item is LineItem => item !== null);
@@ -2141,6 +2440,7 @@ Only return the JSON, no other text.`;
       labor: [],
       equipment: [],
       accessories: [],
+      schafer: [],
     });
 
     const totals: Estimate['totals'] = Object.entries(byCategory).reduce((acc, [cat, items]) => {
@@ -2151,10 +2451,12 @@ Only return the JSON, no other text.`;
       labor: 0,
       equipment: 0,
       accessories: 0,
+      schafer: 0,
     });
 
     // Calculate Sundries (percentage of materials total only)
-    const sundriesAmount = totals.materials * (sundriesPercent / 100);
+    const sundriesBase = totals.materials + (totals.schafer || 0);
+    const sundriesAmount = sundriesBase * (sundriesPercent / 100);
 
     // Calculate costs and profit
     // Base cost = materials + labor + equipment + accessories + sundries
@@ -2419,7 +2721,7 @@ Only return the JSON, no other text.`;
       }
       
       // Calculate waste percent from line items (materials waste)
-      const materialsItems = savedQuote.line_items.filter(item => item.category === 'materials');
+      const materialsItems = savedQuote.line_items.filter(item => item.category === 'materials' || item.category === 'schafer');
       let wastePercent = 10; // default
       if (materialsItems.length > 0) {
         const totalBaseQty = materialsItems.reduce((sum, item) => sum + (item.baseQuantity || item.quantity), 0);
@@ -2464,6 +2766,7 @@ Only return the JSON, no other text.`;
         labor: restoredLineItems.filter(item => item.category === 'labor'),
         equipment: restoredLineItems.filter(item => item.category === 'equipment'),
         accessories: restoredLineItems.filter(item => item.category === 'accessories'),
+        schafer: restoredLineItems.filter(item => item.category === 'schafer'),
       };
       
       const totals = {
@@ -2471,6 +2774,7 @@ Only return the JSON, no other text.`;
         labor: byCategory.labor.reduce((sum, item) => sum + item.total, 0),
         equipment: byCategory.equipment.reduce((sum, item) => sum + item.total, 0),
         accessories: byCategory.accessories.reduce((sum, item) => sum + item.total, 0),
+        schafer: byCategory.schafer.reduce((sum, item) => sum + item.total, 0),
       };
       
       const restoredEstimate: Estimate = {
@@ -2765,6 +3069,7 @@ Only return the JSON, no other text.`;
                       item.category === 'materials' ? 'bg-blue-100 text-blue-700' :
                       item.category === 'labor' ? 'bg-green-100 text-green-700' :
                       item.category === 'equipment' ? 'bg-orange-100 text-orange-700' :
+                      item.category === 'schafer' ? 'bg-blue-100 text-blue-700' :
                       'bg-purple-100 text-purple-700'
                     }`}>
                       {item.category}
@@ -3528,6 +3833,7 @@ Only return the JSON, no other text.`;
                           {items.map(item => {
                             const isVendorItem = item.isVendorItem === true;
                             const isCustomItem = item.isCustomItem === true;
+                            const isSchaferItem = item.category === 'schafer' && !isVendorItem;
                             const isSelected = selectedItems.includes(item.id);
                             const qty = itemQuantities[item.id] ?? (isVendorItem ? (vendorItemMap.get(item.id)?.quantity ?? 0) : 0);
 
@@ -3566,6 +3872,11 @@ Only return the JSON, no other text.`;
                                           Vendor
                                         </span>
                                       )}
+                                    {isSchaferItem && (
+                                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                                        Schafer
+                                      </span>
+                                    )}
                                     {isCustomItem && (
                                       <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">
                                         Custom

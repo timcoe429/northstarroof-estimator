@@ -25,7 +25,7 @@ export interface PriceItem {
   price: number;
   coverage: number | null;
   coverageUnit: string | null;
-  category: 'materials' | 'labor' | 'equipment' | 'accessories';
+  category: 'materials' | 'labor' | 'equipment' | 'accessories' | 'schafer';
   proposalDescription: string | null;
 }
 
@@ -50,12 +50,14 @@ export interface Estimate {
     labor: LineItem[];
     equipment: LineItem[];
     accessories: LineItem[];
+    schafer: LineItem[];
   };
   totals: {
     materials: number;
     labor: number;
     equipment: number;
     accessories: number;
+    schafer: number;
   };
   baseCost: number;
   officeCostPercent: number;
