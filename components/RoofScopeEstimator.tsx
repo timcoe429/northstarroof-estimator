@@ -3113,12 +3113,32 @@ Only return the JSON, no other text.`;
                   onClick={() => setActiveCategory(key)}
                   className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-1.5 md:py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-sm ${
                     activeCategory === key
-                      ? `bg-${color}-100 text-${color}-700 border-2 border-${color}-300`
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? key === 'schafer'
+                        ? 'bg-red-100 text-red-700 border-2 border-red-300'
+                        : `bg-${color}-100 text-${color}-700 border-2 border-${color}-300`
+                      : key === 'schafer'
+                        ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                   style={activeCategory === key ? {
-                    backgroundColor: color === 'blue' ? '#dbeafe' : color === 'green' ? '#dcfce7' : color === 'orange' ? '#ffedd5' : '#f3e8ff',
-                    color: color === 'blue' ? '#1d4ed8' : color === 'green' ? '#15803d' : color === 'orange' ? '#c2410c' : '#7e22ce',
+                    backgroundColor: key === 'schafer'
+                      ? '#dc2626'
+                      : color === 'blue'
+                        ? '#dbeafe'
+                        : color === 'green'
+                          ? '#dcfce7'
+                          : color === 'orange'
+                            ? '#ffedd5'
+                            : '#f3e8ff',
+                    color: key === 'schafer'
+                      ? '#ffffff'
+                      : color === 'blue'
+                        ? '#1d4ed8'
+                        : color === 'green'
+                          ? '#15803d'
+                          : color === 'orange'
+                            ? '#c2410c'
+                            : '#7e22ce',
                   } : {}}
                 >
                   <Icon className="w-4 h-4" />
