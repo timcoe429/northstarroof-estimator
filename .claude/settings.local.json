@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -command \"\\(Get-Content components/RoofScopeEstimator.tsx\\).Length\")",
+      "Bash(npm run build:*)",
+      "Bash(git checkout:*)"
+    ]
+  }
+}

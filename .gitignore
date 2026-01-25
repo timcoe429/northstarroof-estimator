@@ -31,3 +31,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Do NOT ignore /ai folder - we want this in version control

@@ -76,6 +76,11 @@ export default function RoofScopeEstimator() {
   const [tempSelectedItems, setTempSelectedItems] = useState<string[]>([]);
   const [tempItemQuantities, setTempItemQuantities] = useState<Record<string, number>>({});
 
+  // Sync flags to prevent infinite loops in bidirectional state sync
+  const isSyncingVendorQuoteItems = useRef(false);
+  const isSyncingSelectedItems = useRef(false);
+  const isSyncingItemQuantities = useRef(false);
+
   const {
     customItems,
     setCustomItems,
@@ -266,17 +271,25 @@ export default function RoofScopeEstimator() {
   });
 
   // Sync vendorQuoteItems both ways to handle circular dependency
+  // Sync vendorQuoteItems → tempVendorQuoteItems
   useEffect(() => {
+    if (isSyncingVendorQuoteItems.current) return;
     if (JSON.stringify(tempVendorQuoteItems) !== JSON.stringify(vendorQuoteItems)) {
+      isSyncingVendorQuoteItems.current = true;
       setTempVendorQuoteItems(vendorQuoteItems);
+      setTimeout(() => { isSyncingVendorQuoteItems.current = false; }, 0);
     }
-  }, [vendorQuoteItems, tempVendorQuoteItems]);
+  }, [vendorQuoteItems]);
 
+  // Sync tempVendorQuoteItems → vendorQuoteItems
   useEffect(() => {
+    if (isSyncingVendorQuoteItems.current) return;
     if (JSON.stringify(vendorQuoteItems) !== JSON.stringify(tempVendorQuoteItems)) {
+      isSyncingVendorQuoteItems.current = true;
       setVendorQuoteItems(tempVendorQuoteItems);
+      setTimeout(() => { isSyncingVendorQuoteItems.current = false; }, 0);
     }
-  }, [tempVendorQuoteItems, vendorQuoteItems, setVendorQuoteItems]);
+  }, [tempVendorQuoteItems, setVendorQuoteItems]);
 
   const {
     selectedItems,
@@ -314,29 +327,45 @@ export default function RoofScopeEstimator() {
   });
 
   // Sync temp state for useCustomItems and usePriceList/useVendorQuotes
+  // Sync selectedItems → tempSelectedItems
   useEffect(() => {
+    if (isSyncingSelectedItems.current) return;
     if (JSON.stringify(tempSelectedItems) !== JSON.stringify(selectedItems)) {
+      isSyncingSelectedItems.current = true;
       setTempSelectedItems(selectedItems);
+      setTimeout(() => { isSyncingSelectedItems.current = false; }, 0);
     }
-  }, [selectedItems, tempSelectedItems]);
+  }, [selectedItems]);
 
+  // Sync tempSelectedItems → selectedItems
   useEffect(() => {
+    if (isSyncingSelectedItems.current) return;
     if (JSON.stringify(selectedItems) !== JSON.stringify(tempSelectedItems)) {
+      isSyncingSelectedItems.current = true;
       setSelectedItems(tempSelectedItems);
+      setTimeout(() => { isSyncingSelectedItems.current = false; }, 0);
     }
-  }, [tempSelectedItems, selectedItems, setSelectedItems]);
+  }, [tempSelectedItems, setSelectedItems]);
 
+  // Sync itemQuantities → tempItemQuantities
   useEffect(() => {
+    if (isSyncingItemQuantities.current) return;
     if (JSON.stringify(tempItemQuantities) !== JSON.stringify(itemQuantities)) {
+      isSyncingItemQuantities.current = true;
       setTempItemQuantities(itemQuantities);
+      setTimeout(() => { isSyncingItemQuantities.current = false; }, 0);
     }
-  }, [itemQuantities, tempItemQuantities]);
+  }, [itemQuantities]);
 
+  // Sync tempItemQuantities → itemQuantities
   useEffect(() => {
+    if (isSyncingItemQuantities.current) return;
     if (JSON.stringify(itemQuantities) !== JSON.stringify(tempItemQuantities)) {
+      isSyncingItemQuantities.current = true;
       setItemQuantities(tempItemQuantities);
+      setTimeout(() => { isSyncingItemQuantities.current = false; }, 0);
     }
-  }, [tempItemQuantities, itemQuantities, setItemQuantities]);
+  }, [tempItemQuantities, setItemQuantities]);
 
   const {
     jobDescription,
