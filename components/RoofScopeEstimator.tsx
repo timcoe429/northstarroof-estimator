@@ -296,6 +296,119 @@ export default function RoofScopeEstimator() {
     'woodgrip': 'Woodgrip Fasteners - 1-1/2" Galvanized',
   };
 
+  // Match Schafer quote item name to client description using fuzzy matching
+  const matchSchaferDescription = (quoteItemName: string): string => {
+    const normalized = quoteItemName.toLowerCase();
+    
+    // Try exact key matches first
+    for (const [key, description] of Object.entries(schaferDescriptions)) {
+      if (normalized.includes(key)) {
+        return description;
+      }
+    }
+    
+    // Fuzzy matching for common patterns
+    if (normalized.includes('coil') && (normalized.includes('20') || normalized.includes('sccL20'))) {
+      return schaferDescriptions['coil 20'];
+    }
+    if (normalized.includes('coil') && (normalized.includes('48') || normalized.includes('sccL48'))) {
+      return schaferDescriptions['coil 48'];
+    }
+    if (normalized.includes('panel') && (normalized.includes('fab') || normalized.includes('fabrication'))) {
+      return schaferDescriptions['panel fabrication'];
+    }
+    if (normalized.includes('panel') && normalized.includes('clip')) {
+      return schaferDescriptions['panel clip'];
+    }
+    if (normalized.includes('pancake') || normalized.includes('pcscga')) {
+      return schaferDescriptions['pancake screw'];
+    }
+    if (normalized.includes('sheet') && normalized.includes('4x10') && normalized.includes('galv')) {
+      return schaferDescriptions['sheet 4x10 galv'];
+    }
+    if (normalized.includes('sheet') && normalized.includes('4x10')) {
+      return schaferDescriptions['sheet 4x10'];
+    }
+    if (normalized.includes('sheet') && normalized.includes('3x10') && normalized.includes('copper')) {
+      return schaferDescriptions['sheet 3x10 copper'];
+    }
+    if ((normalized.includes('fab-eave') || normalized.includes('fab eave')) && !normalized.includes('clip')) {
+      return schaferDescriptions['eave'];
+    }
+    if (normalized.includes('fab-rake') && normalized.includes('clip')) {
+      return schaferDescriptions['rake clip'];
+    }
+    if (normalized.includes('fab-rake') || normalized.includes('fab rake')) {
+      return schaferDescriptions['rake'];
+    }
+    if (normalized.includes('fab-hiprdge') || normalized.includes('fab ridge') || normalized.includes('ridge')) {
+      if (normalized.includes('half')) {
+        return schaferDescriptions['half ridge'];
+      }
+      return schaferDescriptions['ridge'];
+    }
+    if (normalized.includes('fab-cz') || normalized.includes('cz flashing')) {
+      return schaferDescriptions['cz flashing'];
+    }
+    if (normalized.includes('fab-headwall') || normalized.includes('head wall')) {
+      return schaferDescriptions['head wall'];
+    }
+    if (normalized.includes('fab-sidewall') || normalized.includes('side wall')) {
+      return schaferDescriptions['side wall'];
+    }
+    if (normalized.includes('fab-strtr') || normalized.includes('starter')) {
+      return schaferDescriptions['starter'];
+    }
+    if (normalized.includes('fab-wvalley') || normalized.includes('valley')) {
+      return schaferDescriptions['w valley'];
+    }
+    if (normalized.includes('fab-transition') || normalized.includes('transition')) {
+      return schaferDescriptions['transition'];
+    }
+    if (normalized.includes('fab-dripedge') || normalized.includes('drip edge')) {
+      return schaferDescriptions['drip edge'];
+    }
+    if (normalized.includes('fab-zflash') || normalized.includes('z flash')) {
+      return schaferDescriptions['z flash'];
+    }
+    if (normalized.includes('parapet')) {
+      if (normalized.includes('cleat')) {
+        return schaferDescriptions['parapet cleat'];
+      }
+      return schaferDescriptions['parapet cap'];
+    }
+    if (normalized.includes('line fabrication') || normalized.includes('fabtrimscha')) {
+      return schaferDescriptions['line fabrication'];
+    }
+    if (normalized.includes('panel run') && normalized.includes('mile')) {
+      return schaferDescriptions['panel run mile'];
+    }
+    if (normalized.includes('panel run')) {
+      return schaferDescriptions['panel run base'];
+    }
+    if (normalized.includes('delivery fee') || normalized.includes('delfee')) {
+      return schaferDescriptions['delivery fee'];
+    }
+    if (normalized.includes('overnight')) {
+      return schaferDescriptions['overnight'];
+    }
+    if (normalized.includes('nova seal') || normalized.includes('sealant')) {
+      return schaferDescriptions['sealant'];
+    }
+    if (normalized.includes('pop rivet')) {
+      if (normalized.includes('stainless')) {
+        return schaferDescriptions['pop rivet stainless'];
+      }
+      return schaferDescriptions['pop rivet'];
+    }
+    if (normalized.includes('woodgrip')) {
+      return schaferDescriptions['woodgrip'];
+    }
+    
+    // If no match found, return the original quote description
+    return quoteItemName;
+  };
+
   // Bulk description generation state
   const [isGeneratingDescriptions, setIsGeneratingDescriptions] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number } | null>(null);
@@ -1579,119 +1692,6 @@ Return only the JSON object, no other text.`;
     }
 
     return { quote, items };
-  };
-
-  // Match Schafer quote item name to client description using fuzzy matching
-  const matchSchaferDescription = (quoteItemName: string): string => {
-    const normalized = quoteItemName.toLowerCase();
-    
-    // Try exact key matches first
-    for (const [key, description] of Object.entries(schaferDescriptions)) {
-      if (normalized.includes(key)) {
-        return description;
-      }
-    }
-    
-    // Fuzzy matching for common patterns
-    if (normalized.includes('coil') && (normalized.includes('20') || normalized.includes('sccL20'))) {
-      return schaferDescriptions['coil 20'];
-    }
-    if (normalized.includes('coil') && (normalized.includes('48') || normalized.includes('sccL48'))) {
-      return schaferDescriptions['coil 48'];
-    }
-    if (normalized.includes('panel') && (normalized.includes('fab') || normalized.includes('fabrication'))) {
-      return schaferDescriptions['panel fabrication'];
-    }
-    if (normalized.includes('panel') && normalized.includes('clip')) {
-      return schaferDescriptions['panel clip'];
-    }
-    if (normalized.includes('pancake') || normalized.includes('pcscga')) {
-      return schaferDescriptions['pancake screw'];
-    }
-    if (normalized.includes('sheet') && normalized.includes('4x10') && normalized.includes('galv')) {
-      return schaferDescriptions['sheet 4x10 galv'];
-    }
-    if (normalized.includes('sheet') && normalized.includes('4x10')) {
-      return schaferDescriptions['sheet 4x10'];
-    }
-    if (normalized.includes('sheet') && normalized.includes('3x10') && normalized.includes('copper')) {
-      return schaferDescriptions['sheet 3x10 copper'];
-    }
-    if ((normalized.includes('fab-eave') || normalized.includes('fab eave')) && !normalized.includes('clip')) {
-      return schaferDescriptions['eave'];
-    }
-    if (normalized.includes('fab-rake') && normalized.includes('clip')) {
-      return schaferDescriptions['rake clip'];
-    }
-    if (normalized.includes('fab-rake') || normalized.includes('fab rake')) {
-      return schaferDescriptions['rake'];
-    }
-    if (normalized.includes('fab-hiprdge') || normalized.includes('fab ridge') || normalized.includes('ridge')) {
-      if (normalized.includes('half')) {
-        return schaferDescriptions['half ridge'];
-      }
-      return schaferDescriptions['ridge'];
-    }
-    if (normalized.includes('fab-cz') || normalized.includes('cz flashing')) {
-      return schaferDescriptions['cz flashing'];
-    }
-    if (normalized.includes('fab-headwall') || normalized.includes('head wall')) {
-      return schaferDescriptions['head wall'];
-    }
-    if (normalized.includes('fab-sidewall') || normalized.includes('side wall')) {
-      return schaferDescriptions['side wall'];
-    }
-    if (normalized.includes('fab-strtr') || normalized.includes('starter')) {
-      return schaferDescriptions['starter'];
-    }
-    if (normalized.includes('fab-wvalley') || normalized.includes('valley')) {
-      return schaferDescriptions['w valley'];
-    }
-    if (normalized.includes('fab-transition') || normalized.includes('transition')) {
-      return schaferDescriptions['transition'];
-    }
-    if (normalized.includes('fab-dripedge') || normalized.includes('drip edge')) {
-      return schaferDescriptions['drip edge'];
-    }
-    if (normalized.includes('fab-zflash') || normalized.includes('z flash')) {
-      return schaferDescriptions['z flash'];
-    }
-    if (normalized.includes('parapet')) {
-      if (normalized.includes('cleat')) {
-        return schaferDescriptions['parapet cleat'];
-      }
-      return schaferDescriptions['parapet cap'];
-    }
-    if (normalized.includes('line fabrication') || normalized.includes('fabtrimscha')) {
-      return schaferDescriptions['line fabrication'];
-    }
-    if (normalized.includes('panel run') && normalized.includes('mile')) {
-      return schaferDescriptions['panel run mile'];
-    }
-    if (normalized.includes('panel run')) {
-      return schaferDescriptions['panel run base'];
-    }
-    if (normalized.includes('delivery fee') || normalized.includes('delfee')) {
-      return schaferDescriptions['delivery fee'];
-    }
-    if (normalized.includes('overnight')) {
-      return schaferDescriptions['overnight'];
-    }
-    if (normalized.includes('nova seal') || normalized.includes('sealant')) {
-      return schaferDescriptions['sealant'];
-    }
-    if (normalized.includes('pop rivet')) {
-      if (normalized.includes('stainless')) {
-        return schaferDescriptions['pop rivet stainless'];
-      }
-      return schaferDescriptions['pop rivet'];
-    }
-    if (normalized.includes('woodgrip')) {
-      return schaferDescriptions['woodgrip'];
-    }
-    
-    // If no match found, return the original quote description
-    return quoteItemName;
   };
 
   const handleVendorQuoteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
