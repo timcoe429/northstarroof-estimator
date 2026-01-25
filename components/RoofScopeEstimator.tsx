@@ -259,54 +259,41 @@ export default function RoofScopeEstimator() {
     return desc.includes('tear-off') || quickTearOff;
   }, [jobDescription, quickSelections]);
 
-  const buildSchaferDefaults = () => {
-    const baseItems = [
-      { name: 'Schafer Coil 20" 24ga', unit: 'sf', price: 1.70 },
-      { name: 'Schafer Coil 48" 24ga Galvanized', unit: 'sf', price: 1.30 },
-      { name: 'Schafer Panel Fabrication Steel SS150', unit: 'lf', price: 0.40 },
-      { name: 'Schafer Panel Clip Mech 1-1/2" 24ga', unit: 'each', price: 0.25 },
-      { name: 'Schafer Panel Clip Mech 1" 24ga', unit: 'each', price: 0.26 },
-      { name: 'Schafer Pancake Screw 1" Galv/Zinc', unit: 'each', price: 0.08 },
-      { name: 'Schafer Sheet 4x10 24ga', unit: 'sf', price: 68.00 },
-      { name: 'Schafer Sheet 4x10 Galv 24ga', unit: 'sf', price: 46.00 },
-      { name: 'Schafer Sheet 3x10 Copper 24oz', unit: 'sf', price: 300.00 },
-      { name: 'Schafer Fab Eave', unit: 'lf', price: 1.15 },
-      { name: 'Schafer Fab Rake', unit: 'lf', price: 1.15 },
-      { name: 'Schafer Fab Rake Clip', unit: 'lf', price: 0.66 },
-      { name: 'Schafer Fab Ridge', unit: 'lf', price: 0.99 },
-      { name: 'Schafer Fab Half Ridge', unit: 'lf', price: 0.99 },
-      { name: 'Schafer Fab CZ Flashing', unit: 'lf', price: 0.83 },
-      { name: 'Schafer Fab Head Wall', unit: 'lf', price: 0.66 },
-      { name: 'Schafer Fab Side Wall', unit: 'lf', price: 0.66 },
-      { name: 'Schafer Fab Starter', unit: 'lf', price: 0.66 },
-      { name: 'Schafer Fab W Valley', unit: 'lf', price: 1.50 },
-      { name: 'Schafer Fab Transition', unit: 'lf', price: 0.51 },
-      { name: 'Schafer Fab Drip Edge', unit: 'lf', price: 0.85 },
-      { name: 'Schafer Fab Z Flash', unit: 'lf', price: 0.51 },
-      { name: 'Schafer Fab Parapet Cap', unit: 'lf', price: 1.50 },
-      { name: 'Schafer Fab Parapet Cleat', unit: 'lf', price: 0.50 },
-      { name: 'Schafer Fab Line Fabrication', unit: 'each', price: 1.00 },
-      { name: 'Schafer Job Site Panel Run (per mile)', unit: 'each', price: 3.00 },
-      { name: 'Schafer Job Site Panel Run (base)', unit: 'each', price: 200.00 },
-      { name: 'Schafer Retail Delivery Fee', unit: 'each', price: 0.28 },
-      { name: 'Schafer Overnight Stay', unit: 'each', price: 500.00 },
-      { name: 'Schafer Nova Seal Sealant', unit: 'each', price: 10.00 },
-      { name: 'Schafer Pop Rivet 1/8"', unit: 'each', price: 0.12 },
-      { name: 'Schafer Pop Rivet 1/8" Stainless', unit: 'each', price: 0.12 },
-      { name: 'Schafer Woodgrip 1-1/2" Galv', unit: 'each', price: 0.12 },
-    ];
-    const timestamp = Date.now();
-    let counter = 0;
-    return baseItems.map(item => ({
-      id: `schafer_${timestamp}_${counter++}`,
-      name: item.name,
-      unit: item.unit,
-      price: item.price,
-      coverage: null,
-      coverageUnit: null,
-      category: 'schafer' as PriceItem['category'],
-      proposalDescription: null,
-    }));
+  // Schafer description library - maps internal identifiers to client-facing descriptions
+  // Used only for matching quote items to clean proposal descriptions
+  const schaferDescriptions: Record<string, string> = {
+    'coil 20': 'Standing Seam Metal Panels - 24ga Kynar Finish',
+    'coil 48': 'Standing Seam Metal Panels - 24ga Galvanized',
+    'panel fabrication': 'Panel Fabrication & Forming',
+    'panel clip': 'Concealed Clip Fastening System',
+    'pancake screw': 'Pancake Screw Fasteners - Galvanized/Zinc',
+    'sheet 4x10': 'Standing Seam Metal Sheet - 4x10 24ga',
+    'sheet 4x10 galv': 'Standing Seam Metal Sheet - 4x10 Galvanized 24ga',
+    'sheet 3x10 copper': 'Standing Seam Metal Sheet - 3x10 Copper 24oz',
+    'eave': 'Eave Flashing - Standing Seam Profile',
+    'rake': 'Rake Edge Flashing - Standing Seam Profile',
+    'rake clip': 'Rake Edge Clip Fastening',
+    'ridge': 'Ridge Cap - Standing Seam Profile',
+    'half ridge': 'Half Ridge Cap - Standing Seam Profile',
+    'cz flashing': 'CZ Flashing - Standing Seam Profile',
+    'head wall': 'Head Wall Flashing - Standing Seam Profile',
+    'side wall': 'Side Wall Flashing - Standing Seam Profile',
+    'starter': 'Starter Flashing - Standing Seam Profile',
+    'w valley': 'Valley Flashing - Standing Seam Profile',
+    'transition': 'Transition Flashing - Standing Seam Profile',
+    'drip edge': 'Drip Edge Flashing - Standing Seam Profile',
+    'z flash': 'Z-Flash Flashing - Standing Seam Profile',
+    'parapet cap': 'Parapet Cap Flashing - Standing Seam Profile',
+    'parapet cleat': 'Parapet Cleat Fastening',
+    'line fabrication': 'Line Fabrication & Custom Trim',
+    'panel run mile': 'Job Site Panel Run - Per Mile',
+    'panel run base': 'Job Site Panel Run - Base Charge',
+    'delivery fee': 'Material Delivery Fee',
+    'overnight': 'Overnight Stay Charge',
+    'sealant': 'Nova Seal Sealant',
+    'pop rivet': 'Pop Rivet Fasteners - 1/8"',
+    'pop rivet stainless': 'Pop Rivet Fasteners - 1/8" Stainless Steel',
+    'woodgrip': 'Woodgrip Fasteners - 1-1/2" Galvanized',
   };
 
   // Bulk description generation state
@@ -558,20 +545,31 @@ export default function RoofScopeEstimator() {
   }, [vendorQuotes, vendorQuoteItemSubtotals]);
 
   const vendorSelectableItems: SelectableItem[] = useMemo(() => {
-    return vendorQuoteItems.map(item => ({
-      id: item.id,
-      name: item.name,
-      unit: item.unit || 'each',
-      price: item.price || 0,
-      coverage: null,
-      coverageUnit: null,
-      category: item.category,
-      proposalDescription: null,
-      isVendorItem: true,
-      vendorQuoteId: item.vendor_quote_id,
-      vendorCategory: item.vendor_category,
-    }));
-  }, [vendorQuoteItems]);
+    return vendorQuoteItems.map(item => {
+      // Get vendor quote to check if it's Schafer
+      const vendorQuote = vendorQuoteMap.get(item.vendor_quote_id);
+      const isSchaferQuote = vendorQuote?.vendor === 'schafer';
+      
+      // Use matched description for Schafer items, otherwise use quote name
+      const proposalDescription = isSchaferQuote 
+        ? matchSchaferDescription(item.name)
+        : null;
+      
+      return {
+        id: item.id,
+        name: item.name,
+        unit: item.unit || 'each',
+        price: item.price || 0,
+        coverage: null,
+        coverageUnit: null,
+        category: item.category,
+        proposalDescription,
+        isVendorItem: true,
+        vendorQuoteId: item.vendor_quote_id,
+        vendorCategory: item.vendor_category,
+      };
+    });
+  }, [vendorQuoteItems, vendorQuoteMap]);
 
   const allSelectableItems: SelectableItem[] = useMemo(() => {
     return [...priceItems, ...vendorSelectableItems, ...customItems];
@@ -593,19 +591,7 @@ export default function RoofScopeEstimator() {
       setIsLoadingPriceItems(true);
       try {
         const items = await loadPriceItems(user.id);
-        const hasSchaferItems = items.some(item => item.category === 'schafer');
-        if (!hasSchaferItems) {
-          const defaults = buildSchaferDefaults();
-          try {
-            await savePriceItemsBulk(defaults, user.id);
-            setPriceItems([...items, ...defaults]);
-          } catch (seedError) {
-            console.error('Failed to seed Schafer items:', seedError);
-            setPriceItems(items);
-          }
-        } else {
-          setPriceItems(items);
-        }
+        setPriceItems(items);
       } catch (error) {
         console.error('Failed to load price items:', error);
         alert('Failed to load price items. Please refresh the page.');
@@ -993,43 +979,18 @@ Use null for any values not visible. Return only JSON.`;
           setVendorQuotes(prev => [...prev, quote]);
         }
         if (items.length > 0) {
-          if (quote.vendor === 'schafer') {
-            const matched = await applySchaferQuoteMatching(items);
-            const unmatchedItems = matched.unmatchedItems;
-            if (unmatchedItems.length > 0) {
-              const newItemIds = unmatchedItems.map(item => item.id);
-              setVendorQuoteItems(prev => [...prev, ...unmatchedItems]);
-              setSelectedItems(prev => Array.from(new Set([...prev, ...newItemIds])));
-              setItemQuantities(prev => {
-                const updated = { ...prev };
-                unmatchedItems.forEach(item => {
-                  updated[item.id] = item.quantity || 0;
-                });
-                return updated;
-              });
-            }
-            if (matched.matchedIds.length > 0) {
-              setSelectedItems(prev => Array.from(new Set([...prev, ...matched.matchedIds])));
-              setItemQuantities(prev => {
-                const updated = { ...prev };
-                Object.entries(matched.matchedQuantities).forEach(([id, quantity]) => {
-                  updated[id] = quantity;
-                });
-                return updated;
-              });
-            }
-          } else {
-            const newItemIds = items.map(item => item.id);
-            setVendorQuoteItems(prev => [...prev, ...items]);
-            setSelectedItems(prev => Array.from(new Set([...prev, ...newItemIds])));
-            setItemQuantities(prev => {
-              const updated = { ...prev };
-              items.forEach(item => {
-                updated[item.id] = item.quantity || 0;
-              });
-              return updated;
+          // Add all quote items directly - no matching logic
+          // Schafer quotes are the source of truth, all items are included
+          const newItemIds = items.map(item => item.id);
+          setVendorQuoteItems(prev => [...prev, ...items]);
+          setSelectedItems(prev => Array.from(new Set([...prev, ...newItemIds])));
+          setItemQuantities(prev => {
+            const updated = { ...prev };
+            items.forEach(item => {
+              updated[item.id] = item.quantity || 0;
             });
-          }
+            return updated;
+          });
         }
       } catch (error) {
         console.error('Vendor quote extraction error:', error);
@@ -1510,6 +1471,14 @@ CATEGORY MAPPING:
 - snow-retention → category: accessories (snow guards, fence, tubes, collars, caps)
 - delivery → category: equipment (travel, freight, chop & drop)
 
+CRITICAL EXTRACTION RULES:
+- Extract EVERY line item exactly as it appears in the quote
+- Include ALL items: travel charges, overnight fees, delivery fees, tax, sealant, freight, etc.
+- Do NOT filter out any items - even if they seem minor
+- Do NOT skip fees, charges, or service items
+- Quantities and prices must match the PDF exactly - do NOT recalculate
+- Extract item descriptions exactly as written on the quote
+
 Return ONLY JSON in this exact shape:
 {
   "vendor": "schafer|tra|rocky-mountain",
@@ -1536,6 +1505,7 @@ IMPORTANT:
 - Ensure subtotal is the pre-tax sum of line items.
 - Ensure total equals subtotal + tax + any fees shown.
 - If tax or total are missing, set them to 0 and still return numeric values.
+- Extract ALL line items - do not skip any items from the quote.
 
 Return only the JSON object, no other text.`;
 
@@ -1611,136 +1581,117 @@ Return only the JSON object, no other text.`;
     return { quote, items };
   };
 
-  const findSchaferMatch = (itemName: string, schaferItems: PriceItem[]) => {
-    const name = itemName.toUpperCase();
-    const byName = (target: string) => schaferItems.find(item => item.name === target) || null;
-
-    if (name.includes('SCCL20') || name.includes('COIL 20')) {
-      return byName('Schafer Coil 20" 24ga');
-    }
-    if (name.includes('SCCL48') || name.includes('COIL 48')) {
-      return byName('Schafer Coil 48" 24ga Galvanized');
-    }
-    if (name.includes('PANEL FABRICATION') || name.includes('FAB-PANEL') || name.includes('SCFA') || name.includes('PANEL FAB')) {
-      return byName('Schafer Panel Fabrication Steel SS150');
-    }
-    if (name.includes('PANEL CLIP') && (name.includes('1-1/2') || name.includes('1.5'))) {
-      return byName('Schafer Panel Clip Mech 1-1/2" 24ga');
-    }
-    if (name.includes('PANEL CLIP') && (name.includes('1"') || name.includes('1 IN'))) {
-      return byName('Schafer Panel Clip Mech 1" 24ga');
-    }
-    if (name.includes('PANCAKE') || name.includes('PCSCGA')) {
-      return byName('Schafer Pancake Screw 1" Galv/Zinc');
-    }
-    if (name.includes('SHEET 4X10') && name.includes('GALV')) {
-      return byName('Schafer Sheet 4x10 Galv 24ga');
-    }
-    if (name.includes('SHEET 4X10') || name.includes('SCSH')) {
-      return byName('Schafer Sheet 4x10 24ga');
-    }
-    if (name.includes('SHEET 3X10') && (name.includes('COPPER') || name.includes('24OZ'))) {
-      return byName('Schafer Sheet 3x10 Copper 24oz');
-    }
-    if (name.includes('FAB-EAVE') || name.includes('FAB EAVE')) {
-      return byName('Schafer Fab Eave');
-    }
-    if (name.includes('FAB-RAKECLP') || name.includes('FAB RAKE CLIP')) {
-      return byName('Schafer Fab Rake Clip');
-    }
-    if (name.includes('FAB-RAKE') || name.includes('FAB RAKE')) {
-      return byName('Schafer Fab Rake');
-    }
-    if (name.includes('FAB-HIPRDGE') || name.includes('FAB RIDGE')) {
-      return byName('Schafer Fab Ridge');
-    }
-    if (name.includes('HALF RIDGE')) {
-      return byName('Schafer Fab Half Ridge');
-    }
-    if (name.includes('FAB-CZFLSHNG') || name.includes('FAB CZ')) {
-      return byName('Schafer Fab CZ Flashing');
-    }
-    if (name.includes('FAB-HEADWALL') || name.includes('FAB HEAD WALL')) {
-      return byName('Schafer Fab Head Wall');
-    }
-    if (name.includes('FAB-SIDEWALL') || name.includes('FAB SIDE WALL')) {
-      return byName('Schafer Fab Side Wall');
-    }
-    if (name.includes('FAB-STRTR') || name.includes('FAB STARTER')) {
-      return byName('Schafer Fab Starter');
-    }
-    if (name.includes('FAB-WVALLEY') || name.includes('FAB VALLEY')) {
-      return byName('Schafer Fab W Valley');
-    }
-    if (name.includes('FAB-TRANSITION') || name.includes('FAB TRANSITION')) {
-      return byName('Schafer Fab Transition');
-    }
-    if (name.includes('FAB-DRIPEDGE') || name.includes('FAB DRIP EDGE')) {
-      return byName('Schafer Fab Drip Edge');
-    }
-    if (name.includes('FAB-ZFLASH') || name.includes('FAB Z')) {
-      return byName('Schafer Fab Z Flash');
-    }
-    if (name.includes('FAB-PARAPET')) {
-      return name.includes('CLEAT')
-        ? byName('Schafer Fab Parapet Cleat')
-        : byName('Schafer Fab Parapet Cap');
-    }
-    if (name.includes('LINE FABRICATION') || name.includes('FABTRIMSCHA')) {
-      return byName('Schafer Fab Line Fabrication');
-    }
-    if (name.includes('PANEL RUN') && name.includes('MILE')) {
-      return byName('Schafer Job Site Panel Run (per mile)');
-    }
-    if (name.includes('PANEL RUN')) {
-      return byName('Schafer Job Site Panel Run (base)');
-    }
-    if (name.includes('DELIVERY FEE') || name.includes('DELFEE')) {
-      return byName('Schafer Retail Delivery Fee');
-    }
-    if (name.includes('OVERNIGHT')) {
-      return byName('Schafer Overnight Stay');
-    }
-    if (name.includes('NOVA SEAL') || name.includes('SEALANT')) {
-      return byName('Schafer Nova Seal Sealant');
-    }
-    if (name.includes('POP RIVET') && name.includes('STAINLESS')) {
-      return byName('Schafer Pop Rivet 1/8" Stainless');
-    }
-    if (name.includes('POP RIVET')) {
-      return byName('Schafer Pop Rivet 1/8"');
-    }
-    if (name.includes('WOODGRIP')) {
-      return byName('Schafer Woodgrip 1-1/2" Galv');
-    }
-    return null;
-  };
-
-  const applySchaferQuoteMatching = async (items: VendorQuoteItem[]) => {
-    const schaferItems = priceItems.filter(item => item.category === 'schafer');
-    if (schaferItems.length === 0) {
-      return { unmatchedItems: items, matchedIds: [] as string[], matchedQuantities: {} as Record<string, number> };
-    }
-
-    const unmatchedItems: VendorQuoteItem[] = [];
-    const matchedIds: string[] = [];
-    const matchedQuantities: Record<string, number> = {};
-
-    for (const item of items) {
-      const match = findSchaferMatch(item.name, schaferItems);
-      if (match) {
-        const quotePrice = toNumber(item.price);
-        if (quotePrice > 0 && Math.abs(quotePrice - match.price) > 0.001) {
-          await updatePriceItem(match.id, { price: quotePrice });
-        }
-        matchedIds.push(match.id);
-        matchedQuantities[match.id] = item.quantity || 0;
-      } else {
-        unmatchedItems.push(item);
+  // Match Schafer quote item name to client description using fuzzy matching
+  const matchSchaferDescription = (quoteItemName: string): string => {
+    const normalized = quoteItemName.toLowerCase();
+    
+    // Try exact key matches first
+    for (const [key, description] of Object.entries(schaferDescriptions)) {
+      if (normalized.includes(key)) {
+        return description;
       }
     }
-
-    return { unmatchedItems, matchedIds, matchedQuantities };
+    
+    // Fuzzy matching for common patterns
+    if (normalized.includes('coil') && (normalized.includes('20') || normalized.includes('sccL20'))) {
+      return schaferDescriptions['coil 20'];
+    }
+    if (normalized.includes('coil') && (normalized.includes('48') || normalized.includes('sccL48'))) {
+      return schaferDescriptions['coil 48'];
+    }
+    if (normalized.includes('panel') && (normalized.includes('fab') || normalized.includes('fabrication'))) {
+      return schaferDescriptions['panel fabrication'];
+    }
+    if (normalized.includes('panel') && normalized.includes('clip')) {
+      return schaferDescriptions['panel clip'];
+    }
+    if (normalized.includes('pancake') || normalized.includes('pcscga')) {
+      return schaferDescriptions['pancake screw'];
+    }
+    if (normalized.includes('sheet') && normalized.includes('4x10') && normalized.includes('galv')) {
+      return schaferDescriptions['sheet 4x10 galv'];
+    }
+    if (normalized.includes('sheet') && normalized.includes('4x10')) {
+      return schaferDescriptions['sheet 4x10'];
+    }
+    if (normalized.includes('sheet') && normalized.includes('3x10') && normalized.includes('copper')) {
+      return schaferDescriptions['sheet 3x10 copper'];
+    }
+    if ((normalized.includes('fab-eave') || normalized.includes('fab eave')) && !normalized.includes('clip')) {
+      return schaferDescriptions['eave'];
+    }
+    if (normalized.includes('fab-rake') && normalized.includes('clip')) {
+      return schaferDescriptions['rake clip'];
+    }
+    if (normalized.includes('fab-rake') || normalized.includes('fab rake')) {
+      return schaferDescriptions['rake'];
+    }
+    if (normalized.includes('fab-hiprdge') || normalized.includes('fab ridge') || normalized.includes('ridge')) {
+      if (normalized.includes('half')) {
+        return schaferDescriptions['half ridge'];
+      }
+      return schaferDescriptions['ridge'];
+    }
+    if (normalized.includes('fab-cz') || normalized.includes('cz flashing')) {
+      return schaferDescriptions['cz flashing'];
+    }
+    if (normalized.includes('fab-headwall') || normalized.includes('head wall')) {
+      return schaferDescriptions['head wall'];
+    }
+    if (normalized.includes('fab-sidewall') || normalized.includes('side wall')) {
+      return schaferDescriptions['side wall'];
+    }
+    if (normalized.includes('fab-strtr') || normalized.includes('starter')) {
+      return schaferDescriptions['starter'];
+    }
+    if (normalized.includes('fab-wvalley') || normalized.includes('valley')) {
+      return schaferDescriptions['w valley'];
+    }
+    if (normalized.includes('fab-transition') || normalized.includes('transition')) {
+      return schaferDescriptions['transition'];
+    }
+    if (normalized.includes('fab-dripedge') || normalized.includes('drip edge')) {
+      return schaferDescriptions['drip edge'];
+    }
+    if (normalized.includes('fab-zflash') || normalized.includes('z flash')) {
+      return schaferDescriptions['z flash'];
+    }
+    if (normalized.includes('parapet')) {
+      if (normalized.includes('cleat')) {
+        return schaferDescriptions['parapet cleat'];
+      }
+      return schaferDescriptions['parapet cap'];
+    }
+    if (normalized.includes('line fabrication') || normalized.includes('fabtrimscha')) {
+      return schaferDescriptions['line fabrication'];
+    }
+    if (normalized.includes('panel run') && normalized.includes('mile')) {
+      return schaferDescriptions['panel run mile'];
+    }
+    if (normalized.includes('panel run')) {
+      return schaferDescriptions['panel run base'];
+    }
+    if (normalized.includes('delivery fee') || normalized.includes('delfee')) {
+      return schaferDescriptions['delivery fee'];
+    }
+    if (normalized.includes('overnight')) {
+      return schaferDescriptions['overnight'];
+    }
+    if (normalized.includes('nova seal') || normalized.includes('sealant')) {
+      return schaferDescriptions['sealant'];
+    }
+    if (normalized.includes('pop rivet')) {
+      if (normalized.includes('stainless')) {
+        return schaferDescriptions['pop rivet stainless'];
+      }
+      return schaferDescriptions['pop rivet'];
+    }
+    if (normalized.includes('woodgrip')) {
+      return schaferDescriptions['woodgrip'];
+    }
+    
+    // If no match found, return the original quote description
+    return quoteItemName;
   };
 
   const handleVendorQuoteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1751,20 +1702,13 @@ Return only the JSON object, no other text.`;
     try {
       const newQuotes: VendorQuote[] = [];
       const newItems: VendorQuoteItem[] = [];
-      const matchedIds: string[] = [];
-      const matchedQuantities: Record<string, number> = {};
 
       for (const file of files) {
         const { quote, items } = await extractVendorQuoteFromPdf(file);
         newQuotes.push(quote);
-        if (quote.vendor === 'schafer') {
-          const matched = await applySchaferQuoteMatching(items);
-          newItems.push(...matched.unmatchedItems);
-          matchedIds.push(...matched.matchedIds);
-          Object.assign(matchedQuantities, matched.matchedQuantities);
-        } else {
-          newItems.push(...items);
-        }
+        // Add all quote items directly - no matching logic
+        // Schafer quotes are the source of truth, all items are included
+        newItems.push(...items);
       }
 
       if (newQuotes.length > 0) {
@@ -1779,17 +1723,6 @@ Return only the JSON object, no other text.`;
           const updated = { ...prev };
           newItems.forEach(item => {
             updated[item.id] = item.quantity || 0;
-          });
-          return updated;
-        });
-      }
-
-      if (matchedIds.length > 0) {
-        setSelectedItems(prev => Array.from(new Set([...prev, ...matchedIds])));
-        setItemQuantities(prev => {
-          const updated = { ...prev };
-          Object.entries(matchedQuantities).forEach(([id, quantity]) => {
-            updated[id] = quantity;
           });
           return updated;
         });
@@ -2061,6 +1994,13 @@ Return only the JSON object, no other text.`;
 
     const vendorItem = vendorQuoteItems.find(item => item.id === id);
     if (vendorItem) {
+      // Prevent editing Schafer vendor quote items - they are the source of truth
+      const vendorQuote = vendorQuoteMap.get(vendorItem.vendor_quote_id);
+      if (vendorQuote?.vendor === 'schafer') {
+        console.warn('Cannot edit Schafer vendor quote items - quote is source of truth');
+        return;
+      }
+      
       const updatedVendorItem: VendorQuoteItem = {
         ...vendorItem,
         name: updates.name ?? vendorItem.name,
@@ -3465,7 +3405,7 @@ Only return the JSON, no other text.`;
                             {formatVendorName(quote.vendor)} {quote.quote_number ? `• ${quote.quote_number}` : ''}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {itemCount} items • {formatCurrency((vendorQuoteTotals.get(quote.id) ?? quote.subtotal ?? 0))}
+                            {itemCount} items • {formatCurrency(quote.total > 0 ? quote.total : (quote.subtotal > 0 ? quote.subtotal : 0))}
                           </div>
                         </div>
                         <button
@@ -3577,7 +3517,7 @@ Only return the JSON, no other text.`;
                               {formatVendorName(quote.vendor)} {quote.quote_number ? `• ${quote.quote_number}` : ''}
                             </div>
                             <div className="text-xs text-gray-500">
-                              {itemCount} items • {formatCurrency((vendorQuoteTotals.get(quote.id) ?? quote.subtotal ?? 0))}
+                              {itemCount} items • {formatCurrency(quote.total > 0 ? quote.total : (quote.subtotal > 0 ? quote.subtotal : 0))}
                             </div>
                           </div>
                           <button
@@ -3856,6 +3796,11 @@ Only return the JSON, no other text.`;
                             const isSchaferItem = item.category === 'schafer' && !isVendorItem;
                             const isSelected = selectedItems.includes(item.id);
                             const qty = itemQuantities[item.id] ?? (isVendorItem ? (vendorItemMap.get(item.id)?.quantity ?? 0) : 0);
+                            
+                            // Check if this is a Schafer vendor quote item (read-only)
+                            const vendorItem = isVendorItem ? vendorItemMap.get(item.id) : null;
+                            const vendorQuote = vendorItem ? vendorQuoteMap.get(vendorItem.vendor_quote_id) : null;
+                            const isSchaferVendorItem = vendorQuote?.vendor === 'schafer';
 
                             return (
                               <div
@@ -3888,8 +3833,12 @@ Only return the JSON, no other text.`;
                                     <div className="flex items-center gap-2">
                                       <span className="font-medium">{item.name}</span>
                                       {isVendorItem && (
-                                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                                          Vendor
+                                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                          isSchaferVendorItem 
+                                            ? 'bg-blue-100 text-blue-700' 
+                                            : 'bg-amber-100 text-amber-700'
+                                        }`}>
+                                          {isSchaferVendorItem ? 'Schafer Quote' : 'Vendor'}
                                         </span>
                                       )}
                                     {isSchaferItem && (
@@ -3907,12 +3856,23 @@ Only return the JSON, no other text.`;
                                   <input
                                     type="number"
                                     value={qty}
-                                    onChange={(e) => setItemQuantities(prev => ({ ...prev, [item.id]: parseFloat(e.target.value) || 0 }))}
-                                    className="w-20 px-2 py-1 border border-gray-200 rounded text-center"
+                                    onChange={(e) => {
+                                      // Prevent editing quantity for Schafer vendor quote items
+                                      if (!isSchaferVendorItem) {
+                                        setItemQuantities(prev => ({ ...prev, [item.id]: parseFloat(e.target.value) || 0 }));
+                                      }
+                                    }}
+                                    disabled={isSchaferVendorItem}
+                                    className={`w-20 px-2 py-1 border border-gray-200 rounded text-center ${
+                                      isSchaferVendorItem ? 'bg-gray-100 cursor-not-allowed opacity-60' : ''
+                                    }`}
+                                    title={isSchaferVendorItem ? 'Quantity from Schafer quote - cannot be edited' : ''}
                                   />
                                   <span className="text-gray-400 text-sm w-14">{item.unit}</span>
                                   <span className="text-gray-400">×</span>
-                                  <span className="w-24 text-right">{formatCurrency(item.price)}</span>
+                                  <span className={`w-24 text-right ${isSchaferVendorItem ? 'font-semibold' : ''}`}>
+                                    {formatCurrency(item.price)}
+                                  </span>
                                   <span className="text-gray-400">=</span>
                                   <span className="w-28 text-right font-semibold text-blue-600">
                                     {formatCurrency(qty * item.price)}
@@ -4025,7 +3985,7 @@ Only return the JSON, no other text.`;
                           </div>
                         </div>
                         <div className="text-sm font-semibold text-gray-900">
-                          {formatCurrency((vendorQuoteTotals.get(quote.id) ?? quote.total ?? quote.subtotal ?? 0))}
+                          {formatCurrency(quote.total > 0 ? quote.total : (quote.subtotal > 0 ? quote.subtotal : 0))}
                         </div>
                       </div>
                     ))}
@@ -4033,7 +3993,7 @@ Only return the JSON, no other text.`;
                       <span>Total Vendor Cost</span>
                       <span>
                         {formatCurrency(
-                          vendorQuotes.reduce((sum, quote) => sum + (vendorQuoteTotals.get(quote.id) ?? quote.total ?? quote.subtotal ?? 0), 0)
+                          vendorQuotes.reduce((sum, quote) => sum + (quote.total > 0 ? quote.total : (quote.subtotal > 0 ? quote.subtotal : 0)), 0)
                         )}
                       </span>
                     </div>

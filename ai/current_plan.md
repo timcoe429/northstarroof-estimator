@@ -11,6 +11,10 @@ January 25, 2026
 - Financial controls (waste %, office overhead %, profit margin %, sundries %)
 - PDF proposal generation with custom templates
 - Vendor quote parsing (Schafer, TRA, Rocky Mountain)
+- **Schafer quote system overhaul** - converted from pricing system to description library only
+- **Fixed vendor quote extraction** - now captures ALL line items with exact quantities/prices
+- **Updated vendor quote display** - shows accurate item count and total from quote
+- **Schafer quote items are read-only** - quantities and prices cannot be edited (quote is source of truth)
 - Saved quotes functionality (save, load, delete)
 - Custom items creation
 - Price list management

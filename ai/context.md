@@ -46,3 +46,8 @@ Roofing contractors who need to:
 - Manage pricing from vendor quotes
 - Generate professional proposals with financial controls
 - Save and manage multiple estimates
+
+## Vendor Quote Workflow
+
+- **Schafer Quotes**: Required for metal roofs. Uploaded quote is the ONLY source of truth for pricing and quantities. All quote items are extracted exactly as quoted. Quote items are read-only in estimate builder (can deselect but cannot edit quantity/price).
+- **Other Vendors** (TRA, Rocky Mountain): Quotes can be uploaded and items selected into estimates. Items can be edited if needed.
