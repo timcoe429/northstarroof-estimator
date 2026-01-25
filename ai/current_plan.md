@@ -11,34 +11,22 @@ January 25, 2026
 - Financial controls (waste %, office overhead %, profit margin %, sundries %)
 - PDF proposal generation with custom templates
 - Vendor quote parsing (Schafer, TRA, Rocky Mountain)
-- **Schafer quote system overhaul** - converted from pricing system to description library only
-- **Fixed vendor quote extraction** - now captures ALL line items with exact quantities/prices
-- **Updated vendor quote display** - shows accurate item count and total from quote
-- **Schafer quote items are read-only** - quantities and prices cannot be edited (quote is source of truth)
+- Schafer quote system - description library only, quote items are read-only
 - Saved quotes functionality (save, load, delete)
 - Custom items creation
 - Price list management
 - Authentication with Supabase
 - Mobile responsive UI
-- Custom hooks architecture for state management
-
-## What's Partially Done
-
-- Hooks refactoring (branch: `refactor-hooks-cleanup`)
-  - Custom hooks extracted from main component
-  - State management improvements in progress
+- **Estimate Builder UX Overhaul** (January 2026):
+  - Green box for selected items - clear visual separation at top
+  - Collapsible section headers - large navy blue (#00293f) headers with chevron icons
+  - Improved quantity parsing - AI now correctly extracts explicit quantities (e.g., "2 dumpsters" → quantity = 2)
 
 ## What's Next
 
-1. [Next task to be determined]
-2. [Following task to be determined]
-
-## Known Issues / Blockers
-
-- [Any blockers or open questions]
+- [Next task to be determined]
 
 ## Notes
 
 - Main component: [`components/RoofScopeEstimator.tsx`](components/RoofScopeEstimator.tsx)
-- Custom hooks in [`lib/hooks/`](lib/hooks/)
 - API routes in [`app/api/`](app/api/)

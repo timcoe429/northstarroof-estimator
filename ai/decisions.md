@@ -15,15 +15,18 @@
 
 ## Behavior / UX
 
-- **Schafer Quote-Only Model** (January 2025): Schafer items no longer have system pricing. Metal roofs require an uploaded Schafer quote.
-  - **Why**: System pricing conflicted with uploaded quotes (different quantities, missing items). Estimates showed $1,108/4 items when actual quote was $13,008/22 items. Schafer already calculates exact quantities - no need to recalculate with waste factors.
+- **Schafer Quote-Only Model**: Schafer items no longer have system pricing. Metal roofs require an uploaded Schafer quote.
+  - **Why**: System pricing conflicted with uploaded quotes (different quantities, missing items). Schafer already calculates exact quantities - no need to recalculate with waste factors.
   - **Implementation**: 
     - Schafer section is now a "description library" only (name → client description mapping)
     - Uploaded quote is the ONLY source of truth for pricing/quantities
     - ALL quote line items are extracted exactly as quoted (no filtering, no recalculation)
     - Quote items are read-only in estimate builder (can deselect but can't edit qty/price)
 
-## Behavior / UX
+- **Estimate Builder UX** (January 2026):
+  - **Green Box for Selected Items**: Selected items appear in a green box container at the top for clear visual separation. Makes it easy to see what's in the estimate at a glance.
+  - **Collapsible Sections**: Section headers (MATERIALS, LABOR, EQUIPMENT) are large, navy blue (#00293f), bold, with chevron icons. Click to collapse/expand sections. Shows item counts in headers.
+  - **Improved Quantity Parsing**: AI prompt enhanced to better extract explicit quantities from job descriptions. Handles synonyms (dumpster/rolloff, porto/porto potty). "2 dumpsters" now correctly sets Rolloff quantity to 2.
 
 - **Multi-Step Workflow**: Upload → Measurements → Items → Review flow guides users through estimate creation systematically.
 - **Paste-to-Extract**: Users can paste images directly (Ctrl+V) to extract measurements or prices, reducing friction.

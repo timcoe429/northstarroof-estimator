@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText, Copy, Bot } from 'lucide-react';
+import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, ChevronRight, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText, Copy, Bot } from 'lucide-react';
 import Image from 'next/image';
 import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQuote, VendorQuote, VendorQuoteItem } from '@/types';
 import { saveQuote, loadQuotes, loadQuote, deleteQuote, loadPriceItems, savePriceItem, savePriceItemsBulk, deletePriceItemFromDB, saveVendorQuotes, loadVendorQuotes } from '@/lib/supabase';
@@ -190,6 +190,7 @@ export default function RoofScopeEstimator() {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [itemQuantities, setItemQuantities] = useState<Record<string, number>>({});
   const [viewMode, setViewMode] = useState<'internal' | 'client'>('internal');
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   // Financial controls
   const [marginPercent, setMarginPercent] = useState(() => {
@@ -2223,15 +2224,18 @@ RULES:
 
 EXPLICIT QUANTITIES:
 If the job description specifies an exact quantity for an item, extract it in the "explicitQuantities" object.
-- Look for patterns like "250 snowguards", "3 rolloffs", "2 dumpsters", "100 snowguards"
+- Look for patterns like "250 snowguards", "3 rolloffs", "2 dumpsters", "3 porto potties", "need 2 rolloffs"
 - Only extract when a NUMBER is directly stated with an item name
-- Use a partial item name as the key (e.g., "snowguard" for "Snowguard Install")
+- Use a partial item name as the key (e.g., "snowguard" for "Snowguard Install", "rolloff" or "dumpster" for "Rolloff", "porto" for "Porto Potty")
 - Do NOT guess quantities - only extract when explicitly stated
+- Handle synonyms: "dumpster" and "rolloff" refer to the same item, "porto" and "porto potty" refer to the same item
 - Examples:
   * "Also give us 250 snowguards" → {"snowguard": 250}
+  * "add 2 dumpsters" → {"rolloff": 2} or {"dumpster": 2} (both work)
+  * "need 2 rolloffs" → {"rolloff": 2}
+  * "3 porto potties" → {"porto": 3} or {"porto potty": 3}
   * "add snowguards" → NO explicit quantity (don't include in explicitQuantities)
   * "Brava tile" → NO explicit quantity
-  * "3 rolloffs" → {"rolloff": 3}
 
 Return ONLY JSON:
 {
@@ -2275,15 +2279,33 @@ Only return the JSON, no other text.`;
 
         // Apply explicit quantities if provided
         if (result.explicitQuantities && typeof result.explicitQuantities === 'object') {
+          // Synonym mapping for better matching
+          const synonymMap: Record<string, string[]> = {
+            'dumpster': ['rolloff', 'dumpster'],
+            'rolloff': ['rolloff', 'dumpster'],
+            'porto': ['porto', 'porto potty', 'portable'],
+            'porto potty': ['porto', 'porto potty', 'portable'],
+            'portable': ['porto', 'porto potty', 'portable'],
+          };
+
           // Iterate through explicit quantities
           Object.entries(result.explicitQuantities).forEach(([key, value]) => {
             const quantity = typeof value === 'number' ? value : parseFloat(value as string);
-            if (isNaN(quantity)) return;
+            if (isNaN(quantity) || quantity <= 0) return;
 
-            // Find items whose name contains the key (case-insensitive)
             const keyLower = key.toLowerCase();
+            // Get synonyms for this key, or use the key itself
+            const searchTerms = synonymMap[keyLower] || [keyLower];
+
+            // Find items whose name matches any of the search terms (case-insensitive)
             allSelectableItems.forEach(item => {
-              if (item.name.toLowerCase().includes(keyLower)) {
+              const itemNameLower = item.name.toLowerCase();
+              // Check if item name contains any of the search terms
+              const matches = searchTerms.some(term => itemNameLower.includes(term));
+              
+              if (matches) {
+                // If multiple items match, prefer exact match or longest match
+                // For now, set quantity for all matches (user can adjust if needed)
                 updatedQuantities[item.id] = quantity;
               }
             });
@@ -2501,6 +2523,97 @@ Only return the JSON, no other text.`;
       const totalB = getItemQuantity(b) * (b.price || 0);
       return (totalA - totalB) * multiplier;
     });
+  };
+
+  // Helper function to render an item row
+  const renderItemRow = (item: SelectableItem, isSelected: boolean) => {
+    const isVendorItem = item.isVendorItem === true;
+    const isCustomItem = item.isCustomItem === true;
+    const isSchaferItem = item.category === 'schafer' && !isVendorItem;
+    const qty = itemQuantities[item.id] ?? (isVendorItem ? (vendorItemMap.get(item.id)?.quantity ?? 0) : 0);
+    
+    // Check if this is a Schafer vendor quote item (read-only)
+    const vendorItem = isVendorItem ? vendorItemMap.get(item.id) : null;
+    const vendorQuote = vendorItem ? vendorQuoteMap.get(vendorItem.vendor_quote_id) : null;
+    const isSchaferVendorItem = vendorQuote?.vendor === 'schafer';
+
+    return (
+      <div
+        className={`p-3 rounded-lg border-2 transition-colors ${
+          isSelected ? 'border-blue-300 bg-blue-50' : 'border-gray-100 bg-gray-50'
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={(e) => {
+              if (e.target.checked) {
+                setSelectedItems(prev => [...prev, item.id]);
+                if (isVendorItem) {
+                  const vendorItem = vendorItemMap.get(item.id);
+                  setItemQuantities(prev => ({
+                    ...prev,
+                    [item.id]: prev[item.id] ?? vendorItem?.quantity ?? 0,
+                  }));
+                }
+              } else {
+                setSelectedItems(prev => prev.filter(id => id !== item.id));
+              }
+            }}
+            className="w-5 h-5 rounded flex-shrink-0"
+          />
+          <div className="flex-1 min-w-[120px]">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{item.name}</span>
+              {isVendorItem && (
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  isSchaferVendorItem 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {isSchaferVendorItem ? 'Schafer Quote' : 'Vendor'}
+                </span>
+              )}
+              {isSchaferItem && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                  Schafer
+                </span>
+              )}
+              {isCustomItem && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">
+                  Custom
+                </span>
+              )}
+            </div>
+          </div>
+          <input
+            type="number"
+            value={qty}
+            onChange={(e) => {
+              // Prevent editing quantity for Schafer vendor quote items
+              if (!isSchaferVendorItem) {
+                setItemQuantities(prev => ({ ...prev, [item.id]: parseFloat(e.target.value) || 0 }));
+              }
+            }}
+            disabled={isSchaferVendorItem}
+            className={`w-20 px-2 py-1 border border-gray-200 rounded text-center ${
+              isSchaferVendorItem ? 'bg-gray-100 cursor-not-allowed opacity-60' : ''
+            }`}
+            title={isSchaferVendorItem ? 'Quantity from Schafer quote - cannot be edited' : ''}
+          />
+          <span className="text-gray-400 text-sm w-14">{item.unit}</span>
+          <span className="text-gray-400">×</span>
+          <span className={`w-24 text-right ${isSchaferVendorItem ? 'font-semibold' : ''}`}>
+            {formatCurrency(item.price)}
+          </span>
+          <span className="text-gray-400">=</span>
+          <span className="w-28 text-right font-semibold text-blue-600">
+            {formatCurrency(qty * item.price)}
+          </span>
+        </div>
+      </div>
+    );
   };
 
   const startCustomItem = (category: PriceItem['category']) => {
@@ -3696,196 +3809,174 @@ Only return the JSON, no other text.`;
                   </button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {Object.entries(CATEGORIES).map(([catKey, { label, icon: Icon }]) => {
-                    const items = getEstimateCategoryItems(catKey);
+                <div className="space-y-6">
+                  {/* Selected Items - Green Box */}
+                  {(() => {
+                    const selectedItemsList = allSelectableItems.filter(item => selectedItems.includes(item.id));
+                    const selectedByCategory = Object.entries(CATEGORIES).map(([catKey, { label, icon: Icon }]) => {
+                      const items = selectedItemsList.filter(item => item.category === catKey);
+                      return { catKey, label, icon: Icon, items };
+                    }).filter(({ items }) => items.length > 0);
+
+                    if (selectedItemsList.length === 0) {
+                      return null;
+                    }
 
                     return (
-                      <div key={catKey}>
-                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
-                            <Icon className="w-4 h-4" />
-                            {label}
-                          </h3>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => startCustomItem(catKey as PriceItem['category'])}
-                              className="p-1 rounded text-gray-500 hover:bg-gray-100"
-                              title="Add custom item"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
-                            {(['name', 'price', 'total'] as const).map((key) => {
-                              const sortState = sectionSort[catKey];
-                              const isActive = sortState?.key === key;
-                              const arrow = isActive ? (sortState.direction === 'desc' ? '↓' : '↑') : '';
-                              return (
-                                <button
-                                  key={key}
-                                  onClick={() => toggleSectionSort(catKey, key)}
-                                  className={`text-xs px-2 py-1 rounded border transition-colors ${
-                                    isActive
-                                      ? 'bg-blue-500 text-white border-blue-500'
-                                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                                  }`}
-                                >
-                                  {key === 'name' ? 'Name' : key === 'price' ? 'Price' : 'Total'} {arrow}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {customItemDraft?.category === catKey && (
-                          <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                              <input
-                                type="text"
-                                value={customItemDraft.name}
-                                onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, name: e.target.value } : prev)}
-                                placeholder="Item name"
-                                className="px-2 py-1 border border-gray-200 rounded text-sm"
-                              />
-                              <input
-                                type="number"
-                                value={customItemDraft.quantity}
-                                onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, quantity: parseFloat(e.target.value) || 0 } : prev)}
-                                placeholder="Qty"
-                                className="px-2 py-1 border border-gray-200 rounded text-sm"
-                              />
-                              <input
-                                type="text"
-                                value={customItemDraft.unit}
-                                onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, unit: e.target.value } : prev)}
-                                placeholder="Unit"
-                                className="px-2 py-1 border border-gray-200 rounded text-sm"
-                              />
-                              <input
-                                type="number"
-                                value={customItemDraft.price}
-                                onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, price: parseFloat(e.target.value) || 0 } : prev)}
-                                placeholder="Unit price"
-                                className="px-2 py-1 border border-gray-200 rounded text-sm"
-                              />
-                            </div>
-                            <div className="mt-2 flex items-center gap-2">
-                              <button
-                                onClick={addCustomItem}
-                                className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm"
-                              >
-                                Add
-                              </button>
-                              <button
-                                onClick={cancelCustomItem}
-                                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-sm"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        {items.length === 0 ? (
-                          <div className="text-sm text-gray-400 py-3">
-                            No items yet for this section.
-                          </div>
-                        ) : (
-                        <div className="space-y-2">
-                          {items.map(item => {
-                            const isVendorItem = item.isVendorItem === true;
-                            const isCustomItem = item.isCustomItem === true;
-                            const isSchaferItem = item.category === 'schafer' && !isVendorItem;
-                            const isSelected = selectedItems.includes(item.id);
-                            const qty = itemQuantities[item.id] ?? (isVendorItem ? (vendorItemMap.get(item.id)?.quantity ?? 0) : 0);
-                            
-                            // Check if this is a Schafer vendor quote item (read-only)
-                            const vendorItem = isVendorItem ? vendorItemMap.get(item.id) : null;
-                            const vendorQuote = vendorItem ? vendorQuoteMap.get(vendorItem.vendor_quote_id) : null;
-                            const isSchaferVendorItem = vendorQuote?.vendor === 'schafer';
-
-                            return (
-                              <div
-                                key={item.id}
-                                className={`p-3 rounded-lg border-2 transition-colors ${
-                                  isSelected ? 'border-blue-300 bg-blue-50' : 'border-gray-100 bg-gray-50'
-                                }`}
-                              >
-                                <div className="flex flex-wrap items-center gap-2 md:gap-3">
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setSelectedItems(prev => [...prev, item.id]);
-                                        if (isVendorItem) {
-                                          const vendorItem = vendorItemMap.get(item.id);
-                                          setItemQuantities(prev => ({
-                                            ...prev,
-                                            [item.id]: prev[item.id] ?? vendorItem?.quantity ?? 0,
-                                          }));
-                                        }
-                                      } else {
-                                        setSelectedItems(prev => prev.filter(id => id !== item.id));
-                                      }
-                                    }}
-                                    className="w-5 h-5 rounded flex-shrink-0"
-                                  />
-                                  <div className="flex-1 min-w-[120px]">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium">{item.name}</span>
-                                      {isVendorItem && (
-                                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                          isSchaferVendorItem 
-                                            ? 'bg-blue-100 text-blue-700' 
-                                            : 'bg-amber-100 text-amber-700'
-                                        }`}>
-                                          {isSchaferVendorItem ? 'Schafer Quote' : 'Vendor'}
-                                        </span>
-                                      )}
-                                    {isSchaferItem && (
-                                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                                        Schafer
-                                      </span>
-                                    )}
-                                    {isCustomItem && (
-                                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">
-                                        Custom
-                                      </span>
-                                    )}
-                                    </div>
-                                  </div>
-                                  <input
-                                    type="number"
-                                    value={qty}
-                                    onChange={(e) => {
-                                      // Prevent editing quantity for Schafer vendor quote items
-                                      if (!isSchaferVendorItem) {
-                                        setItemQuantities(prev => ({ ...prev, [item.id]: parseFloat(e.target.value) || 0 }));
-                                      }
-                                    }}
-                                    disabled={isSchaferVendorItem}
-                                    className={`w-20 px-2 py-1 border border-gray-200 rounded text-center ${
-                                      isSchaferVendorItem ? 'bg-gray-100 cursor-not-allowed opacity-60' : ''
-                                    }`}
-                                    title={isSchaferVendorItem ? 'Quantity from Schafer quote - cannot be edited' : ''}
-                                  />
-                                  <span className="text-gray-400 text-sm w-14">{item.unit}</span>
-                                  <span className="text-gray-400">×</span>
-                                  <span className={`w-24 text-right ${isSchaferVendorItem ? 'font-semibold' : ''}`}>
-                                    {formatCurrency(item.price)}
-                                  </span>
-                                  <span className="text-gray-400">=</span>
-                                  <span className="w-28 text-right font-semibold text-blue-600">
-                                    {formatCurrency(qty * item.price)}
-                                  </span>
-                                </div>
+                      <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 md:p-6">
+                        <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                          <Check className="w-5 h-5" />
+                          In This Estimate ({selectedItemsList.length})
+                        </h3>
+                        <div className="space-y-4">
+                          {selectedByCategory.map(({ catKey, label, icon: Icon, items }) => (
+                            <div key={catKey}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <Icon className="w-4 h-4 text-[#00293f]" />
+                                <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                                  {label}
+                                </h4>
                               </div>
-                            );
-                          })}
+                              <div className="space-y-2">
+                                {items.map(item => (
+                                  <React.Fragment key={item.id}>
+                                    {renderItemRow(item, true)}
+                                  </React.Fragment>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        )}
                       </div>
                     );
-                  })}
+                  })()}
+
+                  {/* Available Items */}
+                  <div>
+                    <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-4">Available Items</h3>
+                    <div className="space-y-4">
+                      {Object.entries(CATEGORIES).map(([catKey, { label, icon: Icon }]) => {
+                        const allItems = getEstimateCategoryItems(catKey);
+                        const availableItems = allItems.filter(item => !selectedItems.includes(item.id));
+                        const isCollapsed = collapsedSections[catKey] ?? false;
+                        const itemCount = availableItems.length;
+
+                        if (availableItems.length === 0 && allItems.length === 0) {
+                          return null;
+                        }
+
+                        return (
+                          <div key={catKey}>
+                            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                              <button
+                                onClick={() => setCollapsedSections(prev => ({ ...prev, [catKey]: !prev[catKey] }))}
+                                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                              >
+                                {isCollapsed ? (
+                                  <ChevronRight className="w-5 h-5 text-[#00293f]" />
+                                ) : (
+                                  <ChevronDown className="w-5 h-5 text-[#00293f]" />
+                                )}
+                                <Icon className="w-5 h-5 text-[#00293f]" />
+                                <h3 className="text-lg md:text-xl font-bold text-[#00293f] uppercase tracking-wide">
+                                  {label} ({itemCount})
+                                </h3>
+                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => startCustomItem(catKey as PriceItem['category'])}
+                                  className="p-1 rounded text-gray-500 hover:bg-gray-100"
+                                  title="Add custom item"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                                {(['name', 'price', 'total'] as const).map((key) => {
+                                  const sortState = sectionSort[catKey];
+                                  const isActive = sortState?.key === key;
+                                  const arrow = isActive ? (sortState.direction === 'desc' ? '↓' : '↑') : '';
+                                  return (
+                                    <button
+                                      key={key}
+                                      onClick={() => toggleSectionSort(catKey, key)}
+                                      className={`text-xs px-2 py-1 rounded border transition-colors ${
+                                        isActive
+                                          ? 'bg-blue-500 text-white border-blue-500'
+                                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                                      }`}
+                                    >
+                                      {key === 'name' ? 'Name' : key === 'price' ? 'Price' : 'Total'} {arrow}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {customItemDraft?.category === catKey && (
+                              <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                                  <input
+                                    type="text"
+                                    value={customItemDraft.name}
+                                    onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, name: e.target.value } : prev)}
+                                    placeholder="Item name"
+                                    className="px-2 py-1 border border-gray-200 rounded text-sm"
+                                  />
+                                  <input
+                                    type="number"
+                                    value={customItemDraft.quantity}
+                                    onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, quantity: parseFloat(e.target.value) || 0 } : prev)}
+                                    placeholder="Qty"
+                                    className="px-2 py-1 border border-gray-200 rounded text-sm"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={customItemDraft.unit}
+                                    onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, unit: e.target.value } : prev)}
+                                    placeholder="Unit"
+                                    className="px-2 py-1 border border-gray-200 rounded text-sm"
+                                  />
+                                  <input
+                                    type="number"
+                                    value={customItemDraft.price}
+                                    onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, price: parseFloat(e.target.value) || 0 } : prev)}
+                                    placeholder="Unit price"
+                                    className="px-2 py-1 border border-gray-200 rounded text-sm"
+                                  />
+                                </div>
+                                <div className="mt-2 flex items-center gap-2">
+                                  <button
+                                    onClick={addCustomItem}
+                                    className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm"
+                                  >
+                                    Add
+                                  </button>
+                                  <button
+                                    onClick={cancelCustomItem}
+                                    className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-sm"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            {availableItems.length === 0 ? (
+                              <div className="text-sm text-gray-400 py-3">
+                                No available items in this section.
+                              </div>
+                            ) : !isCollapsed ? (
+                              <div className="space-y-2">
+                                {availableItems.map(item => (
+                                  <React.Fragment key={item.id}>
+                                    {renderItemRow(item, false)}
+                                  </React.Fragment>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
