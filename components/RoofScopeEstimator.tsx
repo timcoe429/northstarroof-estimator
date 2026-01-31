@@ -47,6 +47,13 @@ type QuickSelectOption = {
   icon?: string;
 };
 
+interface ValidationWarning {
+  id: string;
+  message: string;
+  severity: 'warning' | 'error';
+  field?: string;
+}
+
 // Unit types for calculations
 const UNIT_TYPES = [
   { value: 'sq', label: 'per square', calcType: 'area' },
@@ -189,8 +196,9 @@ export default function RoofScopeEstimator() {
   // Estimate builder state
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [itemQuantities, setItemQuantities] = useState<Record<string, number>>({});
-  const [viewMode, setViewMode] = useState<'internal' | 'client'>('internal');
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [validationWarnings, setValidationWarnings] = useState<ValidationWarning[]>([]);
 
   // Financial controls
   const [marginPercent, setMarginPercent] = useState(() => {
@@ -2369,6 +2377,100 @@ Only return the JSON, no other text.`;
     }
   };
 
+  // Toggle section expand/collapse
+  const toggleSection = (sectionKey: string) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionKey)) {
+        next.delete(sectionKey);
+      } else {
+        next.add(sectionKey);
+      }
+      return next;
+    });
+  };
+
+  // Run validation checks on estimate
+  const runValidationChecks = (estimate: Estimate): ValidationWarning[] => {
+    const warnings: ValidationWarning[] = [];
+    
+    // Waste % is 0
+    if (estimate.wastePercent === 0) {
+      warnings.push({
+        id: 'waste-zero',
+        message: 'Waste % is 0 — typically should be 10-15%',
+        severity: 'warning',
+        field: 'wastePercent'
+      });
+    }
+    
+    // No labor selected
+    if (estimate.byCategory.labor.length === 0) {
+      warnings.push({
+        id: 'no-labor',
+        message: 'No labor items selected',
+        severity: 'warning'
+      });
+    }
+    
+    // No underlayment
+    const underlaymentKeywords = ['underlayment', 'ice & water', 'sharkskin', 'felt', 'synthetic'];
+    const hasUnderlayment = estimate.byCategory.materials.some(item =>
+      underlaymentKeywords.some(keyword => item.name.toLowerCase().includes(keyword))
+    );
+    if (!hasUnderlayment) {
+      warnings.push({
+        id: 'no-underlayment',
+        message: 'No underlayment selected — most roofs require underlayment',
+        severity: 'warning'
+      });
+    }
+    
+    // No drip edge
+    const hasDripEdge = [...estimate.byCategory.materials, ...estimate.byCategory.accessories].some(item =>
+      item.name.toLowerCase().includes('drip edge')
+    );
+    if (!hasDripEdge) {
+      warnings.push({
+        id: 'no-drip-edge',
+        message: 'No drip edge selected',
+        severity: 'warning'
+      });
+    }
+    
+    // Margin too low
+    if (estimate.marginPercent < 25) {
+      warnings.push({
+        id: 'margin-low',
+        message: 'Margin is below 25% — is this intentional?',
+        severity: 'warning',
+        field: 'marginPercent'
+      });
+    }
+    
+    // Margin too high
+    if (estimate.marginPercent > 60) {
+      warnings.push({
+        id: 'margin-high',
+        message: 'Margin is above 60% — is this intentional?',
+        severity: 'warning',
+        field: 'marginPercent'
+      });
+    }
+    
+    // Materials seem low
+    const minMaterialsCost = estimate.measurements.total_squares * 50;
+    if (estimate.totals.materials < minMaterialsCost) {
+      warnings.push({
+        id: 'materials-low',
+        message: 'Materials cost seems low for roof size — verify items are selected',
+        severity: 'warning'
+      });
+    }
+    
+    return warnings;
+  };
+
   // Calculate estimate
   const calculateEstimate = () => {
     if (!measurements) return;
@@ -2439,7 +2541,8 @@ Only return the JSON, no other text.`;
     const grossProfit = sellPrice - totalCost;
     const profitMargin = sellPrice > 0 ? (grossProfit / sellPrice) * 100 : 0;
 
-    setEstimate({
+    // Create the estimate object
+    const newEstimate: Estimate = {
       lineItems,
       byCategory,
       totals,
@@ -2457,7 +2560,15 @@ Only return the JSON, no other text.`;
       measurements,
       customerInfo,
       generatedAt: new Date().toLocaleString(),
-    });
+    };
+
+    // Set the estimate state
+    setEstimate(newEstimate);
+    
+    // Run validation checks - IMPORTANT: pass newEstimate directly, NOT estimate state
+    const warnings = runValidationChecks(newEstimate);
+    setValidationWarnings(warnings);
+
     setStep('estimate');
   };
 
@@ -4006,38 +4117,49 @@ Only return the JSON, no other text.`;
         {/* Final Estimate */}
         {step === 'estimate' && estimate && (
           <div className="space-y-4 md:space-y-6">
-            {/* View Mode Toggle */}
-            <div className="flex gap-2 mb-4 items-center">
-              <button 
-                onClick={() => setViewMode('internal')}
-                className={viewMode === 'internal' ? 'bg-blue-500 text-white px-4 py-2 rounded' : 'bg-gray-200 px-4 py-2 rounded'}
+            {/* Validation Warnings */}
+            {validationWarnings.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="font-medium text-amber-800 mb-2">
+                      ⚠️ {validationWarnings.length} issue{validationWarnings.length > 1 ? 's' : ''} to review:
+                    </div>
+                    <ul className="space-y-1">
+                      {validationWarnings.map(warning => (
+                        <li key={warning.id} className="text-amber-700 text-sm">
+                          • {warning.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <button 
+                    onClick={() => setValidationWarnings([])}
+                    className="ml-4 text-amber-600 hover:text-amber-800 text-sm font-medium"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Download Proposal PDF Button */}
+            <div className="flex justify-end">
+              <button
+                onClick={handleDownloadProposal}
+                disabled={isGeneratingPDF}
+                className={`flex items-center gap-2 px-4 py-2 rounded text-white transition-colors ${
+                  isGeneratingPDF 
+                    ? 'bg-gray-400 cursor-not-allowed' 
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
               >
-                Internal View
+                {isGeneratingPDF ? 'Generating Proposal...' : '📄 Download Proposal PDF'}
               </button>
-              <button 
-                onClick={() => setViewMode('client')}
-                className={viewMode === 'client' ? 'bg-blue-500 text-white px-4 py-2 rounded' : 'bg-gray-200 px-4 py-2 rounded'}
-              >
-                Client View
-              </button>
-              {viewMode === 'client' && (
-                <button
-                  onClick={handleDownloadProposal}
-                  disabled={isGeneratingPDF}
-                  className={`ml-auto flex items-center gap-2 px-4 py-2 rounded text-white transition-colors ${
-                    isGeneratingPDF 
-                      ? 'bg-gray-400 cursor-not-allowed' 
-                      : 'bg-green-600 hover:bg-green-700'
-                  }`}
-                >
-                  {isGeneratingPDF ? 'Generating Proposal...' : '📄 Download Proposal PDF'}
-                </button>
-              )}
             </div>
 
-            {/* Profit Summary Card - Internal View Only */}
-            {viewMode === 'internal' && (
-              <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-4 md:p-6 text-white">
+            {/* Profit Summary Card */}
+            <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-4 md:p-6 text-white">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
                   <div>
                     <p className="text-green-100 text-xs md:text-sm">Total Cost</p>
@@ -4057,9 +4179,8 @@ Only return the JSON, no other text.`;
                   </div>
                 </div>
               </div>
-            )}
 
-            {viewMode === 'internal' && vendorQuotes.length > 0 && (
+            {vendorQuotes.length > 0 && (
               <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
                 <button
                   onClick={() => setShowVendorBreakdown(prev => !prev)}
@@ -4116,58 +4237,33 @@ Only return the JSON, no other text.`;
                 </div>
               </div>
 
-              {/* Line Items by Category */}
-              {viewMode === 'client' ? (
-                <>
-                  {(() => {
-                    const clientSections = buildClientViewSections(estimate);
-                    const sections = [
-                      { label: 'Materials', items: clientSections.materials },
-                      { label: CATEGORIES.labor.label, items: clientSections.labor },
-                      { label: CATEGORIES.equipment.label, items: clientSections.equipment },
-                    ];
+              {/* Line Items by Category - Collapsible Sections */}
+              {Object.entries(CATEGORIES).map(([catKey, { label }]) => {
+                const items = estimate.byCategory[catKey];
+                if (!items || items.length === 0) return null;
+                const isExpanded = expandedSections.has(catKey);
 
-                    return sections.map(section => {
-                      if (!section.items || section.items.length === 0) return null;
-                      const sectionTotal = section.items.reduce((sum, item) => sum + item.total, 0);
-
-                      return (
-                        <div key={section.label} className="mb-4 md:mb-6">
-                          <h3 className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2 md:mb-3">{section.label}</h3>
-                          <div className="space-y-2">
-                            {section.items.map((item, idx) => {
-                              const clientPrice = Math.round(item.total * markupMultiplier * 100) / 100;
-                              return (
-                                <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
-                                  <div className="flex-1 min-w-0">
-                                    <span className="font-medium text-sm block truncate">{item.description}</span>
-                                  </div>
-                                  <span className="font-semibold text-sm ml-2">{formatCurrency(clientPrice)}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                          <div className="flex justify-between mt-2 pt-2 border-t border-gray-200 text-sm">
-                            <span className="text-gray-600">{section.label} Subtotal</span>
-                            <span className="font-bold">
-                              {formatCurrency(Math.round(sectionTotal * markupMultiplier * 100) / 100)}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </>
-              ) : (
-                /* Internal View: Show all categories separately */
-                Object.entries(CATEGORIES).map(([catKey, { label }]) => {
-                  const items = estimate.byCategory[catKey];
-                  if (!items || items.length === 0) return null;
-
-                  return (
-                    <div key={catKey} className="mb-4 md:mb-6">
-                      <h3 className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2 md:mb-3">{label}</h3>
-                      <div className="space-y-2">
+                return (
+                  <div key={catKey} className="mb-4 md:mb-6">
+                    <button
+                      onClick={() => toggleSection(catKey)}
+                      className="w-full flex items-center justify-between py-2 px-3 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors mb-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        {isExpanded ? (
+                          <ChevronDown className="w-4 h-4 text-gray-500" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-gray-500" />
+                        )}
+                        <h3 className="text-xs md:text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                          {label} ({items.length} {items.length === 1 ? 'item' : 'items'})
+                        </h3>
+                      </div>
+                      <span className="font-bold text-sm">{formatCurrency(estimate.totals[catKey])}</span>
+                    </button>
+                    
+                    {isExpanded && (
+                      <div className="mt-2 space-y-2">
                         {items.map((item, idx) => {
                           const vendorItem = vendorItemMap.get(item.id);
                           const vendorQuote = vendorItem ? vendorQuoteMap.get(vendorItem.vendor_quote_id) : null;
@@ -4197,99 +4293,68 @@ Only return the JSON, no other text.`;
                           );
                         })}
                       </div>
-                      <div className="flex justify-between mt-2 pt-2 border-t border-gray-200 text-sm">
-                        <span className="text-gray-600">{label} Subtotal</span>
-                        <span className="font-bold">
-                          {formatCurrency(estimate.totals[catKey])}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+                    )}
+                  </div>
+                );
+              })}
 
               {/* Financial Summary */}
               <div className="border-t-2 border-gray-200 pt-4 mt-4 md:mt-6 space-y-2 md:space-y-3 text-sm">
-                {viewMode === 'internal' ? (
-                  <>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Materials Subtotal ({estimate.wastePercent}% waste)</span>
-                      <span>{formatCurrency(estimate.totals.materials)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Labor Subtotal</span>
-                      <span>{formatCurrency(estimate.totals.labor)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Equipment Subtotal</span>
-                      <span>{formatCurrency(estimate.totals.equipment)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Accessories Subtotal</span>
-                      <span>{formatCurrency(estimate.totals.accessories)}</span>
-                    </div>
-                    {vendorTaxFeesTotal > 0 && (
-                      <div className="flex justify-between text-gray-600">
-                        <span>Vendor Tax & Fees (included)</span>
-                        <span>{formatCurrency(vendorTaxFeesTotal)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-gray-600">
-                      <span>Materials Allowance ({estimate.sundriesPercent}%)</span>
-                      <span>{formatCurrency(estimate.sundriesAmount)}</span>
-                    </div>
-                    <div className="flex justify-between font-medium border-t border-gray-200 pt-2 md:pt-3">
-                      <span>Base Cost</span>
-                      <span>{formatCurrency(estimate.baseCost)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Office ({estimate.officeCostPercent}%)</span>
-                      <span>+{formatCurrency(estimate.officeAllocation)}</span>
-                    </div>
-                    <div className="flex justify-between font-medium border-t border-gray-200 pt-2 md:pt-3">
-                      <span>Total Cost</span>
-                      <span>{formatCurrency(estimate.totalCost)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Margin ({estimate.marginPercent}%)</span>
-                      <span>+{formatCurrency(estimate.grossProfit)}</span>
-                    </div>
-                    <div className="flex justify-between items-center border-t-2 border-gray-900 pt-3 md:pt-4">
-                      <div>
-                        <p className="text-lg md:text-xl font-bold">Customer Price</p>
-                        <p className="text-xs md:text-sm text-gray-500">
-                          {estimate.measurements.total_squares} sq • {estimate.measurements.predominant_pitch}
-                        </p>
-                      </div>
-                      <p className="text-2xl md:text-3xl font-bold">{formatCurrency(estimate.sellPrice)}</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Materials Subtotal</span>
-                      <span>{formatCurrency(Math.round((estimate.totals.materials + estimate.totals.accessories) * markupMultiplier * 100) / 100)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Labor Subtotal</span>
-                      <span>{formatCurrency(Math.round(estimate.totals.labor * markupMultiplier * 100) / 100)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Equipment Subtotal</span>
-                      <span>{formatCurrency(Math.round(estimate.totals.equipment * markupMultiplier * 100) / 100)}</span>
-                    </div>
-                    <div className="flex justify-between items-center border-t-2 border-gray-900 pt-3 md:pt-4">
-                      <div>
-                        <p className="text-lg md:text-xl font-bold">TOTAL</p>
-                      </div>
-                      <p className="text-2xl md:text-3xl font-bold">{formatCurrency(estimate.sellPrice)}</p>
-                    </div>
-                  </>
+                <div className="flex justify-between text-gray-600">
+                  <span>Materials Subtotal ({estimate.wastePercent}% waste)</span>
+                  <span>{formatCurrency(estimate.totals.materials)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Labor Subtotal</span>
+                  <span>{formatCurrency(estimate.totals.labor)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Equipment Subtotal</span>
+                  <span>{formatCurrency(estimate.totals.equipment)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Accessories Subtotal</span>
+                  <span>{formatCurrency(estimate.totals.accessories)}</span>
+                </div>
+                {vendorTaxFeesTotal > 0 && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Vendor Tax & Fees (included)</span>
+                    <span>{formatCurrency(vendorTaxFeesTotal)}</span>
+                  </div>
                 )}
+                <div className="flex justify-between text-gray-600">
+                  <span>Materials Allowance ({estimate.sundriesPercent}%)</span>
+                  <span>{formatCurrency(estimate.sundriesAmount)}</span>
+                </div>
+                <div className="flex justify-between font-medium border-t border-gray-200 pt-2 md:pt-3">
+                  <span>Base Cost</span>
+                  <span>{formatCurrency(estimate.baseCost)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Office ({estimate.officeCostPercent}%)</span>
+                  <span>+{formatCurrency(estimate.officeAllocation)}</span>
+                </div>
+                <div className="flex justify-between font-medium border-t border-gray-200 pt-2 md:pt-3">
+                  <span>Total Cost</span>
+                  <span>{formatCurrency(estimate.totalCost)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Margin ({estimate.marginPercent}%)</span>
+                  <span>+{formatCurrency(estimate.grossProfit)}</span>
+                </div>
+                <div className="flex justify-between items-center border-t-2 border-gray-900 pt-3 md:pt-4">
+                  <div>
+                    <p className="text-lg md:text-xl font-bold">Customer Price</p>
+                    <p className="text-xs md:text-sm text-gray-500">
+                      {estimate.measurements.total_squares} sq • {estimate.measurements.predominant_pitch}
+                    </p>
+                  </div>
+                  <p className="text-2xl md:text-3xl font-bold">{formatCurrency(estimate.sellPrice)}</p>
+                </div>
               </div>
 
               {/* Profit Breakdown (Internal Only) */}
-              {viewMode === 'internal' && (
+              {(
                 <div className="mt-4 md:mt-6 p-3 md:p-4 bg-amber-50 border border-amber-200 rounded-xl">
                   <div className="flex items-center gap-2 text-amber-800 mb-2">
                     <AlertCircle className="w-4 h-4" />
@@ -4313,7 +4378,7 @@ Only return the JSON, no other text.`;
               )}
 
               {/* Profit Split Panel (Internal Only) */}
-              {viewMode === 'internal' && (() => {
+              {(() => {
                 const salesCommission = estimate.grossProfit * 0.5;
                 const ownerProfit = estimate.grossProfit * 0.5;
                 const trueOwnerMargin = estimate.sellPrice > 0 ? (ownerProfit / estimate.sellPrice) * 100 : 0;
@@ -4373,17 +4438,11 @@ Only return the JSON, no other text.`;
 
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
-              {viewMode === 'client' && (
-                <button
-                  onClick={copyClientViewToClipboard}
-                  className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 text-sm md:text-base"
-                >
-                  <Copy className="w-4 h-4" />
-                  Copy for Proposal
-                </button>
-              )}
               <button
-                onClick={() => setStep('extracted')}
+                onClick={() => {
+                  setStep('extracted');
+                  setValidationWarnings([]);
+                }}
                 className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm md:text-base"
               >
                 Edit Estimate
