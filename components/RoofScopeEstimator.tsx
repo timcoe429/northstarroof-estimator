@@ -2911,7 +2911,7 @@ Only return the JSON, no other text.`;
       const restoredCustomItems: CustomItem[] = [];
       
       restoredLineItems.forEach(item => {
-        restoredQuantities[item.id] = item.quantity;
+        restoredQuantities[item.id] = item.baseQuantity || item.quantity;
         restoredSelectedItems.push(item.id);
         if ((item as any).isCustomItem) {
           restoredCustomItems.push({
@@ -2972,6 +2972,11 @@ Only return the JSON, no other text.`;
       setEstimate(restoredEstimate);
       setStep('estimate');
       setShowSavedQuotes(false);
+      
+      // Trigger recalculation after all state is set to ensure waste % is applied correctly
+      setTimeout(() => {
+        calculateEstimate();
+      }, 0);
     } catch (error) {
       console.error('Failed to load quote:', error);
       alert(`Failed to load quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
