@@ -194,14 +194,14 @@ export default function RoofScopeEstimator() {
 
   // Financial controls
   const [marginPercent, setMarginPercent] = useState(() => {
-    if (typeof window === 'undefined') return 20;
+    if (typeof window === 'undefined') return 40;
     const saved = localStorage.getItem('roofscope_margin');
-    return saved ? parseFloat(saved) : 20;
+    return saved ? parseFloat(saved) : 40;
   });
   const [officeCostPercent, setOfficeCostPercent] = useState(() => {
-    if (typeof window === 'undefined') return 5;
+    if (typeof window === 'undefined') return 10;
     const saved = localStorage.getItem('roofscope_office_percent');
-    return saved ? parseFloat(saved) : 5;
+    return saved ? parseFloat(saved) : 10;
   });
   const [wastePercent, setWastePercent] = useState(() => {
     if (typeof window === 'undefined') return 10;
@@ -4303,6 +4303,64 @@ Only return the JSON, no other text.`;
                   </div>
                 </div>
               )}
+
+              {/* Profit Split Panel (Internal Only) */}
+              {viewMode === 'internal' && (() => {
+                const salesCommission = estimate.grossProfit * 0.5;
+                const ownerProfit = estimate.grossProfit * 0.5;
+                const trueOwnerMargin = estimate.sellPrice > 0 ? (ownerProfit / estimate.sellPrice) * 100 : 0;
+                const marginColor = trueOwnerMargin >= 20 ? 'text-green-600' : trueOwnerMargin >= 15 ? 'text-yellow-600' : 'text-red-600';
+                
+                return (
+                  <div className="mt-4 md:mt-6 p-4 md:p-6 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl">
+                    <div className="flex items-center gap-2 text-emerald-800 mb-4">
+                      <span className="text-lg">💰</span>
+                      <span className="font-semibold text-sm md:text-base">Profit Split (50/50)</span>
+                    </div>
+                    <div className="space-y-2 text-xs md:text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Sell Price:</span>
+                        <span className="font-semibold text-gray-900">{formatCurrency(estimate.sellPrice)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Total Cost:</span>
+                        <span className="font-semibold text-gray-900">-{formatCurrency(estimate.totalCost)}</span>
+                      </div>
+                      <div className="border-t border-emerald-200 my-2"></div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700 font-medium">Net Profit:</span>
+                        <span className="font-bold text-gray-900">{formatCurrency(estimate.grossProfit)}</span>
+                      </div>
+                      <div className="mt-3 space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-700">Sales Commission:</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900">{formatCurrency(salesCommission)}</span>
+                            <span className="text-gray-500 text-xs">(50%)</span>
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-700">Owner Profit:</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900">{formatCurrency(ownerProfit)}</span>
+                            <span className="text-gray-500 text-xs">(50%)</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="border-t border-emerald-200 my-2"></div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-700 font-medium">TRUE Owner Margin:</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold text-lg ${marginColor}`}>
+                            {trueOwnerMargin.toFixed(1)}%
+                          </span>
+                          <span className={`${marginColor}`}>●</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Actions */}
