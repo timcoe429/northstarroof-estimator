@@ -431,6 +431,14 @@ export default function RoofScopeEstimator() {
     localStorage.setItem('roofscope_sundries', sundriesPercent.toString());
   }, [sundriesPercent]);
 
+  // Auto-recalculate estimate when financial controls change (if estimate already exists)
+  useEffect(() => {
+    if (estimate && step === 'estimate' && measurements && selectedItems.length > 0) {
+      calculateEstimate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wastePercent, marginPercent, officeCostPercent, sundriesPercent]);
+
   // Calculate quantities for ALL items based on measurements
   const calculateItemQuantities = useCallback((m: Measurements) => {
     const quantities: Record<string, number> = {};
