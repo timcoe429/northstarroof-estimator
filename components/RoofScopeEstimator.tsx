@@ -1792,7 +1792,7 @@ Return only the JSON object, no other text.`;
     });
   };
 
-  const buildClientViewSections = (estimate: Estimate) => {
+  const buildClientViewSections = (estimate: Estimate, markupMultiplier: number) => {
     const vendorItemIds = new Set(vendorQuoteItems.map(item => item.id));
 
     const nonVendorMaterials = estimate.byCategory.materials.filter(item => !vendorItemIds.has(item.id));
@@ -1803,7 +1803,38 @@ Return only the JSON object, no other text.`;
     const groupedMaterials = groupedVendorItems.filter(group => group.category === 'materials' || group.category === 'accessories');
     const groupedEquipment = groupedVendorItems.filter(group => group.category === 'equipment');
 
-    const materials = [
+    // Define grouping threshold and kits
+    const GROUPING_THRESHOLD = 1500; // sell price threshold
+
+    const kits = {
+      flashing: {
+        keywords: ['eave', 'rake', 'ridge', 'valley', 'sidewall', 'headwall', 'starter', 'head wall', 'side wall', 'drip edge', 'flashing'],
+        items: [] as Array<{ name: string; description: string; total: number }>,
+        name: 'Flashing Kit',
+        description: 'Custom fabricated metal flashing including eave, rake, ridge, valley, sidewall, headwall, and starter pieces'
+      },
+      fasteners: {
+        keywords: ['fastener', 'clip', 'screw', 'rivet', 'woodgrip', 'pancake', 'nail', 'lap tek'],
+        items: [] as Array<{ name: string; description: string; total: number }>,
+        name: 'Fasteners & Hardware',
+        description: 'Panel clips, screws, rivets, and installation fasteners'
+      },
+      sealants: {
+        keywords: ['sealant', 'caulk', 'tape', 'foam', 'closure', 'nova seal', 'butyl'],
+        items: [] as Array<{ name: string; description: string; total: number }>,
+        name: 'Sealants & Accessories',
+        description: 'Foam closures, butyl tape, caulk, and finishing materials'
+      },
+      other: {
+        keywords: [],
+        items: [] as Array<{ name: string; description: string; total: number }>,
+        name: 'Additional Materials',
+        description: 'Additional roofing materials and supplies'
+      }
+    };
+
+    // Build materials array (non-vendor + accessories + grouped vendor)
+    const allMaterials = [
       ...nonVendorMaterials.map(item => ({
         name: item.name,
         description: item.proposalDescription && item.proposalDescription.trim() ? item.proposalDescription : item.name,
@@ -1820,6 +1851,58 @@ Return only the JSON object, no other text.`;
         total: group.total,
       })),
     ];
+
+    // Step 1: Separate items above/below threshold (check sell price)
+    const standAloneItems = allMaterials.filter(item => (item.total * markupMultiplier) >= GROUPING_THRESHOLD);
+    const groupableItems = allMaterials.filter(item => (item.total * markupMultiplier) < GROUPING_THRESHOLD);
+
+    // Step 2: Group small items by kit type
+    groupableItems.forEach(item => {
+      const itemName = item.name.toLowerCase();
+      let assigned = false;
+      
+      // Check flashing kit
+      if (kits.flashing.keywords.some(kw => itemName.includes(kw))) {
+        kits.flashing.items.push(item);
+        assigned = true;
+      }
+      // Check fasteners kit
+      else if (kits.fasteners.keywords.some(kw => itemName.includes(kw))) {
+        kits.fasteners.items.push(item);
+        assigned = true;
+      }
+      // Check sealants kit
+      else if (kits.sealants.keywords.some(kw => itemName.includes(kw))) {
+        kits.sealants.items.push(item);
+        assigned = true;
+      }
+      
+      // If no match, put in "Additional Materials"
+      if (!assigned) {
+        kits.other.items.push(item);
+      }
+    });
+
+    // Step 3: Build final materials array
+    const materials: Array<{ name: string; description: string; total: number }> = [];
+
+    // Add standalone items
+    materials.push(...standAloneItems);
+
+    // Add non-empty kits (sum totals for kit)
+    Object.values(kits).forEach(kit => {
+      if (kit.items.length > 0) {
+        const kitTotal = kit.items.reduce((sum, item) => sum + item.total, 0);
+        materials.push({
+          name: kit.name,
+          description: kit.description,
+          total: kitTotal
+        });
+      }
+    });
+
+    // Step 4: Sort by total descending (biggest first)
+    materials.sort((a, b) => b.total - a.total);
 
     const equipment = [
       ...nonVendorEquipment.map(item => ({
@@ -1844,7 +1927,7 @@ Return only the JSON object, no other text.`;
   };
 
   const buildEstimateForClientPdf = (estimate: Estimate) => {
-    const clientSections = buildClientViewSections(estimate);
+    const clientSections = buildClientViewSections(estimate, markupMultiplier);
 
     const buildLineItems = (items, category: LineItem['category']) => {
       return items.map((item, idx) => ({
@@ -1900,7 +1983,7 @@ Return only the JSON object, no other text.`;
     text += `${estimate.customerInfo.address || 'Address'}\n`;
     text += `${estimate.generatedAt}\n\n`;
 
-    const clientSections = buildClientViewSections(estimate);
+    const clientSections = buildClientViewSections(estimate, markupMultiplier);
 
     const sectionConfig = [
       { key: 'materials', label: 'Materials', items: clientSections.materials },
