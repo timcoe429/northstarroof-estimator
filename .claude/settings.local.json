@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(python replace_review_step.py:*)",
+      "Bash(python:*)",
+      "Bash(bash replace_estimate_manual.sh:*)",
+      "Bash(ls:*)",
+      "Bash(npx tsc:*)",
+      "Bash(test:*)"
+    ]
+  }
+}

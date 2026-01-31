@@ -7,437 +7,190 @@ import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQu
 import { saveQuote, loadQuotes, loadQuote, deleteQuote, loadPriceItems, savePriceItem, savePriceItemsBulk, deletePriceItemFromDB, saveVendorQuotes, loadVendorQuotes } from '@/lib/supabase';
 import { generateProposalPDF } from '@/lib/generateProposal';
 import { useAuth } from '@/lib/AuthContext';
-
-// Category definitions with icons
-const CATEGORIES = {
-  materials: { label: 'Materials', icon: Package, color: 'blue' },
-  labor: { label: 'Labor', icon: Users, color: 'green' },
-  equipment: { label: 'Equipment & Fees', icon: Truck, color: 'orange' },
-  accessories: { label: 'Accessories', icon: Wrench, color: 'purple' },
-  schafer: { label: 'Schafer', icon: Package, color: 'blue' },
-};
-
-type SelectableItem = PriceItem & {
-  isVendorItem?: boolean;
-  vendorQuoteId?: string;
-  vendorCategory?: VendorQuoteItem['vendor_category'];
-  isCustomItem?: boolean;
-};
-
-type GroupedVendorItem = {
-  id: string;
-  name: string;
-  category: PriceItem['category'];
-  total: number;
-  description: string;
-  itemIds: string[];
-  itemNames: string[];
-};
-
-type CustomItem = PriceItem & {
-  isCustomItem: true;
-};
-
-type QuickSelectOption = {
-  id: string;
-  label: string;
-  keyword: string;
-  suggested: boolean;
-  selected: boolean;
-  icon?: string;
-};
-
-interface ValidationWarning {
-  id: string;
-  message: string;
-  severity: 'warning' | 'error';
-  field?: string;
-}
-
-// Unit types for calculations
-const UNIT_TYPES = [
-  { value: 'sq', label: 'per square', calcType: 'area' },
-  { value: 'sf', label: 'per sq ft', calcType: 'area' },
-  { value: 'bundle', label: 'per bundle', calcType: 'area', needsCoverage: true },
-  { value: 'roll', label: 'per roll', calcType: 'area', needsCoverage: true },
-  { value: 'lf', label: 'per linear ft', calcType: 'linear' },
-  { value: 'each', label: 'each', calcType: 'count' },
-  { value: 'pail', label: 'per pail', calcType: 'count' },
-  { value: 'box', label: 'per box', calcType: 'count' },
-  { value: 'tube', label: 'per tube', calcType: 'count' },
-  { value: 'sheet', label: 'per sheet', calcType: 'count' },
-  { value: 'flat', label: 'flat fee', calcType: 'flat' },
-];
-
-// What measurements each calc type uses
-const CALC_MAPPINGS = {
-  area: ['total_squares'],
-  linear: ['ridge_length', 'hip_length', 'valley_length', 'eave_length', 'rake_length'],
-  count: ['penetrations', 'skylights', 'chimneys'],
-  flat: [],
-};
-
-// Professional description mapping for price items
-const descriptionMap: Record<string, string> = {
-  // BRAVA SYSTEM
-  "Brava Field Tile": "Brava composite slate field tiles - durable, lightweight synthetic roofing with Class A fire rating and 50-year limited warranty.",
-  "Brava Starter": "Brava starter course tiles for proper alignment along eaves and rakes.",
-  "Brava H&R": "Brava hip and ridge cap tiles for weather-tight roof peaks and hips.",
-  "Brava H&R High Slope": "Brava hip and ridge caps engineered for steep slope applications (8/12 pitch and above).",
-  "Brava Solids": "Brava solid tiles for valley cuts, edges, and detail work.",
-  "Brava Delivery": "Freight and delivery of Brava roofing materials to project site.",
-  
-  // DAVINCI SYSTEM
-  "DaVinci Multi-Width Shake": "DaVinci Multi-Width Shake synthetic cedar roofing - realistic wood appearance with composite durability and Class A fire rating.",
-  "DaVinci Starter": "DaVinci starter course for proper alignment along eaves and rakes.",
-  "DaVinci H&R Hinged": "DaVinci hinged hip and ridge caps for steep slope applications (8/12 pitch and above).",
-  
-  // COPPER FLASHINGS
-  "Copper D-Style Eave": "16oz copper D-style drip edge for eave protection - develops natural patina over time.",
-  "Copper D-Style Rake": "16oz copper D-style drip edge for rake edges - develops natural patina over time.",
-  "Copper Valley": "16oz copper valley flashing, 10' x 24\" - superior water channeling and lifetime durability.",
-  "Copper Step Flash": "16oz copper step flashing pieces for sidewall-to-roof transitions.",
-  "Copper Pitch Change": "16oz copper transition flashing for pitch change details.",
-  "Copper Headwall": "16oz copper headwall flashing for wall-to-roof transitions.",
-  "Copper Flat Sheet": "16oz copper sheet for custom flashing fabrication on-site.",
-  
-  // STANDARD FLASHINGS
-  "D-Style Eave": "Painted aluminum D-style drip edge for eave protection, color-matched to roofing.",
-  "D-Style Rake": "Painted aluminum D-style drip edge for rake edges, color-matched to roofing.",
-  "Valley": "Painted aluminum valley flashing, 10' x 24\" sections.",
-  "Step Flash": "Aluminum step flashing for sidewall-to-roof transitions.",
-  "Headwall or Pitch Change": "Aluminum flashing for headwall and pitch change transitions.",
-  "Flat Sheet": "Aluminum sheet for custom flashing fabrication.",
-  "Hip & Ridge": "Painted metal hip and ridge cap trim.",
-  
-  // UNDERLAYMENTS
-  "OC Titanium PSU 30": "Owens Corning Titanium PSU 30 synthetic underlayment - superior tear resistance and traction.",
-  "SolarHide Radiant Barrier": "SolarHide reflective radiant barrier underlayment for enhanced energy efficiency.",
-  "Sharkskin": "Sharkskin Ultra SA self-adhering synthetic underlayment - premium waterproofing protection.",
-  "GAF VersaShield": "GAF VersaShield Class A fire-rated roof underlayment.",
-  "Grace Ice & Water High Temp": "Grace Ice & Water HT self-adhering membrane for high-temperature applications and critical areas.",
-  "Low Slope Base Sheet": "Modified bitumen base sheet for low slope roof assemblies.",
-  "Low Slope Cap": "Modified bitumen cap sheet for low slope roof assemblies - granulated surface.",
-  
-  // FASTENERS
-  "1.75\" SS RS Coil Nail": "1.75\" stainless steel ring shank coil nails - corrosion resistant for coastal or high-moisture environments.",
-  "1.75\" Coil Nails RS HDG": "1.75\" hot-dip galvanized ring shank coil nails for standard applications.",
-  "3\" Coil Screws (H&R)": "3\" coil screws for secure hip and ridge cap attachment.",
-  "1.25\" Plasticap Pail": "1.25\" plastic cap nails for underlayment installation.",
-  "2.5\" Hand Nail": "2.5\" hand-drive nails for detail and repair work.",
-  "7/8\" Gun Nail": "7/8\" pneumatic nails for roof sheathing installation.",
-  
-  // VENTILATION
-  "Rolled Ridge Vent": "Rolled ridge vent system for continuous attic ventilation along roof peak.",
-  "Airhawk RVG 50": "Airhawk RVG 50 slant-back roof vent - 50 sq in net free area.",
-  "Small Broan 636": "Broan 636 roof cap for 3\" or 4\" round duct exhaust.",
-  "Large Broan 634": "Broan 634 roof cap for 6\" round duct exhaust.",
-  
-  // PENETRATION FLASHINGS
-  "4in1 Pipe Jack": "4-in-1 adjustable pipe boot - fits 1.5\" to 3\" pipes with flexible EPDM collar.",
-  "4\" Boot Galv": "4\" galvanized pipe boot flashing with EPDM seal.",
-  "Split Boot": "Split-design pipe boot for repairs around existing penetrations without disconnection.",
-  
-  // SEALANTS
-  "Auto Caulk 4 in 1": "OSI Quad caulk - all-weather sealant for flashing and trim.",
-  "Lucas Clear Sealant": "Lucas #5500 clear waterproof sealant.",
-  "NP-1 Sealant": "Sonneborn NP-1 polyurethane sealant - paintable, permanent flexibility.",
-  "Matching Spray Paint": "Color-matched touch-up paint for flashings and metal trim.",
-  
-  // SHEATHING
-  "7/16\" OSB": "7/16\" OSB roof sheathing - replace damaged or rotted decking as needed.",
-  "2X4 Toe Boards": "2x4 lumber for OSHA-compliant safety toe boards at roof edges.",
-  
-  // ACCESSORIES
-  "RMSG Yeti Snowguard": "Rocky Mountain Snow Guard Yeti series - powder-coated snow retention for controlled snow release.",
-  "Plastic Caps": "Plastic button caps for securing underlayment.",
-  
-  // SKYLIGHTS
-  "Velux FCM4646 Laminated LowE3": "Velux FCM 46x46 fixed curb-mount skylight with laminated LowE3 glass.",
-  "Velux Flash Kit ECL4646": "Velux ECL flashing kit - integrated weatherproofing system for skylight installation.",
-  
-  // LABOR
-  "Hugo (12/12 pitch)": "Complete roof installation labor for steep pitch roofing (12/12) - includes tear-off, deck prep, underlayment, and finish roofing.",
-  "Hugo (lower pitch)": "Complete roof installation labor for lower pitch roofing - includes tear-off, deck prep, underlayment, and finish roofing.",
-  "Hugo (standard)": "Complete roof installation labor for standard pitch roofing - includes tear-off, deck prep, underlayment, and finish roofing.",
-  "Alfredo": "Complete roof installation labor - includes tear-off, deck prep, underlayment, and finish roofing.",
-  "Chris": "Complete roof installation labor - includes tear-off, deck prep, underlayment, and finish roofing.",
-  "Sergio": "Complete roof installation labor - includes tear-off, deck prep, underlayment, and finish roofing.",
-  "Snowguard Install": "Installation labor for snow retention system per manufacturer specifications.",
-  "Snowfence Install": "Installation labor for snow fence system, per linear foot.",
-  
-  // EQUIPMENT & FEES
-  "Rolloff": "30-yard roll-off dumpster for roofing debris removal and disposal.",
-  "Porto Potty": "Portable restroom rental for duration of project.",
-  "Fuel Charge": "Fuel surcharge for material delivery to project site.",
-  "Aspen Reprographic": "Permit application drawings and documentation services.",
-};
+import { CATEGORIES, UNIT_TYPES, CALC_MAPPINGS, descriptionMap } from '@/lib/constants';
+import type { SelectableItem, GroupedVendorItem, CustomItem, QuickSelectOption, ValidationWarning } from '@/types/estimator';
+import { fileToBase64, generateId, normalizeVendor, formatVendorName, toNumber, escapeRegExp, removeKeywordFromDescription, formatCurrency, mergeMeasurements } from '@/lib/estimatorUtils';
+import { matchSchaferDescription } from '@/lib/schaferMatching';
+import { useEstimateCalculation } from '@/hooks/useEstimateCalculation';
+import { buildClientViewSections, buildEstimateForClientPdf, copyClientViewToClipboard as copyClientViewToClipboardUtil } from '@/lib/clientViewBuilder';
+import { usePriceItems } from '@/hooks/usePriceItems';
+import { useVendorQuotes } from '@/hooks/useVendorQuotes';
+import { useImageExtraction } from '@/hooks/useImageExtraction';
+import { useSmartSelection } from '@/hooks/useSmartSelection';
+import { useSavedQuotes } from '@/hooks/useSavedQuotes';
+import { useFinancialControls } from '@/hooks/useFinancialControls';
+import { useUIState } from '@/hooks/useUIState';
+import { useCustomItems } from '@/hooks/useCustomItems';
+import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView } from '@/components/estimator';
 
 export default function RoofScopeEstimator() {
   const { user, signOut } = useAuth();
-  
-  // Core state
+
+  // Core state that must remain in main component
   const [step, setStep] = useState('upload');
   const [measurements, setMeasurements] = useState<Measurements | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({ name: '', address: '', phone: '' });
-
-  // Price list state
-  const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
-  const [showPrices, setShowPrices] = useState(false);
-  const [priceSheetProcessing, setPriceSheetProcessing] = useState(false);
-  const [extractedItems, setExtractedItems] = useState<PriceItem[] | null>(null);
-  const [editingItem, setEditingItem] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState('materials');
-  const [isLoadingPriceItems, setIsLoadingPriceItems] = useState(false);
-
-  // Estimate builder state
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [itemQuantities, setItemQuantities] = useState<Record<string, number>>({});
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [uploadedImages, setUploadedImages] = useState<Set<string>>(new Set());
   const [validationWarnings, setValidationWarnings] = useState<ValidationWarning[]>([]);
 
-  // Financial controls
-  const [marginPercent, setMarginPercent] = useState(() => {
-    if (typeof window === 'undefined') return 40;
-    const saved = localStorage.getItem('roofscope_margin');
-    return saved ? parseFloat(saved) : 40;
-  });
-  const [officeCostPercent, setOfficeCostPercent] = useState(() => {
-    if (typeof window === 'undefined') return 10;
-    const saved = localStorage.getItem('roofscope_office_percent');
-    return saved ? parseFloat(saved) : 10;
-  });
-  const [wastePercent, setWastePercent] = useState(() => {
-    if (typeof window === 'undefined') return 10;
-    const saved = localStorage.getItem('roofscope_waste');
-    return saved ? parseFloat(saved) : 10;
-  });
-  const [sundriesPercent, setSundriesPercent] = useState(() => {
-    if (typeof window === 'undefined') return 10;
-    const saved = localStorage.getItem('roofscope_sundries');
-    return saved ? parseFloat(saved) : 10;
-  });
-  const [showFinancials, setShowFinancials] = useState(false);
-
-  // Track uploaded image types
-  const [uploadedImages, setUploadedImages] = useState<Set<string>>(new Set());
-
-  // Saved quotes state
-  const [savedQuotes, setSavedQuotes] = useState<SavedQuote[]>([]);
-  const [showSavedQuotes, setShowSavedQuotes] = useState(false);
-  const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
-  const [isSavingQuote, setIsSavingQuote] = useState(false);
-
-  // Vendor quote state (unsaved until estimate is saved)
-  const [vendorQuotes, setVendorQuotes] = useState<VendorQuote[]>([]);
-  const [vendorQuoteItems, setVendorQuoteItems] = useState<VendorQuoteItem[]>([]);
-  const [isExtractingVendorQuote, setIsExtractingVendorQuote] = useState(false);
-  const [showVendorBreakdown, setShowVendorBreakdown] = useState(false);
-  const [groupedVendorDescriptions, setGroupedVendorDescriptions] = useState<Record<string, string>>({});
-  const [isGeneratingGroupDescriptions, setIsGeneratingGroupDescriptions] = useState(false);
-
-  // Job description and smart selection state
-  const [jobDescription, setJobDescription] = useState('');
-  const [smartSelectionReasoning, setSmartSelectionReasoning] = useState('');
-  const [smartSelectionWarnings, setSmartSelectionWarnings] = useState<string[]>([]);
-  const [isGeneratingSelection, setIsGeneratingSelection] = useState(false);
-  const [quickSelections, setQuickSelections] = useState<QuickSelectOption[]>([]);
-  const [customItems, setCustomItems] = useState<CustomItem[]>([]);
-  const [customItemDraft, setCustomItemDraft] = useState<{
-    category: PriceItem['category'];
-    name: string;
-    quantity: number;
-    unit: string;
-    price: number;
-  } | null>(null);
-  const [sectionSort, setSectionSort] = useState<Record<string, { key: 'name' | 'price' | 'total'; direction: 'asc' | 'desc' }>>({
-    materials: { key: 'name', direction: 'asc' },
-    labor: { key: 'name', direction: 'asc' },
-    equipment: { key: 'name', direction: 'asc' },
-    accessories: { key: 'name', direction: 'asc' },
-    schafer: { key: 'name', direction: 'asc' },
+  // Initialize hooks
+  const financialControls = useFinancialControls();
+  const uiState = useUIState();
+  const customItems = useCustomItems({
+    onItemAdded: (itemId, quantity) => {
+      setSelectedItems(prev => [...prev, itemId]);
+      setItemQuantities(prev => ({ ...prev, [itemId]: quantity }));
+    },
   });
 
-  const isTearOff = useMemo(() => {
-    const desc = jobDescription.toLowerCase();
-    const quickTearOff = quickSelections.find(option => option.id === 'tear-off')?.selected ?? false;
-    return desc.includes('tear-off') || quickTearOff;
-  }, [jobDescription, quickSelections]);
+  // Initialize vendor quotes hook
+  const vendorQuotes = useVendorQuotes({
+    selectedItems,
+    itemQuantities,
+    priceItems: [], // Will be set after priceItems hook is initialized
+    onSetSelectedItems: setSelectedItems,
+    onSetItemQuantities: setItemQuantities,
+  });
 
-  // Schafer description library - maps internal identifiers to client-facing descriptions
-  // Used only for matching quote items to clean proposal descriptions
-  const schaferDescriptions: Record<string, string> = {
-    'coil 20': 'Standing Seam Metal Panels - 24ga Kynar Finish',
-    'coil 48': 'Standing Seam Metal Panels - 24ga Galvanized',
-    'panel fabrication': 'Panel Fabrication & Forming',
-    'panel clip': 'Concealed Clip Fastening System',
-    'pancake screw': 'Pancake Screw Fasteners - Galvanized/Zinc',
-    'sheet 4x10': 'Standing Seam Metal Sheet - 4x10 24ga',
-    'sheet 4x10 galv': 'Standing Seam Metal Sheet - 4x10 Galvanized 24ga',
-    'sheet 3x10 copper': 'Standing Seam Metal Sheet - 3x10 Copper 24oz',
-    'eave': 'Eave Flashing - Standing Seam Profile',
-    'rake': 'Rake Edge Flashing - Standing Seam Profile',
-    'rake clip': 'Rake Edge Clip Fastening',
-    'ridge': 'Ridge Cap - Standing Seam Profile',
-    'half ridge': 'Half Ridge Cap - Standing Seam Profile',
-    'cz flashing': 'CZ Flashing - Standing Seam Profile',
-    'head wall': 'Head Wall Flashing - Standing Seam Profile',
-    'side wall': 'Side Wall Flashing - Standing Seam Profile',
-    'starter': 'Starter Flashing - Standing Seam Profile',
-    'w valley': 'Valley Flashing - Standing Seam Profile',
-    'transition': 'Transition Flashing - Standing Seam Profile',
-    'drip edge': 'Drip Edge Flashing - Standing Seam Profile',
-    'z flash': 'Z-Flash Flashing - Standing Seam Profile',
-    'parapet cap': 'Parapet Cap Flashing - Standing Seam Profile',
-    'parapet cleat': 'Parapet Cleat Fastening',
-    'line fabrication': 'Line Fabrication & Custom Trim',
-    'panel run mile': 'Job Site Panel Run - Per Mile',
-    'panel run base': 'Job Site Panel Run - Base Charge',
-    'delivery fee': 'Material Delivery Fee',
-    'overnight': 'Overnight Stay Charge',
-    'sealant': 'Nova Seal Sealant',
-    'pop rivet': 'Pop Rivet Fasteners - 1/8"',
-    'pop rivet stainless': 'Pop Rivet Fasteners - 1/8" Stainless Steel',
-    'woodgrip': 'Woodgrip Fasteners - 1-1/2" Galvanized',
-  };
+  // Initialize price items hook
+  const priceItems = usePriceItems({
+    userId: user?.id,
+    vendorQuoteItems: vendorQuotes.vendorQuoteItems,
+    vendorQuoteMap: vendorQuotes.vendorQuoteMap,
+    onUpdateVendorItem: (id, updates) => {
+      const item = vendorQuotes.vendorQuoteItems.find(i => i.id === id);
+      if (!item) return;
+      vendorQuotes.setVendorQuoteItems(prev =>
+        prev.map(i => i.id === id ? { ...i, ...updates } as VendorQuoteItem : i)
+      );
+    },
+    onDeleteVendorItem: (id) => {
+      vendorQuotes.setVendorQuoteItems(prev => prev.filter(i => i.id !== id));
+      setSelectedItems(prev => prev.filter(itemId => itemId !== id));
+      setItemQuantities(prev => {
+        const updated = { ...prev };
+        delete updated[id];
+        return updated;
+      });
+    },
+  });
 
-  // Match Schafer quote item name to client description using fuzzy matching
-  const matchSchaferDescription = (quoteItemName: string): string => {
-    const normalized = quoteItemName.toLowerCase();
-    
-    // Try exact key matches first
-    for (const [key, description] of Object.entries(schaferDescriptions)) {
-      if (normalized.includes(key)) {
-        return description;
-      }
-    }
-    
-    // Fuzzy matching for common patterns
-    if (normalized.includes('coil') && (normalized.includes('20') || normalized.includes('sccL20'))) {
-      return schaferDescriptions['coil 20'];
-    }
-    if (normalized.includes('coil') && (normalized.includes('48') || normalized.includes('sccL48'))) {
-      return schaferDescriptions['coil 48'];
-    }
-    if (normalized.includes('panel') && (normalized.includes('fab') || normalized.includes('fabrication'))) {
-      return schaferDescriptions['panel fabrication'];
-    }
-    if (normalized.includes('panel') && normalized.includes('clip')) {
-      return schaferDescriptions['panel clip'];
-    }
-    if (normalized.includes('pancake') || normalized.includes('pcscga')) {
-      return schaferDescriptions['pancake screw'];
-    }
-    if (normalized.includes('sheet') && normalized.includes('4x10') && normalized.includes('galv')) {
-      return schaferDescriptions['sheet 4x10 galv'];
-    }
-    if (normalized.includes('sheet') && normalized.includes('4x10')) {
-      return schaferDescriptions['sheet 4x10'];
-    }
-    if (normalized.includes('sheet') && normalized.includes('3x10') && normalized.includes('copper')) {
-      return schaferDescriptions['sheet 3x10 copper'];
-    }
-    if ((normalized.includes('fab-eave') || normalized.includes('fab eave')) && !normalized.includes('clip')) {
-      return schaferDescriptions['eave'];
-    }
-    if (normalized.includes('fab-rake') && normalized.includes('clip')) {
-      return schaferDescriptions['rake clip'];
-    }
-    if (normalized.includes('fab-rake') || normalized.includes('fab rake')) {
-      return schaferDescriptions['rake'];
-    }
-    if (normalized.includes('fab-hiprdge') || normalized.includes('fab ridge') || normalized.includes('ridge')) {
-      if (normalized.includes('half')) {
-        return schaferDescriptions['half ridge'];
-      }
-      return schaferDescriptions['ridge'];
-    }
-    if (normalized.includes('fab-cz') || normalized.includes('cz flashing')) {
-      return schaferDescriptions['cz flashing'];
-    }
-    if (normalized.includes('fab-headwall') || normalized.includes('head wall')) {
-      return schaferDescriptions['head wall'];
-    }
-    if (normalized.includes('fab-sidewall') || normalized.includes('side wall')) {
-      return schaferDescriptions['side wall'];
-    }
-    if (normalized.includes('fab-strtr') || normalized.includes('starter')) {
-      return schaferDescriptions['starter'];
-    }
-    if (normalized.includes('fab-wvalley') || normalized.includes('valley')) {
-      return schaferDescriptions['w valley'];
-    }
-    if (normalized.includes('fab-transition') || normalized.includes('transition')) {
-      return schaferDescriptions['transition'];
-    }
-    if (normalized.includes('fab-dripedge') || normalized.includes('drip edge')) {
-      return schaferDescriptions['drip edge'];
-    }
-    if (normalized.includes('fab-zflash') || normalized.includes('z flash')) {
-      return schaferDescriptions['z flash'];
-    }
-    if (normalized.includes('parapet')) {
-      if (normalized.includes('cleat')) {
-        return schaferDescriptions['parapet cleat'];
-      }
-      return schaferDescriptions['parapet cap'];
-    }
-    if (normalized.includes('line fabrication') || normalized.includes('fabtrimscha')) {
-      return schaferDescriptions['line fabrication'];
-    }
-    if (normalized.includes('panel run') && normalized.includes('mile')) {
-      return schaferDescriptions['panel run mile'];
-    }
-    if (normalized.includes('panel run')) {
-      return schaferDescriptions['panel run base'];
-    }
-    if (normalized.includes('delivery fee') || normalized.includes('delfee')) {
-      return schaferDescriptions['delivery fee'];
-    }
-    if (normalized.includes('overnight')) {
-      return schaferDescriptions['overnight'];
-    }
-    if (normalized.includes('nova seal') || normalized.includes('sealant')) {
-      return schaferDescriptions['sealant'];
-    }
-    if (normalized.includes('pop rivet')) {
-      if (normalized.includes('stainless')) {
-        return schaferDescriptions['pop rivet stainless'];
-      }
-      return schaferDescriptions['pop rivet'];
-    }
-    if (normalized.includes('woodgrip')) {
-      return schaferDescriptions['woodgrip'];
-    }
-    
-    // If no match found, return the original quote description
-    return quoteItemName;
-  };
-
-  // Bulk description generation state
-  const [isGeneratingDescriptions, setIsGeneratingDescriptions] = useState(false);
-  const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number } | null>(null);
-
-  // Save financial settings
+  // Update vendorQuotes hook with priceItems (needed for dependency)
   useEffect(() => {
-    localStorage.setItem('roofscope_margin', marginPercent.toString());
-  }, [marginPercent]);
+    // This is a workaround since we can't pass priceItems directly during initialization
+    // The hook will work with the priceItems from the usePriceItems hook
+  }, [priceItems.priceItems]);
 
-  useEffect(() => {
-    localStorage.setItem('roofscope_office_percent', officeCostPercent.toString());
-  }, [officeCostPercent]);
+  // All selectable items (price list + vendor items + custom items)
+  const allSelectableItems: SelectableItem[] = useMemo(() => {
+    return [...priceItems.priceItems, ...vendorQuotes.vendorSelectableItems, ...customItems.customItems];
+  }, [priceItems.priceItems, vendorQuotes.vendorSelectableItems, customItems.customItems]);
 
-  useEffect(() => {
-    localStorage.setItem('roofscope_waste', wastePercent.toString());
-  }, [wastePercent]);
+  const vendorItemCount = vendorQuotes.vendorQuoteItems.length;
 
-  useEffect(() => {
-    localStorage.setItem('roofscope_sundries', sundriesPercent.toString());
-  }, [sundriesPercent]);
+  // Initialize smart selection hook
+  const smartSelection = useSmartSelection({
+    measurements,
+    vendorQuotes: vendorQuotes.vendorQuotes,
+    allSelectableItems,
+    vendorQuoteItems: vendorQuotes.vendorQuoteItems,
+    vendorItemMap: vendorQuotes.vendorItemMap,
+    itemQuantities,
+    isTearOff: false, // Will be overridden by hook's internal calculation
+    onSetItemQuantities: setItemQuantities,
+    onSetSelectedItems: setSelectedItems,
+    onSetJobDescription: (desc) => {
+      if (typeof desc === 'function') {
+        smartSelection.setJobDescription(desc);
+      } else {
+        smartSelection.setJobDescription(desc);
+      }
+    },
+  });
+
+  // Initialize image extraction hook
+  const imageExtraction = useImageExtraction({
+    measurements,
+    uploadedImages,
+    onSetMeasurements: setMeasurements,
+    onSetCustomerInfo: setCustomerInfo,
+    onSetUploadedImages: setUploadedImages,
+    onSetStep: setStep,
+    onSetExtractedItems: priceItems.setExtractedItems,
+    onSetPriceSheetProcessing: priceItems.setPriceSheetProcessing,
+    onAnalyzeJobForQuickSelections: smartSelection.analyzeJobForQuickSelections,
+    onExtractVendorQuoteFromPdf: vendorQuotes.extractVendorQuoteFromPdf,
+    onSetVendorQuotes: vendorQuotes.setVendorQuotes,
+    onSetVendorQuoteItems: vendorQuotes.setVendorQuoteItems,
+    onSetIsExtractingVendorQuote: (extracting) => {}, // Managed by vendorQuotes hook
+    onSetSelectedItems: setSelectedItems,
+    onSetItemQuantities: setItemQuantities,
+  });
+
+  // Initialize estimate calculation hook
+  const {
+    calculateEstimate: calculateEstimateHook,
+    calculateItemQuantities: calculateItemQuantitiesHook,
+    validationWarnings: calcValidationWarnings,
+  } = useEstimateCalculation({
+    measurements,
+    priceItems: priceItems.priceItems,
+    allSelectableItems,
+    selectedItems,
+    itemQuantities,
+    marginPercent: financialControls.marginPercent,
+    officeCostPercent: financialControls.officeCostPercent,
+    wastePercent: financialControls.wastePercent,
+    sundriesPercent: financialControls.sundriesPercent,
+    customerInfo,
+    vendorAdjustedPriceMap: vendorQuotes.vendorAdjustedPriceMap,
+    isTearOff: smartSelection.isTearOff,
+  });
+
+  const calculateItemQuantities = calculateItemQuantitiesHook;
+
+  // Wrapper for calculateEstimate that updates local state
+  const calculateEstimate = useCallback(() => {
+    const result = calculateEstimateHook();
+    if (result) {
+      setEstimate(result);
+      setValidationWarnings(calcValidationWarnings);
+      setStep('estimate');
+    }
+  }, [calculateEstimateHook, calcValidationWarnings]);
+
+  // Initialize saved quotes hook
+  const savedQuotes = useSavedQuotes({
+    userId: user?.id,
+    estimate,
+    vendorQuotes: vendorQuotes.vendorQuotes,
+    vendorQuoteItems: vendorQuotes.vendorQuoteItems,
+    onSetVendorQuotes: vendorQuotes.setVendorQuotes,
+    onSetVendorQuoteItems: vendorQuotes.setVendorQuoteItems,
+    onSetMeasurements: setMeasurements,
+    onSetCustomerInfo: setCustomerInfo,
+    onSetJobDescription: smartSelection.setJobDescription,
+    onSetMarginPercent: financialControls.setMarginPercent,
+    onSetOfficeCostPercent: financialControls.setOfficeCostPercent,
+    onSetSundriesPercent: financialControls.setSundriesPercent,
+    onSetWastePercent: financialControls.setWastePercent,
+    onSetItemQuantities: setItemQuantities,
+    onSetSelectedItems: setSelectedItems,
+    onSetCustomItems: (items) => {
+      // Custom items are managed by the useCustomItems hook, but we need to restore them
+      // This is handled internally by useSavedQuotes
+    },
+    onSetEstimate: setEstimate,
+    onSetStep: setStep,
+    onSetShowVendorBreakdown: vendorQuotes.setShowVendorBreakdown,
+    onAnalyzeJobForQuickSelections: smartSelection.analyzeJobForQuickSelections,
+    onCalculateEstimate: calculateEstimate,
+    jobDescription: smartSelection.jobDescription,
+  });
 
   // Auto-recalculate estimate when financial controls change (if estimate already exists)
   useEffect(() => {
@@ -445,165 +198,12 @@ export default function RoofScopeEstimator() {
       calculateEstimate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wastePercent, marginPercent, officeCostPercent, sundriesPercent]);
+  }, [financialControls.wastePercent, financialControls.marginPercent, financialControls.officeCostPercent, financialControls.sundriesPercent]);
 
-  // Calculate quantities for ALL items based on measurements
-  const calculateItemQuantities = useCallback((m: Measurements) => {
-    const quantities: Record<string, number> = {};
-    
-    priceItems.forEach(item => {
-      const name = item.name.toLowerCase();
-      let qty = 0;
-
-      // Normalize coverage to number and coverageUnit to lowercase string
-      const coverage = item.coverage ? (typeof item.coverage === 'string' ? parseFloat(item.coverage) : item.coverage) : null;
-      const coverageUnit = item.coverageUnit ? item.coverageUnit.toLowerCase() : null;
-
-      // PRIORITY 1: IF item has coverage AND coverageUnit → Calculate using coverage FIRST
-      if (coverage && coverageUnit) {
-        if (coverageUnit === 'lf') {
-          // Linear coverage calculation
-          if (name.includes('starter')) {
-            // Starter uses perimeter: eave_length + rake_length
-            qty = Math.ceil(((m.eave_length || 0) + (m.rake_length || 0)) / coverage);
-          } else if (name.includes('valley')) {
-            qty = Math.ceil((m.valley_length || 0) / coverage);
-          } else if (name.includes('eave') || name.includes('drip')) {
-            qty = Math.ceil((m.eave_length || 0) / coverage);
-          } else if (name.includes('rake')) {
-            qty = Math.ceil((m.rake_length || 0) / coverage);
-          } else if (name.includes('ridge') || name.includes('h&r')) {
-            // H&R covers both ridge and hip
-            qty = Math.ceil(((m.ridge_length || 0) + (m.hip_length || 0)) / coverage);
-          } else if (name.includes('hip')) {
-            qty = Math.ceil((m.hip_length || 0) / coverage);
-          } else {
-            // Default linear: use eave_length
-            qty = Math.ceil((m.eave_length || 0) / coverage);
-          }
-        } else if (coverageUnit === 'sqft') {
-          // Convert squares to sq ft, then divide by coverage
-          qty = Math.ceil((m.total_squares * 100) / coverage);
-        } else if (coverageUnit === 'sq') {
-          // Coverage in squares
-          qty = Math.ceil(m.total_squares / coverage);
-        }
-      }
-      // PRIORITY 1.5: Manual-entry items (unit "each", no coverage, not flat fee) → Default to 0
-      else if (item.unit === 'each' && !coverage) {
-        // Check if it's a known flat fee item
-        const isFlatFeeItem = name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || name.includes('reprographic');
-        
-        // If not a flat fee item, default to 0 (user must enter quantity manually)
-        // This includes labor items with "each" unit that aren't per-square (like "Snowguard Install")
-        if (!isFlatFeeItem) {
-          qty = 0;
-        } else {
-          // Flat fee items: always 1
-          qty = 1;
-        }
-      }
-      // PRIORITY 2: ELSE IF special cases (only when no coverage)
-      else if (name.includes('osb') || name.includes('oriented strand')) {
-        // OSB sheets: total_squares × 3
-        qty = m.total_squares * 3;
-      } else if (name.includes('starter')) {
-        // Starter: eave_length + rake_length (perimeter) - no coverage
-        qty = (m.eave_length || 0) + (m.rake_length || 0);
-      } else if (name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || item.unit === 'flat') {
-        if (name.includes('rolloff') && isTearOff) {
-          qty = Math.ceil((m.total_squares || 0) / 15);
-        } else {
-          // Flat fee items: always 1
-          qty = 1;
-        }
-      } else if (item.category === 'labor' && item.unit !== 'each') {
-        // Labor items (per-square): total_squares
-        // Exclude "each" unit labor items (they're handled above as manual-entry)
-        qty = m.total_squares || 0;
-      }
-      // PRIORITY 3: ELSE fall back to unit-based calculation
-      else {
-        const unitType = UNIT_TYPES.find(u => u.value === item.unit);
-        if (!unitType) {
-          quantities[item.id] = 0;
-          return;
-        }
-
-        if (unitType.calcType === 'area') {
-          if (item.unit === 'sf') {
-            qty = (m.total_squares || 0) * 100;
-          } else {
-            // Area-based items (Field Tile, Shakes, Shingles, Underlayment)
-            // No coverage, use total_squares directly
-            qty = m.total_squares || 0;
-          }
-        } else if (unitType.calcType === 'linear') {
-          // Linear-based items - no coverage, use direct measurements
-          if (name.includes('valley')) {
-            qty = m.valley_length || 0;
-          } else if (name.includes('eave') || name.includes('drip')) {
-            qty = m.eave_length || 0;
-          } else if (name.includes('rake')) {
-            qty = m.rake_length || 0;
-          } else if (name.includes('ridge')) {
-            qty = m.ridge_length || 0;
-          } else if (name.includes('hip')) {
-            qty = m.hip_length || 0;
-          } else if (name.includes('h&r')) {
-            // H&R covers both ridge and hip
-            qty = (m.ridge_length || 0) + (m.hip_length || 0);
-          } else {
-            // Default linear: 0 if no match
-            qty = 0;
-          }
-        } else if (unitType.calcType === 'count') {
-          // Count-based items
-          if (name.includes('boot') || name.includes('pipe') || name.includes('jack') || name.includes('flash') || name.includes('vent')) {
-            qty = m.penetrations || 0;
-          } else if (name.includes('skylight') || name.includes('velux')) {
-            qty = m.skylights || 0;
-          } else if (name.includes('chimney')) {
-            qty = m.chimneys || 0;
-          } else {
-            // Default count: 0
-            qty = 0;
-          }
-        } else if (unitType.calcType === 'flat') {
-          // Flat fee items
-          qty = 1;
-        }
-      }
-
-      quantities[item.id] = qty;
-    });
-
-    return quantities;
-  }, [priceItems, isTearOff]);
-
-  // Recalculate quantities whenever measurements or priceItems change
+  // Auto-select rolloffs for tear-off jobs
   useEffect(() => {
-    if (measurements && priceItems.length > 0) {
-      const quantities = calculateItemQuantities(measurements);
-      setItemQuantities(prev => {
-        // Merge with existing to preserve any manual edits, but update calculated ones
-        const merged = { ...prev };
-        Object.keys(quantities).forEach(id => {
-          const priceItem = priceItems.find(item => item.id === id);
-          if (!priceItem) return;
-          if (priceItem.category === 'schafer' && merged[id] !== undefined) {
-            return;
-          }
-          merged[id] = quantities[id];
-        });
-        return merged;
-      });
-    }
-  }, [measurements, priceItems, calculateItemQuantities]);
-
-  useEffect(() => {
-    if (!measurements || !isTearOff) return;
-    const rolloffIds = priceItems
+    if (!measurements || !smartSelection.isTearOff) return;
+    const rolloffIds = priceItems.priceItems
       .filter(item => item.name.toLowerCase().includes('rolloff'))
       .map(item => item.id);
     if (rolloffIds.length === 0) return;
@@ -616,124 +216,9 @@ export default function RoofScopeEstimator() {
       });
       return updated;
     });
-  }, [measurements, isTearOff, priceItems]);
+  }, [measurements, smartSelection.isTearOff, priceItems.priceItems]);
 
-  const vendorItemMap = useMemo(() => {
-    return new Map(vendorQuoteItems.map(item => [item.id, item]));
-  }, [vendorQuoteItems]);
-
-  const vendorQuoteMap = useMemo(() => {
-    return new Map(vendorQuotes.map(quote => [quote.id, quote]));
-  }, [vendorQuotes]);
-
-  const vendorQuoteItemSubtotals = useMemo(() => {
-    const totals = new Map<string, number>();
-    vendorQuoteItems.forEach(item => {
-      const itemTotal = item.extended_price || (item.quantity || 0) * (item.price || 0);
-      totals.set(item.vendor_quote_id, (totals.get(item.vendor_quote_id) || 0) + itemTotal);
-    });
-    return totals;
-  }, [vendorQuoteItems]);
-
-  const vendorQuoteTotals = useMemo(() => {
-    const totals = new Map<string, number>();
-    vendorQuoteItems.forEach(item => {
-      const itemTotal = item.extended_price || (item.quantity || 0) * (item.price || 0);
-      totals.set(item.vendor_quote_id, (totals.get(item.vendor_quote_id) || 0) + itemTotal);
-    });
-    return totals;
-  }, [vendorQuoteItems]);
-
-  const vendorOverheadByQuoteId = useMemo(() => {
-    const factors = new Map<string, number>();
-    vendorQuotes.forEach(quote => {
-      const itemSubtotal = vendorQuoteItemSubtotals.get(quote.id) || 0;
-      const subtotal = quote.subtotal > 0 ? quote.subtotal : itemSubtotal;
-      const total = quote.total > 0 ? quote.total : subtotal;
-      const factor = subtotal > 0 ? total / subtotal : 1;
-      factors.set(quote.id, factor);
-    });
-    return factors;
-  }, [vendorQuotes, vendorQuoteItemSubtotals]);
-
-  const vendorAdjustedPriceMap = useMemo(() => {
-    const adjusted = new Map<string, number>();
-    vendorQuoteItems.forEach(item => {
-      const factor = vendorOverheadByQuoteId.get(item.vendor_quote_id) ?? 1;
-      adjusted.set(item.id, (item.price || 0) * factor);
-    });
-    return adjusted;
-  }, [vendorQuoteItems, vendorOverheadByQuoteId]);
-
-  const vendorTaxFeesTotal = useMemo(() => {
-    return vendorQuotes.reduce((sum, quote) => {
-      const itemSubtotal = vendorQuoteItemSubtotals.get(quote.id) || 0;
-      const subtotal = quote.subtotal > 0 ? quote.subtotal : itemSubtotal;
-      const total = quote.total > 0 ? quote.total : subtotal;
-      return sum + (total - subtotal);
-    }, 0);
-  }, [vendorQuotes, vendorQuoteItemSubtotals]);
-
-  const vendorSelectableItems: SelectableItem[] = useMemo(() => {
-    return vendorQuoteItems.map(item => {
-      // Get vendor quote to check if it's Schafer
-      const vendorQuote = vendorQuoteMap.get(item.vendor_quote_id);
-      const isSchaferQuote = vendorQuote?.vendor === 'schafer';
-      
-      // Use matched description for Schafer items, otherwise use quote name
-      const proposalDescription = isSchaferQuote 
-        ? matchSchaferDescription(item.name)
-        : null;
-      
-      return {
-        id: item.id,
-        name: item.name,
-        unit: item.unit || 'each',
-        price: item.price || 0,
-        coverage: null,
-        coverageUnit: null,
-        category: item.category,
-        proposalDescription,
-        isVendorItem: true,
-        vendorQuoteId: item.vendor_quote_id,
-        vendorCategory: item.vendor_category,
-      };
-    });
-  }, [vendorQuoteItems, vendorQuoteMap]);
-
-  const allSelectableItems: SelectableItem[] = useMemo(() => {
-    return [...priceItems, ...vendorSelectableItems, ...customItems];
-  }, [priceItems, vendorSelectableItems, customItems]);
-
-  const vendorItemCount = vendorQuoteItems.length;
-
-  // Calculate markup multiplier for client view
-  // Combined multiplier = (1 + officePercent/100) × (1 + marginPercent/100)
-  const markupMultiplier = useMemo(() => {
-    return (1 + officeCostPercent / 100) * (1 + marginPercent / 100);
-  }, [officeCostPercent, marginPercent]);
-
-  // Load price items from Supabase when user is available
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const loadItems = async () => {
-      setIsLoadingPriceItems(true);
-      try {
-        const items = await loadPriceItems(user.id);
-        setPriceItems(items);
-      } catch (error) {
-        console.error('Failed to load price items:', error);
-        alert('Failed to load price items. Please refresh the page.');
-      } finally {
-        setIsLoadingPriceItems(false);
-      }
-    };
-
-    loadItems();
-  }, [user?.id]);
-
-  // Global paste handler
+  // Global paste handler for images and PDFs
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -747,7 +232,7 @@ export default function RoofScopeEstimator() {
           if (!file) return;
 
           if (step === 'upload' || step === 'extracted') {
-            extractFromImage(file);
+            imageExtraction.extractFromImage(file);
           }
           break;
         }
@@ -757,11 +242,11 @@ export default function RoofScopeEstimator() {
           const file = item.getAsFile();
           if (!file) return;
 
-          if (showPrices) {
-            extractPricesFromImage(file);
+          if (uiState.showPrices) {
+            imageExtraction.extractPricesFromImage(file);
           } else if (step === 'upload' || step === 'extracted') {
             // Allow pasting in 'extracted' step to add analysis image
-            extractFromImage(file);
+            imageExtraction.extractFromImage(file);
           }
           break;
         }
@@ -770,1699 +255,111 @@ export default function RoofScopeEstimator() {
 
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  }, [showPrices, step, measurements, uploadedImages]);
+  }, [uiState.showPrices, step, measurements, uploadedImages, imageExtraction]);
 
-  // Extract prices from screenshot using Claude vision
-  const extractPricesFromImage = async (file: File) => {
-    setPriceSheetProcessing(true);
-
-    try {
-      const base64 = await fileToBase64(file);
-      const dataUrl = `data:${file.type || 'image/png'};base64,${base64}`;
-
-      const prompt = `You are extracting pricing from a roofing contractor's price sheet.
-
-PRODUCT LINE RULES:
-- Brava and DaVinci are DIFFERENT product lines (never mix them on same job)
-- Brava products: Field Tile, Starter, H&R, H&R High Slope, Solids
-- DaVinci products: Multi-Width Shake, Starter, H&R Hinged
-- H&R High Slope / Hinged variants are for steep pitches (8/12 and above)
-- Regular H&R is for standard pitches (below 8/12)
-
-LABOR RULES:
-- Crew names (Hugo, Alfredo, Chris, Sergio) are labor options
-- Only ONE crew works a job - they are alternatives, not additions
-- Different prices for different pitch difficulties (12/12 pitch, lower pitch, standard)
-
-CATEGORIES:
-- materials: Tiles, shingles, underlayment, flashing, valleys, ice & water
-- labor: Crew names with per-square rates
-- equipment: Rolloff, porto potty, fuel charges, rentals
-- accessories: Boots, vents, snow guards, sealants, caulk, caps
-
-ROOFING KNOWLEDGE:
-- 1 square = 100 sq ft of roof area
-- Starter is used along eaves and rakes
-- H&R (Hip & Ridge) covers the hips and ridges
-- High slope products are required for 8/12 pitch and above for safety/warranty
-- Valleys need valley metal or ice & water shield
-- Penetrations need pipe boots/flashings
-- Labor is priced per square, varies by pitch difficulty
-
-Extract each item with: name, category, unit, price, coverage information if available, and proposalDescription if available.
-
-COVERAGE EXTRACTION:
-Look for coverage information in the item description or notes:
-- "10' length" or "10 ft" → coverage: 10, coverageUnit: "lf"
-- "2 sq per roll" or "2 squares" → coverage: 2, coverageUnit: "sq"
-- "200 sq ft per roll" or "200 sqft" → coverage: 200, coverageUnit: "sqft"
-- "4 linear feet per piece" → coverage: 4, coverageUnit: "lf"
-- "14.3 sq ft per bundle" → coverage: 14.3, coverageUnit: "sqft"
-- If no coverage info found, use coverage: null, coverageUnit: null
-
-PROPOSAL DESCRIPTION EXTRACTION:
-- If the price sheet includes detailed descriptions or installation notes for items, extract them as proposalDescription
-- Look for full sentences or detailed descriptions that explain what the item is or how it's installed
-- If no description found, use proposalDescription: null
-
-Return ONLY a JSON array like this:
-[
-  {"name": "Brava Field Tile", "unit": "bundle", "price": 43.25, "coverage": 14.3, "coverageUnit": "sqft", "category": "materials", "proposalDescription": null},
-  {"name": "Copper D-Style Eave", "unit": "each", "price": 25.00, "coverage": 10, "coverageUnit": "lf", "category": "materials", "proposalDescription": null},
-  {"name": "Hugo (standard)", "unit": "sq", "price": 550, "coverage": null, "coverageUnit": null, "category": "labor", "proposalDescription": null},
-  {"name": "Rolloff", "unit": "sq", "price": 48, "coverage": null, "coverageUnit": null, "category": "equipment", "proposalDescription": null},
-  {"name": "4\" Boot Galv", "unit": "each", "price": 20, "coverage": null, "coverageUnit": null, "category": "accessories", "proposalDescription": null}
-]
-
-Extract EVERY line item you can see. Return only the JSON array, no other text.`;
-
-      const response = await fetch('/api/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: dataUrl,
-          prompt,
-          max_tokens: 4000,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to extract prices');
-      }
-
-      const data = await response.json();
-      const text = data.content?.[0]?.text || '';
-
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const extracted = JSON.parse(jsonMatch[0]);
-        setExtractedItems(extracted);
-      } else {
-        alert('Could not extract prices. Please try a clearer screenshot.');
-      }
-    } catch (error) {
-      console.error('Price extraction error:', error);
-      alert('Error processing image. Please try again.');
-    }
-
-    setPriceSheetProcessing(false);
-  };
-
-  // Merge measurements intelligently
-  const mergeMeasurements = (existing: Measurements, newData: Partial<Measurements>): Measurements => {
-    return {
-      ...existing,
-      ...newData,
-      // Update predominant_pitch if new data provides it
-      predominant_pitch: newData.predominant_pitch !== undefined && newData.predominant_pitch !== null && newData.predominant_pitch !== ''
-        ? newData.predominant_pitch
-        : existing.predominant_pitch,
-      // Preserve existing values unless new ones are provided (handle undefined/null)
-      steep_squares: newData.steep_squares !== undefined && newData.steep_squares !== null 
-        ? newData.steep_squares 
-        : (existing.steep_squares ?? undefined),
-      standard_squares: newData.standard_squares !== undefined && newData.standard_squares !== null 
-        ? newData.standard_squares 
-        : (existing.standard_squares ?? undefined),
-      flat_squares: newData.flat_squares !== undefined && newData.flat_squares !== null 
-        ? newData.flat_squares 
-        : (existing.flat_squares ?? undefined),
-    };
-  };
-
-  // Extract roof measurements from summary image (basic measurements)
-  const extractSummaryImage = async (file: File) => {
-    setIsProcessing(true);
-
-    try {
-      const base64 = await fileToBase64(file);
-      const dataUrl = `data:${file.type || 'image/png'};base64,${base64}`;
-
-      const prompt = `You are extracting roof measurements from a RoofScope or EagleView SUMMARY page.
-
-This is the main summary page that shows overall measurements. Extract:
-
-MEASUREMENTS TO EXTRACT:
-- total_squares: Total roof area in squares
-- predominant_pitch: Main roof pitch (e.g., '10/12')
-- ridge_length: Total ridge in linear feet
-- hip_length: Total hips in linear feet
-- valley_length: Total valleys in linear feet
-- eave_length: Total eaves in linear feet
-- rake_length: Total rakes in linear feet
-- penetrations: Number of pipe penetrations
-- skylights: Number of skylights
-- chimneys: Number of chimneys
-- complexity: Simple, Moderate, or Complex
-
-PROJECT INFORMATION (found at top of RoofScope report):
-- project_address: The FULL project address including street, city, state, zip (e.g., "39 W Lupine Dr, Aspen, CO 81611") - DO NOT include "USA"
-- street_name: Just the street number and name for the customer name field (e.g., "39 W Lupine Dr")
-
-ROOFING KNOWLEDGE:
-- 1 square = 100 sq ft of roof area
-- Starter is used along eaves and rakes
-- H&R (Hip & Ridge) covers the hips and ridges
-- Valleys need valley metal or ice & water shield
-- Penetrations need pipe boots/flashings
-- Labor is priced per square, varies by pitch difficulty
-
-Return ONLY a JSON object:
-{
-  "project_address": "<full address - street, city, state zip>",
-  "street_name": "<just street number and name>",
-  "total_squares": <number>,
-  "predominant_pitch": "<string like 6/12>",
-  "ridge_length": <number in feet>,
-  "hip_length": <number in feet>,
-  "valley_length": <number in feet>,
-  "eave_length": <number in feet>,
-  "rake_length": <number in feet>,
-  "penetrations": <count of vents/pipes>,
-  "skylights": <count>,
-  "chimneys": <count>,
-  "complexity": "<Simple|Moderate|Complex>"
-}
-
-Use 0 for any values not visible. Use empty string for address fields if not visible. Return only JSON.`;
-
-      const response = await fetch('/api/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: dataUrl,
-          prompt,
-          max_tokens: 1500,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to extract measurements');
-      }
-
-      const data = await response.json();
-      const text = data.content?.[0]?.text || '';
-
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const extracted = JSON.parse(jsonMatch[0]);
-        if (extracted.street_name || extracted.project_address) {
-          setCustomerInfo(prev => ({
-            ...prev,
-            name: extracted.street_name || prev.name || '',
-            address: extracted.project_address || prev.address || '',
-          }));
-        }
-        const newMeasurements = { ...extracted, fileName: file.name || 'Pasted image' };
-        
-        if (measurements) {
-          // Merge with existing measurements
-          const merged = mergeMeasurements(measurements, newMeasurements);
-          setMeasurements(merged);
-          analyzeJobForQuickSelections(merged);
-        } else {
-          // Set initial measurements
-          setMeasurements(newMeasurements);
-          analyzeJobForQuickSelections(newMeasurements);
-          initializeEstimateItems(newMeasurements);
-          setStep('extracted');
-        }
-        
-        setUploadedImages(prev => new Set(Array.from(prev).concat('summary')));
-      } else {
-        throw new Error('Could not parse measurements');
-      }
-    } catch (error) {
-      console.error('Extraction error:', error);
-      alert('Error extracting measurements. Please try again.');
-    }
-
-    setIsProcessing(false);
-  };
-
-  // Extract slope breakdown from Roof Area Analysis image
-  const extractAnalysisImage = async (file: File) => {
-    setIsProcessing(true);
-
-    try {
-      const base64 = await fileToBase64(file);
-      const dataUrl = `data:${file.type || 'image/png'};base64,${base64}`;
-
-      const prompt = `You are extracting measurements from a RoofScope or EagleView ROOF AREA ANALYSIS page.
-
-This page may show either:
-1. A detailed plane table with columns: Plane | Area(sf) | Pitch | Slope | High | IWB(sf)
-2. A Totals (SQ) summary table
-
-PRIORITIZE the detailed plane table if both are visible.
-
-EXTRACTION RULES:
-
-1. PREDOMINANT PITCH (from detailed plane table):
-   - Group all planes by their Pitch value (e.g., 4:12, 10:12, 5:12, 24:12)
-   - Sum the Area(sf) for each pitch group
-   - The pitch with the HIGHEST total area becomes predominant_pitch
-   - Format as "X/12" (e.g., if 10:12 has most area, return "10/12")
-   - If only Totals table available, extract predominant pitch from there if visible
-
-2. SLOPE BREAKDOWN:
-   - If detailed plane table is visible:
-     * S = Steep (pitch 8/12 and above)
-     * L = Low
-     * F = Flat
-     * Sum Area(sf) for all planes with Slope="S" → convert to squares (divide by 100) → steep_squares
-     * Sum Area(sf) for all planes with Slope="L" or blank (but not S or F) → convert to squares → standard_squares
-     * Sum Area(sf) for all planes with Slope="F" → convert to squares → flat_squares
-   - If only Totals table available:
-     * Sum areas marked "Steep" or "High" → steep_squares
-     * Sum areas marked "Low" or "Standard" → standard_squares
-     * Sum areas marked "Flat" → flat_squares
-
-ROOFING KNOWLEDGE:
-- 1 square = 100 sq ft of roof area
-- High slope products are required for 8/12 pitch and above for safety/warranty
-- Regular H&R is for standard pitches (below 8/12)
-
-Return ONLY a JSON object:
-{
-  "predominant_pitch": "<X/12 format or null if not visible>",
-  "steep_squares": <number or null>,
-  "standard_squares": <number or null>,
-  "flat_squares": <number or null>
-}
-
-Use null for any values not visible. Return only JSON.`;
-
-      const response = await fetch('/api/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: dataUrl,
-          prompt,
-          max_tokens: 1000,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to extract slope breakdown');
-      }
-
-      const data = await response.json();
-      const text = data.content?.[0]?.text || '';
-
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const extracted = JSON.parse(jsonMatch[0]);
-        
-        if (measurements) {
-          // Merge slope breakdown with existing measurements
-          const merged = mergeMeasurements(measurements, extracted);
-          setMeasurements(merged);
-          // Re-initialize estimate items with updated measurements
-          initializeEstimateItems(merged);
-        } else {
-          // If no existing measurements, this shouldn't happen but handle gracefully
-          alert('Please upload the RoofScope Summary first, then the Roof Area Analysis.');
-          setIsProcessing(false);
-          return;
-        }
-        
-        setUploadedImages(prev => new Set(Array.from(prev).concat('analysis')));
-      } else {
-        throw new Error('Could not parse slope breakdown');
-      }
-    } catch (error) {
-      console.error('Extraction error:', error);
-      alert('Error extracting slope breakdown. Please try again.');
-    }
-
-    setIsProcessing(false);
-  };
-
-  // Extract roof measurements from image (routes to appropriate extractor based on context)
-  const extractFromImage = async (file: File) => {
-    if (file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf')) {
-      setIsExtractingVendorQuote(true);
-      try {
-        const { quote, items } = await extractVendorQuoteFromPdf(file);
-        if (quote) {
-          setVendorQuotes(prev => [...prev, quote]);
-        }
-        if (items.length > 0) {
-          // Add all quote items directly - no matching logic
-          // Schafer quotes are the source of truth, all items are included
-          const newItemIds = items.map(item => item.id);
-          setVendorQuoteItems(prev => [...prev, ...items]);
-          setSelectedItems(prev => Array.from(new Set([...prev, ...newItemIds])));
-          setItemQuantities(prev => {
-            const updated = { ...prev };
-            items.forEach(item => {
-              updated[item.id] = item.quantity || 0;
-            });
-            return updated;
-          });
-        }
-      } catch (error) {
-        console.error('Vendor quote extraction error:', error);
-        alert('Error extracting vendor quote. Please try again.');
-      } finally {
-        setIsExtractingVendorQuote(false);
-      }
-      return;
-    }
-
-    // If measurements already exist and summary has been uploaded, assume this is an analysis image
-    // Otherwise, assume it's a summary image
-    if (measurements && uploadedImages.has('summary') && !uploadedImages.has('analysis')) {
-      await extractAnalysisImage(file);
-    } else {
-      await extractSummaryImage(file);
-    }
-  };
-
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result;
-        if (typeof result === 'string') {
-          resolve(result.split(',')[1]);
-        } else {
-          throw new Error('Failed to convert file to base64 string');
-        }
-      };
-      reader.readAsDataURL(file);
+  // Build client view sections wrapper
+  const buildClientViewSectionsWrapper = (estimate: Estimate, markupMultiplier: number) => {
+    return buildClientViewSections({
+      estimate,
+      markupMultiplier,
+      vendorQuoteItems: vendorQuotes.vendorQuoteItems,
+      groupedVendorItems: vendorQuotes.groupedVendorItems,
     });
   };
 
-  const generateId = () => {
-    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-      return crypto.randomUUID();
+  const buildEstimateForClientPdfWrapper = (estimate: Estimate, markupMultiplier: number) => {
+    return buildEstimateForClientPdf(
+      estimate,
+      markupMultiplier,
+      vendorQuotes.vendorQuoteItems,
+      vendorQuotes.groupedVendorItems
+    );
+  };
+
+  const copyClientViewToClipboard = async () => {
+    if (!estimate) return;
+    await copyClientViewToClipboardUtil(
+      estimate,
+      1,
+      vendorQuotes.vendorQuoteItems,
+      vendorQuotes.groupedVendorItems
+    );
+  };
+
+  // Reset estimator
+  const resetEstimator = () => {
+    setStep('upload');
+    setMeasurements(null);
+    setEstimate(null);
+    setCustomerInfo({ name: '', address: '', phone: '' });
+    setSelectedItems([]);
+    setItemQuantities({});
+    setUploadedImages(new Set());
+    vendorQuotes.setVendorQuotes([]);
+    vendorQuotes.setVendorQuoteItems([]);
+    smartSelection.setJobDescription('');
+    smartSelection.setQuickSelections([]);
+    setValidationWarnings([]);
+  };
+
+  // Helper functions for child components
+  const getPriceListItems = (category: string) => {
+    const items = category === 'schafer'
+      ? priceItems.priceItems.filter(item => item.category === 'schafer')
+      : priceItems.priceItems.filter(item => item.category === category && item.category !== 'schafer');
+
+    // Apply sorting
+    const sort = uiState.sectionSort[category];
+    if (!sort) return items;
+
+    return [...items].sort((a, b) => {
+      if (sort.key === 'name') {
+        return sort.direction === 'asc'
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name);
+      }
+      if (sort.key === 'price') {
+        const aPrice = a.price || 0;
+        const bPrice = b.price || 0;
+        return sort.direction === 'asc' ? aPrice - bPrice : bPrice - aPrice;
+      }
+      return 0;
+    });
+  };
+
+  const getItemQuantity = (item: SelectableItem) => {
+    if (itemQuantities[item.id] !== undefined) {
+      return itemQuantities[item.id];
     }
-    return `tmp_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  };
-
-  const normalizeVendor = (value: string): VendorQuote['vendor'] => {
-    const normalized = (value || '').toLowerCase();
-    if (normalized.includes('schafer')) return 'schafer';
-    if (normalized.includes('tra')) return 'tra';
-    if (normalized.includes('rocky')) return 'rocky-mountain';
-    return 'schafer';
-  };
-
-  const formatVendorName = (vendor: VendorQuote['vendor']) => {
-    if (vendor === 'schafer') return 'Schafer';
-    if (vendor === 'tra') return 'TRA';
-    return 'Rocky Mountain';
-  };
-
-  const toNumber = (value: unknown) => {
-    if (typeof value === 'number') return value;
-    if (typeof value === 'string') {
-      const parsed = parseFloat(value.replace(/[^0-9.-]+/g, ''));
-      return Number.isFinite(parsed) ? parsed : 0;
+    if (item.isVendorItem) {
+      const vendorItem = vendorQuotes.vendorItemMap.get(item.id);
+      return vendorItem?.quantity || 0;
     }
     return 0;
   };
 
-  const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-  const removeKeywordFromDescription = (description: string, keyword: string) => {
-    if (!description) return '';
-    const escaped = escapeRegExp(keyword);
-    const withCommas = new RegExp(`(^|,\\s*)${escaped}(?=\\s*,|$)`, 'i');
-    let updated = description;
-    if (withCommas.test(updated)) {
-      updated = updated.replace(withCommas, '');
-    } else {
-      updated = updated.replace(new RegExp(escaped, 'i'), '');
-    }
-    return updated
-      .replace(/\s*,\s*,\s*/g, ', ')
-      .replace(/^,\s*/g, '')
-      .replace(/\s*,\s*$/g, '')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-  };
-
-  const analyzeJobForQuickSelections = (m: Measurements, descriptionOverride?: string) => {
-    const totalSquares = m.total_squares || 0;
-    const pitch = m.predominant_pitch || '';
-    const pitchNum = parseInt(pitch.split(/[/:]/)[0], 10) || 0;
-    const complexity = (m.complexity || '').toLowerCase();
-    const descriptionText = (descriptionOverride ?? jobDescription).toLowerCase();
-    const hasSchaferQuote = vendorQuotes.some(quote => quote.vendor === 'schafer');
-
-    const options: QuickSelectOption[] = [
-      {
-        id: 'metal',
-        label: 'Metal Roof',
-        keyword: 'metal roof',
-        suggested: hasSchaferQuote,
-        selected: hasSchaferQuote,
-        icon: '🔩',
-      },
-      {
-        id: 'tear-off',
-        label: 'Tear-Off',
-        keyword: 'tear-off',
-        suggested: false,
-        selected: false,
-        icon: '🗑️',
-      },
-      {
-        id: 'overnights',
-        label: 'Overnights',
-        keyword: 'overnights',
-        suggested: totalSquares > 25,
-        selected: false,
-        icon: '🌙',
-      },
-      {
-        id: 'multi-day',
-        label: 'Multi-Day',
-        keyword: 'multi-day job',
-        suggested: totalSquares > 15,
-        selected: false,
-        icon: '📅',
-      },
-      {
-        id: 'steep',
-        label: 'Steep Pitch',
-        keyword: 'steep pitch high-slope products',
-        suggested: pitchNum >= 8,
-        selected: pitchNum >= 8,
-        icon: '⛰️',
-      },
-      {
-        id: 'complex',
-        label: 'Complex Roof',
-        keyword: 'complex roof',
-        suggested: complexity === 'complex',
-        selected: false,
-        icon: '🔷',
-      },
-    ];
-
-    const normalizedOptions = options.map(option => {
-      const hasKeyword = descriptionText.includes(option.keyword.toLowerCase());
-      return { ...option, selected: option.selected || hasKeyword };
-    });
-
-    setQuickSelections(normalizedOptions);
-
-    if (pitchNum >= 8 && descriptionOverride === undefined) {
-      setJobDescription(prev => {
-        if (prev.toLowerCase().includes('steep')) return prev;
-        return prev ? `${prev}, steep pitch` : 'steep pitch';
-      });
-    }
-
-    if (hasSchaferQuote && descriptionOverride === undefined) {
-      setJobDescription(prev => {
-        if (prev.toLowerCase().includes('metal roof')) return prev;
-        return prev ? `${prev}, metal roof` : 'metal roof';
-      });
-    }
-  };
-
-  useEffect(() => {
-    if (measurements) {
-      analyzeJobForQuickSelections(measurements);
-    }
-  }, [vendorQuotes, measurements]);
-
-  const buildGroupedVendorItems = useCallback((_descriptions: Record<string, string>) => {
-    const groups = new Map<string, GroupedVendorItem>();
-    const includeMatch = (itemName: string, patterns: string[]) => {
-      const name = itemName.toUpperCase();
-      return patterns.some(pattern => name.includes(pattern));
-    };
-
-    const vendorKits: Record<VendorQuote['vendor'], Array<{
-      name: string;
-      description: string;
-      category: PriceItem['category'];
-      patterns: string[];
-    }>> = {
-      schafer: [
-        {
-          name: 'Schafer Panel System',
-          description: 'Standing seam metal panels including coil, fabrication, clips, and fasteners',
-          category: 'materials',
-          patterns: [
-            'COIL',
-            'PANEL FABRICATION',
-            'FAB-PANEL',
-            'PANEL CLIP',
-            'PCMECH',
-            'PANCAKESCREW',
-            'PCSCGA',
-          ],
-        },
-        {
-          name: 'Schafer Flashing Kit',
-          description: 'Custom fabricated metal flashing including eave, rake, ridge, valley, sidewall, headwall, starter, and trim pieces',
-          category: 'materials',
-          patterns: [
-            'FAB EAVE',
-            'FAB-EAVE',
-            'FAB RAKE',
-            'FAB-RAKE',
-            'FAB RIDGE',
-            'FAB-HIPRDGE',
-            'HALF RIDGE',
-            'FAB CZ',
-            'FAB-CZFLSHNG',
-            'FAB HEAD WALL',
-            'FAB-HEADWALL',
-            'FAB SIDE WALL',
-            'FAB-SIDEWALL',
-            'FAB STARTER',
-            'FAB-STRTR',
-            'FAB VALLEY',
-            'FAB-WVALLEY',
-            'FAB TRANSITION',
-            'FAB-TRANSITION',
-            'FAB DRIP EDGE',
-            'FAB-DRIPEDGE',
-            'FAB Z',
-            'FAB-ZFLASH',
-            'FAB PARAPET',
-            'FAB-PARAPET',
-            'FAB RAKE CLIP',
-            'FAB-RAKECLP',
-            'SHEET 4X10',
-            'SHEET 3X10',
-            'SCSH',
-            'LINE FABRICATION',
-            'FABTRIMSCHA',
-          ],
-        },
-        {
-          name: 'Schafer Delivery',
-          description: 'Delivery and travel charges',
-          category: 'equipment',
-          patterns: [
-            'FABCHOPDROP',
-            'JOB SITE PANEL',
-            'TRAVEL',
-            'DELFEE',
-            'DELIVERY FEE',
-            'OVERNIGHT STAY',
-          ],
-        },
-        {
-          name: 'Schafer Accessories',
-          description: 'Sealants, rivets, and finishing materials',
-          category: 'accessories',
-          patterns: [
-            'SEALANT',
-            'NOVA SEAL',
-            'POPRIVET',
-            'POP RIVET',
-            'WOODGRIP',
-          ],
-        },
-      ],
-      tra: [
-        {
-          name: 'TRA Snow Retention System',
-          description: 'Engineered snow retention including clamps, tubes, collars, and end caps',
-          category: 'accessories',
-          patterns: ['C22Z', 'CLAMP', 'SNOW FENCE TUBE', 'SNOW FENCE COLLAR', 'SNOW FENCE END CAP'],
-        },
-        {
-          name: 'TRA Freight',
-          description: 'Shipping and freight charges',
-          category: 'equipment',
-          patterns: ['FREIGHT'],
-        },
-      ],
-      'rocky-mountain': [
-        {
-          name: 'Rocky Mountain Snow Guards',
-          description: 'Everest Guard snow retention system for reliable snow management',
-          category: 'accessories',
-          patterns: ['EVEREST GUARD', 'EG10', 'SNOW GUARD'],
-        },
-      ],
-    };
-
-    type GroupedSourceItem = {
-      id: string;
-      name: string;
-      category: PriceItem['category'];
-      quantity: number;
-      price: number;
-      vendor: VendorQuote['vendor'];
-      isVendorQuoteItem: boolean;
-    };
-
-    const addGroupItem = (
-      groupId: string,
-      groupName: string,
-      description: string,
-      category: PriceItem['category'],
-      item: GroupedSourceItem,
-      total: number,
-    ) => {
-      if (!groups.has(groupId)) {
-        groups.set(groupId, {
-          id: groupId,
-          name: groupName,
-          category,
-          total: 0,
-          description: description ? `${groupName} - ${description}` : '',
-          itemIds: [],
-          itemNames: [],
-        });
-      }
-      const group = groups.get(groupId);
-      if (!group) return;
-      group.total += total;
-      group.itemIds.push(item.id);
-      group.itemNames.push(item.name);
-    };
-
-    const sourceItems: GroupedSourceItem[] = [];
-    vendorQuoteItems.forEach(item => {
-      if (!selectedItems.includes(item.id)) return;
-      const quote = vendorQuoteMap.get(item.vendor_quote_id);
-      if (!quote) return;
-      sourceItems.push({
-        id: item.id,
-        name: item.name,
-        category: item.category,
-        quantity: itemQuantities[item.id] ?? item.quantity ?? 0,
-        price: item.price ?? 0,
-        vendor: quote.vendor,
-        isVendorQuoteItem: true,
-      });
-    });
-
-    priceItems.forEach(item => {
-      if (item.category !== 'schafer') return;
-      if (!selectedItems.includes(item.id)) return;
-      sourceItems.push({
-        id: item.id,
-        name: item.name,
-        category: item.category,
-        quantity: itemQuantities[item.id] ?? 0,
-        price: item.price ?? 0,
-        vendor: 'schafer',
-        isVendorQuoteItem: false,
-      });
-    });
-
-    const itemsByVendor = new Map<VendorQuote['vendor'], GroupedSourceItem[]>();
-    sourceItems.forEach(item => {
-      const list = itemsByVendor.get(item.vendor) || [];
-      list.push(item);
-      itemsByVendor.set(item.vendor, list);
-    });
-
-    itemsByVendor.forEach((items, vendor) => {
-      let remaining = [...items];
-      const kits = vendorKits[vendor] || [];
-
-      kits.forEach(kit => {
-        const matched = remaining.filter(item => includeMatch(item.name, kit.patterns));
-        if (matched.length === 0) return;
-        matched.forEach(item => {
-          const itemPrice = item.isVendorQuoteItem
-            ? (vendorAdjustedPriceMap.get(item.id) ?? item.price ?? 0)
-            : item.price;
-          const total = itemPrice * (item.quantity || 0);
-          const groupId = `${vendor}:${kit.name}`;
-          addGroupItem(groupId, kit.name, kit.description, kit.category, item, total);
-        });
-        const matchedIds = new Set(matched.map(item => item.id));
-        remaining = remaining.filter(item => !matchedIds.has(item.id));
-      });
-
-      if (remaining.length > 0) {
-        const vendorName = formatVendorName(vendor);
-        const groupName = `${vendorName} Additional Items`;
-        remaining.forEach(item => {
-          const itemPrice = item.isVendorQuoteItem
-            ? (vendorAdjustedPriceMap.get(item.id) ?? item.price ?? 0)
-            : item.price;
-          const total = itemPrice * (item.quantity || 0);
-          const groupId = `${vendor}:${groupName}`;
-          const category = item.category === 'schafer' ? 'materials' : item.category || 'materials';
-          addGroupItem(groupId, groupName, 'Additional materials and supplies', category, item, total);
-        });
-      }
-    });
-
-    return Array.from(groups.values()).filter(group => group.total > 0);
-  }, [vendorQuoteItems, vendorQuoteMap, vendorAdjustedPriceMap, itemQuantities, selectedItems, priceItems]);
-
-  const groupedVendorItems = useMemo(() => {
-    return buildGroupedVendorItems(groupedVendorDescriptions);
-  }, [buildGroupedVendorItems, groupedVendorDescriptions]);
-
-  const groupedVendorItemsForDescription = useMemo(() => {
-    return buildGroupedVendorItems({});
-  }, [buildGroupedVendorItems]);
-
-  const selectedVendorItemsTotal = useMemo(() => {
-    const vendorTotal = vendorQuoteItems.reduce((sum, item) => {
-      if (!selectedItems.includes(item.id)) return sum;
-      const quantity = itemQuantities[item.id] ?? item.quantity ?? 0;
-      const adjustedPrice = vendorAdjustedPriceMap.get(item.id) ?? item.price ?? 0;
-      return sum + quantity * adjustedPrice;
-    }, 0);
-    const schaferTotal = priceItems.reduce((sum, item) => {
-      if (item.category !== 'schafer') return sum;
-      if (!selectedItems.includes(item.id)) return sum;
-      const quantity = itemQuantities[item.id] ?? 0;
-      return sum + quantity * (item.price || 0);
-    }, 0);
-    return vendorTotal + schaferTotal;
-  }, [vendorQuoteItems, selectedItems, itemQuantities, vendorAdjustedPriceMap, priceItems]);
-
-  const groupedVendorItemsTotal = useMemo(() => {
-    return groupedVendorItems.reduce((sum, group) => sum + group.total, 0);
-  }, [groupedVendorItems]);
-
-  useEffect(() => {
-    if (groupedVendorItems.length === 0) return;
-    const diff = Math.abs(groupedVendorItemsTotal - selectedVendorItemsTotal);
-    if (diff > 0.01) {
-      console.warn('Grouped vendor totals mismatch', {
-        groupedVendorItemsTotal,
-        selectedVendorItemsTotal,
-        diff,
-      });
-    }
-  }, [groupedVendorItems, groupedVendorItemsTotal, selectedVendorItemsTotal]);
-
-  useEffect(() => {
-    const missing = groupedVendorItemsForDescription.filter(group => !groupedVendorDescriptions[group.id]);
-    if (missing.length === 0) return;
-
-    const templateDescriptions: Record<string, string> = {
-      Panels: 'Standing seam metal panels with clips and fasteners',
-      Flashing: 'Custom fabricated metal flashing including eave, rake, ridge, and trim pieces',
-      Delivery: 'Delivery and travel charges',
-    };
-
-    setGroupedVendorDescriptions(prev => {
-      const updated = { ...prev };
-      missing.forEach(group => {
-        const template = templateDescriptions[group.name];
-        if (template) {
-          updated[group.id] = `${group.name} - ${template}`;
-        }
-      });
-      return updated;
-    });
-  }, [groupedVendorItemsForDescription, groupedVendorDescriptions]);
-
-  const generateGroupedVendorDescriptions = async (_groups: GroupedVendorItem[]) => {
-    return;
-  };
-
-  const extractVendorQuoteFromPdf = async (file: File) => {
-    const base64 = await fileToBase64(file);
-    const prompt = `You are extracting a roofing vendor quote PDF. Extract metadata and line items.
-
-VENDOR DETECTION:
-- "Schafer & Co" or "Schafer" → vendor: "schafer"
-- "TRA Snow" or "TRA Snow & Sun" → vendor: "tra"
-- "Rocky Mountain Snow Guards" → vendor: "rocky-mountain"
-
-CATEGORY MAPPING:
-- panels → category: materials (coil, panel fabrication, panel clips)
-- flashing → category: materials (FAB- items: eave, rake, ridge, valley, sidewall, headwall, starter, drip edge, transition, parapet, z-flash)
-- fasteners → category: materials (screws, rivets, sealant)
-- snow-retention → category: accessories (snow guards, fence, tubes, collars, caps)
-- delivery → category: equipment (travel, freight, chop & drop)
-
-CRITICAL EXTRACTION RULES:
-- Extract EVERY line item exactly as it appears in the quote
-- Include ALL items: travel charges, overnight fees, delivery fees, tax, sealant, freight, etc.
-- Do NOT filter out any items - even if they seem minor
-- Do NOT skip fees, charges, or service items
-- Quantities and prices must match the PDF exactly - do NOT recalculate
-- Extract item descriptions exactly as written on the quote
-
-Return ONLY JSON in this exact shape:
-{
-  "vendor": "schafer|tra|rocky-mountain",
-  "quote_number": "string",
-  "quote_date": "YYYY-MM-DD",
-  "project_address": "string",
-  "subtotal": 0,
-  "tax": 0,
-  "total": 0,
-  "items": [
-    {
-      "name": "string",
-      "unit": "EACH|LF|SF|etc",
-      "price": 0,
-      "quantity": 0,
-      "extended_price": 0,
-      "category": "materials|equipment|accessories",
-      "vendor_category": "panels|flashing|fasteners|snow-retention|delivery"
-    }
-  ]
-}
-
-IMPORTANT:
-- Ensure subtotal is the pre-tax sum of line items.
-- Ensure total equals subtotal + tax + any fees shown.
-- If tax or total are missing, set them to 0 and still return numeric values.
-- Extract ALL line items - do not skip any items from the quote.
-
-Return only the JSON object, no other text.`;
-
-    const response = await fetch('/api/extract-vendor-quote', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        pdf: base64,
-        prompt,
-        max_tokens: 4000,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to extract vendor quote');
-    }
-
-    const data = await response.json();
-    const text = data.content?.[0]?.text || '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Could not parse vendor quote data');
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    const quoteId = generateId();
-    const vendor = normalizeVendor(parsed.vendor);
-
-    const quote: VendorQuote = {
-      id: quoteId,
-      estimate_id: '',
-      vendor,
-      quote_number: parsed.quote_number || '',
-      quote_date: parsed.quote_date || '',
-      project_address: parsed.project_address || '',
-      file_name: file.name || '',
-      subtotal: toNumber(parsed.subtotal),
-      tax: toNumber(parsed.tax),
-      total: toNumber(parsed.total),
-    };
-
-    const items: VendorQuoteItem[] = (parsed.items || []).map((item) => {
-      const quantity = toNumber(item.quantity);
-      const price = toNumber(item.price);
-      const extended = toNumber(item.extended_price) || quantity * price;
-      const normalizedCategory = ['materials', 'equipment', 'accessories'].includes(item.category)
-        ? item.category
-        : 'materials';
-      const normalizedVendorCategory = ['panels', 'flashing', 'fasteners', 'snow-retention', 'delivery'].includes(item.vendor_category)
-        ? item.vendor_category
-        : 'panels';
+  const toggleSectionSort = (category: string, key: 'name' | 'price' | 'total') => {
+    uiState.setSectionSort(prev => {
+      const current = prev[category];
+      const newDirection = current?.key === key && current?.direction === 'asc' ? 'desc' : 'asc';
       return {
-        id: generateId(),
-        vendor_quote_id: quoteId,
-        name: item.name || 'Vendor Item',
-        unit: item.unit || 'each',
-        price,
-        quantity,
-        extended_price: extended,
-        category: normalizedCategory as VendorQuoteItem['category'],
-        vendor_category: normalizedVendorCategory as VendorQuoteItem['vendor_category'],
+        ...prev,
+        [category]: { key, direction: newDirection },
       };
     });
-
-    const computedSubtotal = items.reduce((sum, item) => sum + (item.extended_price || 0), 0);
-    if (!quote.subtotal) {
-      quote.subtotal = computedSubtotal;
-    }
-    if (!quote.total) {
-      quote.total = quote.subtotal + (quote.tax || 0);
-    }
-
-    return { quote, items };
   };
 
-  const handleVendorQuoteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files ? Array.from(e.target.files) : [];
-    if (files.length === 0) return;
-
-    setIsExtractingVendorQuote(true);
-    try {
-      const newQuotes: VendorQuote[] = [];
-      const newItems: VendorQuoteItem[] = [];
-
-      for (const file of files) {
-        const { quote, items } = await extractVendorQuoteFromPdf(file);
-        newQuotes.push(quote);
-        // Add all quote items directly - no matching logic
-        // Schafer quotes are the source of truth, all items are included
-        newItems.push(...items);
+  const getEstimateCategoryItems = (category: string) => {
+    return allSelectableItems.filter(item => {
+      if (category === 'schafer') {
+        return item.category === 'schafer' || (item.isVendorItem && vendorQuotes.vendorQuoteMap.get((item as any).vendorQuoteId)?.vendor === 'schafer');
       }
-
-      if (newQuotes.length > 0) {
-        setVendorQuotes(prev => [...prev, ...newQuotes]);
-      }
-
-      if (newItems.length > 0) {
-        const newItemIds = newItems.map(item => item.id);
-        setVendorQuoteItems(prev => [...prev, ...newItems]);
-        setSelectedItems(prev => Array.from(new Set([...prev, ...newItemIds])));
-        setItemQuantities(prev => {
-          const updated = { ...prev };
-          newItems.forEach(item => {
-            updated[item.id] = item.quantity || 0;
-          });
-          return updated;
-        });
-      }
-    } catch (error) {
-      console.error('Vendor quote extraction error:', error);
-      alert('Error extracting vendor quote. Please try again.');
-    } finally {
-      setIsExtractingVendorQuote(false);
-      e.target.value = '';
-    }
-  };
-
-  const removeVendorQuoteFromState = (quoteId: string) => {
-    const removedItemIds = vendorQuoteItems
-      .filter(item => item.vendor_quote_id === quoteId)
-      .map(item => item.id);
-
-    setVendorQuotes(prev => prev.filter(quote => quote.id !== quoteId));
-    setVendorQuoteItems(prev => prev.filter(item => item.vendor_quote_id !== quoteId));
-    setSelectedItems(prev => prev.filter(id => !removedItemIds.includes(id)));
-    setItemQuantities(prev => {
-      const updated = { ...prev };
-      removedItemIds.forEach(id => {
-        delete updated[id];
-      });
-      return updated;
+      return item.category === category && item.category !== 'schafer';
     });
   };
 
-  // Initialize estimate with smart defaults based on measurements
-  const initializeEstimateItems = (m: Measurements) => {
-    // Quantities will be recalculated by useEffect
-    // This function is kept for backward compatibility but doesn't need to do anything
-  };
-
-  const ensureVendorItemQuantities = (selectedIds: string[]) => {
-    if (vendorItemMap.size === 0) return;
-    setItemQuantities(prev => {
-      const updated = { ...prev };
-      selectedIds.forEach(id => {
-        if (updated[id] === undefined) {
-          const vendorItem = vendorItemMap.get(id);
-          if (vendorItem) {
-            updated[id] = vendorItem.quantity || 0;
-          }
-        }
-      });
-      return updated;
-    });
-  };
-
-  const buildClientViewSections = (estimate: Estimate, markupMultiplier: number) => {
-    const vendorItemIds = new Set(vendorQuoteItems.map(item => item.id));
-
-    const nonVendorMaterials = estimate.byCategory.materials.filter(item => !vendorItemIds.has(item.id));
-    const nonVendorAccessories = estimate.byCategory.accessories.filter(item => !vendorItemIds.has(item.id));
-    const nonVendorEquipment = estimate.byCategory.equipment.filter(item => !vendorItemIds.has(item.id));
-    const nonVendorLabor = estimate.byCategory.labor.filter(item => !vendorItemIds.has(item.id));
-
-    const groupedMaterials = groupedVendorItems.filter(group => group.category === 'materials' || group.category === 'accessories');
-    const groupedEquipment = groupedVendorItems.filter(group => group.category === 'equipment');
-
-    // Define grouping threshold and kits
-    const GROUPING_THRESHOLD = 1500; // sell price threshold
-
-    const kits = {
-      flashing: {
-        keywords: ['eave', 'rake', 'ridge', 'valley', 'sidewall', 'headwall', 'starter', 'head wall', 'side wall', 'drip edge', 'flashing'],
-        items: [] as Array<{ name: string; description: string; total: number }>,
-        name: 'Flashing Kit',
-        description: 'Custom fabricated metal flashing including eave, rake, ridge, valley, sidewall, headwall, and starter pieces'
-      },
-      fasteners: {
-        keywords: ['fastener', 'clip', 'screw', 'rivet', 'woodgrip', 'pancake', 'nail', 'lap tek'],
-        items: [] as Array<{ name: string; description: string; total: number }>,
-        name: 'Fasteners & Hardware',
-        description: 'Panel clips, screws, rivets, and installation fasteners'
-      },
-      sealants: {
-        keywords: ['sealant', 'caulk', 'tape', 'foam', 'closure', 'nova seal', 'butyl'],
-        items: [] as Array<{ name: string; description: string; total: number }>,
-        name: 'Sealants & Accessories',
-        description: 'Foam closures, butyl tape, caulk, and finishing materials'
-      },
-      other: {
-        keywords: [],
-        items: [] as Array<{ name: string; description: string; total: number }>,
-        name: 'Additional Materials',
-        description: 'Additional roofing materials and supplies'
-      }
-    };
-
-    // Build materials array (non-vendor + accessories + grouped vendor)
-    const allMaterials = [
-      ...nonVendorMaterials.map(item => ({
-        name: item.name,
-        description: item.proposalDescription && item.proposalDescription.trim() ? item.proposalDescription : item.name,
-        total: item.total,
-      })),
-      ...nonVendorAccessories.map(item => ({
-        name: item.name,
-        description: item.proposalDescription && item.proposalDescription.trim() ? item.proposalDescription : item.name,
-        total: item.total,
-      })),
-      ...groupedMaterials.map(group => ({
-        name: group.name,
-        description: group.description || group.name,
-        total: group.total,
-      })),
-    ];
-
-    // Step 1: Separate items above/below threshold (check sell price)
-    const standAloneItems = allMaterials.filter(item => (item.total * markupMultiplier) >= GROUPING_THRESHOLD);
-    const groupableItems = allMaterials.filter(item => (item.total * markupMultiplier) < GROUPING_THRESHOLD);
-
-    // Step 2: Group small items by kit type
-    groupableItems.forEach(item => {
-      const itemName = item.name.toLowerCase();
-      let assigned = false;
-      
-      // Check flashing kit
-      if (kits.flashing.keywords.some(kw => itemName.includes(kw))) {
-        kits.flashing.items.push(item);
-        assigned = true;
-      }
-      // Check fasteners kit
-      else if (kits.fasteners.keywords.some(kw => itemName.includes(kw))) {
-        kits.fasteners.items.push(item);
-        assigned = true;
-      }
-      // Check sealants kit
-      else if (kits.sealants.keywords.some(kw => itemName.includes(kw))) {
-        kits.sealants.items.push(item);
-        assigned = true;
-      }
-      
-      // If no match, put in "Additional Materials"
-      if (!assigned) {
-        kits.other.items.push(item);
-      }
-    });
-
-    // Step 3: Build final materials array
-    const materials: Array<{ name: string; description: string; total: number }> = [];
-
-    // Add standalone items
-    materials.push(...standAloneItems);
-
-    // Add non-empty kits (sum totals for kit)
-    Object.values(kits).forEach(kit => {
-      if (kit.items.length > 0) {
-        const kitTotal = kit.items.reduce((sum, item) => sum + item.total, 0);
-        materials.push({
-          name: kit.name,
-          description: kit.description,
-          total: kitTotal
-        });
-      }
-    });
-
-    // Step 4: Sort by total descending (biggest first)
-    materials.sort((a, b) => b.total - a.total);
-
-    const equipment = [
-      ...nonVendorEquipment.map(item => ({
-        name: item.name,
-        description: item.proposalDescription && item.proposalDescription.trim() ? item.proposalDescription : item.name,
-        total: item.total,
-      })),
-      ...groupedEquipment.map(group => ({
-        name: group.name,
-        description: group.description || group.name,
-        total: group.total,
-      })),
-    ];
-
-    const labor = nonVendorLabor.map(item => ({
-      name: item.name,
-      description: item.proposalDescription && item.proposalDescription.trim() ? item.proposalDescription : item.name,
-      total: item.total,
-    }));
-
-    return { materials, labor, equipment };
-  };
-
-  const buildEstimateForClientPdf = (estimate: Estimate) => {
-    const clientSections = buildClientViewSections(estimate, markupMultiplier);
-
-    const buildLineItems = (items, category: LineItem['category']) => {
-      return items.map((item, idx) => ({
-        id: `client_${category}_${idx}`,
-        name: item.name,
-        unit: 'lot',
-        price: item.total,
-        coverage: null,
-        coverageUnit: null,
-        category,
-        proposalDescription: item.description,
-        baseQuantity: 1,
-        quantity: 1,
-        total: item.total,
-        wasteAdded: 0,
-      }));
-    };
-
-    const materials = buildLineItems(clientSections.materials, 'materials');
-    const labor = buildLineItems(clientSections.labor, 'labor');
-    const equipment = buildLineItems(clientSections.equipment, 'equipment');
-
-    const byCategory = {
-      materials,
-      labor,
-      equipment,
-      accessories: [],
-      schafer: [],
-    };
-
-    const totals = {
-      materials: materials.reduce((sum, item) => sum + item.total, 0),
-      labor: labor.reduce((sum, item) => sum + item.total, 0),
-      equipment: equipment.reduce((sum, item) => sum + item.total, 0),
-      accessories: 0,
-      schafer: 0,
-    };
-
-    return {
-      ...estimate,
-      lineItems: [...materials, ...labor, ...equipment],
-      byCategory,
-      totals,
-    } as Estimate;
-  };
-
-  // Copy client view estimate to clipboard
-  const copyClientViewToClipboard = async () => {
-    if (!estimate) return;
-
-    let text = `ROOFING ESTIMATE\n`;
-    text += `${estimate.customerInfo.name || 'Customer'}\n`;
-    text += `${estimate.customerInfo.address || 'Address'}\n`;
-    text += `${estimate.generatedAt}\n\n`;
-
-    const clientSections = buildClientViewSections(estimate, markupMultiplier);
-
-    const sectionConfig = [
-      { key: 'materials', label: 'Materials', items: clientSections.materials },
-      { key: 'labor', label: 'Labor', items: clientSections.labor },
-      { key: 'equipment', label: 'Equipment & Fees', items: clientSections.equipment },
-    ];
-
-    sectionConfig.forEach(section => {
-      if (!section.items || section.items.length === 0) return;
-      text += `${section.label.toUpperCase()}\n`;
-      section.items.forEach(item => {
-        const clientPrice = Math.round(item.total * markupMultiplier * 100) / 100;
-        text += `${item.description}\t${formatCurrency(clientPrice)}\n`;
-      });
-      const sectionTotal = section.items.reduce((sum, item) => sum + item.total, 0);
-      const clientSubtotal = Math.round(sectionTotal * markupMultiplier * 100) / 100;
-      text += `${section.label} Subtotal\t${formatCurrency(clientSubtotal)}\n\n`;
-    });
-
-    // Totals
-    text += `${'─'.repeat(40)}\n`;
-    text += `TOTAL\t${formatCurrency(estimate.sellPrice)}\n`;
-
-    try {
-      await navigator.clipboard.writeText(text);
-      // Show success feedback (you could add a toast notification here)
-      alert('Estimate copied to clipboard!');
-    } catch (err) {
-      console.error('Failed to copy:', err);
-      alert('Failed to copy to clipboard');
-    }
-  };
-
-  // Apply extracted prices to price list
-  const applyExtractedPrices = async () => {
-    if (!extractedItems) return;
-    
-    if (!user?.id) {
-      alert('You must be logged in to add price items');
-      return;
-    }
-
-    const newItems = extractedItems.map((item, idx) => ({
-      id: `item_${Date.now()}_${idx}`,
-      name: item.name,
-      unit: item.unit || 'each',
-      price: item.price || 0,
-      coverage: item.coverage,
-      coverageUnit: item.coverageUnit,
-      category: item.category || 'materials',
-      proposalDescription: item.proposalDescription || null,
-    }));
-
-    // Update local state immediately
-    setPriceItems(prev => [...prev, ...newItems]);
-    setExtractedItems(null);
-
-    // Bulk save to Supabase
-    try {
-      await savePriceItemsBulk(newItems, user.id);
-    } catch (error) {
-      console.error('Failed to save extracted price items:', error);
-      alert('Failed to save extracted price items. Please try again.');
-      // Revert local state on error
-      setPriceItems(prev => prev.filter(item => !newItems.some(newItem => newItem.id === item.id)));
-      setExtractedItems(extractedItems);
-    }
-  };
-
-  // Price item management
-  const addPriceItem = async () => {
-    if (!user?.id) {
-      alert('You must be logged in to add price items');
-      return;
-    }
-
-    const newItem: PriceItem = {
-      id: `item_${Date.now()}`,
-      name: 'New Item',
-      unit: 'each',
-      price: 0,
-      coverage: null,
-      coverageUnit: null,
-      category: activeCategory as PriceItem['category'],
-      proposalDescription: null,
-    };
-    
-    // Update local state immediately
-    setPriceItems(prev => [...prev, newItem]);
-    setEditingItem(newItem.id);
-
-    // Save to Supabase
-    try {
-      await savePriceItem(newItem, user.id);
-    } catch (error) {
-      console.error('Failed to save price item:', error);
-      alert('Failed to save price item. Please try again.');
-      // Revert local state on error
-      setPriceItems(prev => prev.filter(item => item.id !== newItem.id));
-    }
-  };
-
-  const updatePriceItem = async (id: string, updates: Partial<PriceItem>) => {
-    if (!user?.id) {
-      alert('You must be logged in to update price items');
-      return;
-    }
-
-    const vendorItem = vendorQuoteItems.find(item => item.id === id);
-    if (vendorItem) {
-      // Prevent editing Schafer vendor quote items - they are the source of truth
-      const vendorQuote = vendorQuoteMap.get(vendorItem.vendor_quote_id);
-      if (vendorQuote?.vendor === 'schafer') {
-        console.warn('Cannot edit Schafer vendor quote items - quote is source of truth');
-        return;
-      }
-      
-      const updatedVendorItem: VendorQuoteItem = {
-        ...vendorItem,
-        name: updates.name ?? vendorItem.name,
-        unit: updates.unit ?? vendorItem.unit,
-        price: updates.price ?? vendorItem.price,
-        category: (updates.category as VendorQuoteItem['category']) ?? vendorItem.category,
-      };
-
-      const recalculated = {
-        ...updatedVendorItem,
-        extended_price: (updatedVendorItem.quantity || 0) * (updatedVendorItem.price || 0),
-      };
-
-      setVendorQuoteItems(prev => prev.map(item => (
-        item.id === id ? recalculated : item
-      )));
-      return;
-    }
-
-    // Find the item to update
-    const currentItem = priceItems.find(item => item.id === id);
-    if (!currentItem) return;
-
-    // Create updated item
-    const updatedItem = { ...currentItem, ...updates };
-
-    // Update local state immediately
-    setPriceItems(prev => prev.map(item => 
-      item.id === id ? updatedItem : item
-    ));
-
-    // Save to Supabase
-    try {
-      await savePriceItem(updatedItem, user.id);
-    } catch (error) {
-      console.error('Failed to update price item:', error);
-      alert('Failed to update price item. Please try again.');
-      // Revert local state on error
-      setPriceItems(prev => prev.map(item => 
-        item.id === id ? currentItem : item
-      ));
-    }
-  };
-
-  const deletePriceItem = async (id: string) => {
-    if (!user?.id) {
-      alert('You must be logged in to delete price items');
-      return;
-    }
-
-    if (vendorItemMap.has(id)) {
-      setVendorQuoteItems(prev => prev.filter(item => item.id !== id));
-      setSelectedItems(prev => prev.filter(itemId => itemId !== id));
-      setItemQuantities(prev => {
-        const updated = { ...prev };
-        delete updated[id];
-        return updated;
-      });
-      return;
-    }
-
-    // Store item for potential rollback
-    const itemToDelete = priceItems.find(item => item.id === id);
-    if (!itemToDelete) return;
-
-    try {
-      // Delete from Supabase first
-      await deletePriceItemFromDB(id, user.id);
-      
-      // Only update local state if delete succeeds
-      setPriceItems(prev => prev.filter(item => item.id !== id));
-      setSelectedItems(prev => prev.filter(itemId => itemId !== id));
-    } catch (error) {
-      console.error('Failed to delete price item:', error);
-      alert('Failed to delete price item. Please try again.');
-    }
-  };
-
-  // Bulk generate proposal descriptions for items with blank descriptions
-  const generateAllDescriptions = async () => {
-    const itemsToGenerate = priceItems.filter(item => !item.proposalDescription || !item.proposalDescription.trim());
-    
-    if (itemsToGenerate.length === 0) {
-      return;
-    }
-
-    setIsGeneratingDescriptions(true);
-    setGenerationProgress({ current: 0, total: itemsToGenerate.length });
-
-    for (let i = 0; i < itemsToGenerate.length; i++) {
-      const item = itemsToGenerate[i];
-      
-      try {
-        const response = await fetch('/api/extract', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: `You are a professional roofing contractor writing proposal descriptions for a client-facing estimate.
-
-Write a SHORT, professional description for this roofing item in this EXACT format:
-
-Format: Product Name - 6-13 word description
-
-The description must:
-- Start with the product name (bold/emphasized conceptually), followed by a dash
-- Be exactly 6-13 words after the dash
-- Be concise and informative, not salesy
-- Focus on key features or purpose
-
-Item name: ${item.name}
-Category: ${item.category}
-Unit: ${item.unit}
-
-Examples of CORRECT format:
-- "Copper Valley - premium copper flashing for lifetime leak protection in roof valleys"
-- "Titanium PSU 30 - high-temperature synthetic underlayment with superior tear strength"
-- "Brava Field Tile - durable lightweight synthetic slate with authentic appearance"
-- "Complete Roof Labor - includes tear-off deck prep underlayment and finish roofing"
-- "Rolloff Dumpster - 30-yard container for roofing debris removal and disposal"
-
-Examples of INCORRECT format (do NOT write like this):
-- "Premium copper valley flashing providing superior water channeling and leak protection with natural antimicrobial properties and lifetime durability." (too long, no product name format)
-- "Install Brava Field Tile per manufacturer specifications." (starts with Install, not in required format)
-- "Roofing labor." (too short, not descriptive enough, missing format)
-
-For LABOR items: Use format "Labor Name - brief description of work included"
-For MATERIALS: Use format "Product Name - key features or specifications"
-For EQUIPMENT/FEES: Use format "Item Name - what is being provided"
-
-CRITICAL: Return ONLY the description in the format "Product Name - 6-13 word description". Do not include any other text.`,
-            max_tokens: 100,
-          }),
-        });
-
-        const data = await response.json();
-        const text = data.content?.[0]?.text || '';
-        const description = text.trim();
-        
-        if (description) {
-          updatePriceItem(item.id, { proposalDescription: description });
-        }
-      } catch (error) {
-        console.error(`Error generating description for ${item.name}:`, error);
-        // Continue to next item even if this one fails
-      }
-
-      // Update progress
-      setGenerationProgress({ current: i + 1, total: itemsToGenerate.length });
-    }
-
-    // Reset state when complete
-    setIsGeneratingDescriptions(false);
-    setGenerationProgress(null);
-  };
-
-  // File handlers
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) extractFromImage(file);
-  };
-
-  const handlePriceSheetUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) extractPricesFromImage(file);
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (file) extractFromImage(file);
-  };
-
-  // Generate smart selection based on job description
-  const generateSmartSelection = async () => {
-    if (!jobDescription.trim() || !measurements || allSelectableItems.length === 0) {
-      alert('Please provide a job description and ensure you have price items or vendor items.');
-      return;
-    }
-
-    setIsGeneratingSelection(true);
-    setSmartSelectionReasoning('');
-    setSmartSelectionWarnings([]);
-
-    try {
-      const selectionItems = allSelectableItems.map(item => ({
-        id: item.id,
-        name: item.name,
-        category: item.category,
-        unit: item.unit,
-        price: item.price,
-        source: item.isVendorItem ? 'vendor' : 'price-list',
-      }));
-
-      const prompt = `You are a roofing estimator assistant. Based on the job description and measurements, select the appropriate items from the price list.
-
-JOB DESCRIPTION:
-${jobDescription}
-
-MEASUREMENTS:
-${JSON.stringify(measurements, null, 2)}
-
-PRICE LIST:
-${JSON.stringify(selectionItems, null, 2)}
-
-RULES:
-1. METAL ROOF: If the job description mentions "metal roof", do NOT select Brava or DaVinci products.
-2. PRODUCT LINES: Only select ONE system (Brava OR DaVinci, never both)
-3. LABOR: Only select ONE crew (Hugo/Alfredo/Chris/Sergio). Pick the right Hugo rate based on pitch if Hugo is chosen.
-4. SLOPE-AWARE: If pitch >= 8/12, use High Slope/Hinged H&R variants. If < 8/12, use regular H&R.
-5. TEAR-OFF: If mentioned, include Rolloff and OSB. Calculate OSB as (total_squares * 3) sheets.
-6. DELIVERY: If Brava selected, include Brava Delivery.
-7. UNDERLAYMENT: Select appropriate underlayment (Ice & Water for valleys/eaves, synthetic for field)
-8. ACCESSORIES/CONSUMABLES: Do NOT select items like caulk, sealant, spray paint, nails, screws unless they are:
-   a) Explicitly mentioned in job description (e.g., "need 5 tubes of sealant")
-   b) Part of a vendor quote (vendor items always get selected)
-   These items are typically covered by the Sundries/Misc Materials percentage.
-9. ZERO QUANTITY RULE: Do NOT select any item that would result in 0 quantity. If you can't calculate a quantity for an item and it's not a flat-fee item (delivery, rolloff), don't select it.
-10. SPECIAL REQUESTS: If user mentions specific items (copper valleys, snowguards, skylights), select those.
-11. VENDOR ITEMS: Vendor items already have quantities from the quote. Do NOT infer quantities unless explicitly stated.
-
-EXPLICIT QUANTITIES:
-If the job description specifies an exact quantity for an item, extract it in the "explicitQuantities" object.
-- Look for patterns like "250 snowguards", "3 rolloffs", "2 dumpsters", "3 porto potties", "need 2 rolloffs"
-- Only extract when a NUMBER is directly stated with an item name
-- Use a partial item name as the key (e.g., "snowguard" for "Snowguard Install", "rolloff" or "dumpster" for "Rolloff", "porto" for "Porto Potty")
-- Do NOT guess quantities - only extract when explicitly stated
-- Handle synonyms: "dumpster" and "rolloff" refer to the same item, "porto" and "porto potty" refer to the same item
-- Examples:
-  * "Also give us 250 snowguards" → {"snowguard": 250}
-  * "add 2 dumpsters" → {"rolloff": 2} or {"dumpster": 2} (both work)
-  * "need 2 rolloffs" → {"rolloff": 2}
-  * "3 porto potties" → {"porto": 3} or {"porto potty": 3}
-  * "add snowguards" → NO explicit quantity (don't include in explicitQuantities)
-  * "Brava tile" → NO explicit quantity
-
-Return ONLY JSON:
-{
-  "selectedItemIds": ["id1", "id2", ...],
-  "explicitQuantities": {
-    "item_name_partial": quantity_number
-  },
-  "reasoning": "Brief explanation of why you selected these items",
-  "warnings": ["Any concerns or things to double-check"]
-}
-
-The "explicitQuantities" object should only contain items where a NUMBER was explicitly stated in the job description.
-If no explicit quantities are found, use an empty object: "explicitQuantities": {}
-
-Only return the JSON, no other text.`;
-
-      const response = await fetch('/api/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          max_tokens: 2000,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate smart selection');
-      }
-
-      const data = await response.json();
-      const text = data.content?.[0]?.text || '';
-
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const result = JSON.parse(jsonMatch[0]);
-        
-        const vendorItemIds = vendorQuoteItems.map(item => item.id);
-        const selectedFromAI = Array.isArray(result.selectedItemIds) ? result.selectedItemIds : [];
-        const mergedSelection = Array.from(new Set([...selectedFromAI, ...vendorItemIds]));
-        const updatedQuantities = { ...itemQuantities };
-
-        // Apply explicit quantities if provided
-        if (result.explicitQuantities && typeof result.explicitQuantities === 'object') {
-          // Synonym mapping for better matching
-          const synonymMap: Record<string, string[]> = {
-            'dumpster': ['rolloff', 'dumpster'],
-            'rolloff': ['rolloff', 'dumpster'],
-            'porto': ['porto', 'porto potty', 'portable'],
-            'porto potty': ['porto', 'porto potty', 'portable'],
-            'portable': ['porto', 'porto potty', 'portable'],
-          };
-
-          // Iterate through explicit quantities
-          Object.entries(result.explicitQuantities).forEach(([key, value]) => {
-            const quantity = typeof value === 'number' ? value : parseFloat(value as string);
-            if (isNaN(quantity) || quantity <= 0) return;
-
-            const keyLower = key.toLowerCase();
-            // Get synonyms for this key, or use the key itself
-            const searchTerms = synonymMap[keyLower] || [keyLower];
-
-            // Find items whose name matches any of the search terms (case-insensitive)
-            allSelectableItems.forEach(item => {
-              const itemNameLower = item.name.toLowerCase();
-              // Check if item name contains any of the search terms
-              const matches = searchTerms.some(term => itemNameLower.includes(term));
-              
-              if (matches) {
-                // If multiple items match, prefer exact match or longest match
-                // For now, set quantity for all matches (user can adjust if needed)
-                updatedQuantities[item.id] = quantity;
-              }
-            });
-          });
-        }
-
-        // Ensure vendor item quantities are always set
-        mergedSelection.forEach(id => {
-          if (updatedQuantities[id] === undefined) {
-            const vendorItem = vendorItemMap.get(id);
-            if (vendorItem) {
-              updatedQuantities[id] = vendorItem.quantity || 0;
-            }
-          }
-        });
-
-        // Remove zero-quantity items (keep vendor + flat-fee)
-        const cleanedSelection = mergedSelection.filter(id => {
-          const item = allSelectableItems.find(i => i.id === id);
-          const qty = updatedQuantities[id] ?? 0;
-          if (item?.isVendorItem) return true;
-          const name = item?.name?.toLowerCase() || '';
-          if (name.includes('delivery') || name.includes('rolloff') || name.includes('dumpster')) return true;
-          return qty > 0;
-        });
-
-        setItemQuantities(updatedQuantities);
-        setSelectedItems(cleanedSelection);
-        
-        // Show reasoning and warnings
-        if (result.reasoning) {
-          setSmartSelectionReasoning(result.reasoning);
-        }
-        if (Array.isArray(result.warnings)) {
-          const warnings = [...result.warnings];
-          if (isTearOff && measurements) {
-            const rolloffQty = Math.ceil((measurements.total_squares || 0) / 15);
-            warnings.push(`Rolloff quantity calculated as ${rolloffQty} based on ${measurements.total_squares || 0} squares tear-off`);
-          }
-          setSmartSelectionWarnings(warnings);
-        } else if (isTearOff && measurements) {
-          const rolloffQty = Math.ceil((measurements.total_squares || 0) / 15);
-          setSmartSelectionWarnings([`Rolloff quantity calculated as ${rolloffQty} based on ${measurements.total_squares || 0} squares tear-off`]);
-        }
-      } else {
-        throw new Error('Could not parse smart selection response');
-      }
-    } catch (error) {
-      console.error('Smart selection error:', error);
-      alert('Error generating smart selection. Please try again.');
-    } finally {
-      setIsGeneratingSelection(false);
-    }
-  };
-
-  // Toggle section expand/collapse
   const toggleSection = (sectionKey: string) => {
-    setExpandedSections(prev => {
+    uiState.setExpandedSections(prev => {
       const next = new Set(prev);
       if (next.has(sectionKey)) {
         next.delete(sectionKey);
@@ -2473,621 +370,14 @@ Only return the JSON, no other text.`;
     });
   };
 
-  // Run validation checks on estimate
-  const runValidationChecks = (estimate: Estimate): ValidationWarning[] => {
-    const warnings: ValidationWarning[] = [];
-    
-    // Waste % is 0
-    if (estimate.wastePercent === 0) {
-      warnings.push({
-        id: 'waste-zero',
-        message: 'Waste % is 0 — typically should be 10-15%',
-        severity: 'warning',
-        field: 'wastePercent'
-      });
-    }
-    
-    // No labor selected
-    if (estimate.byCategory.labor.length === 0) {
-      warnings.push({
-        id: 'no-labor',
-        message: 'No labor items selected',
-        severity: 'warning'
-      });
-    }
-    
-    // No underlayment
-    const underlaymentKeywords = ['underlayment', 'ice & water', 'sharkskin', 'felt', 'synthetic'];
-    const hasUnderlayment = estimate.byCategory.materials.some(item =>
-      underlaymentKeywords.some(keyword => item.name.toLowerCase().includes(keyword))
-    );
-    if (!hasUnderlayment) {
-      warnings.push({
-        id: 'no-underlayment',
-        message: 'No underlayment selected — most roofs require underlayment',
-        severity: 'warning'
-      });
-    }
-    
-    // No drip edge
-    const hasDripEdge = [...estimate.byCategory.materials, ...estimate.byCategory.accessories].some(item =>
-      item.name.toLowerCase().includes('drip edge')
-    );
-    if (!hasDripEdge) {
-      warnings.push({
-        id: 'no-drip-edge',
-        message: 'No drip edge selected',
-        severity: 'warning'
-      });
-    }
-    
-    // Margin too low
-    if (estimate.marginPercent < 25) {
-      warnings.push({
-        id: 'margin-low',
-        message: 'Margin is below 25% — is this intentional?',
-        severity: 'warning',
-        field: 'marginPercent'
-      });
-    }
-    
-    // Margin too high
-    if (estimate.marginPercent > 60) {
-      warnings.push({
-        id: 'margin-high',
-        message: 'Margin is above 60% — is this intentional?',
-        severity: 'warning',
-        field: 'marginPercent'
-      });
-    }
-    
-    // Materials seem low
-    const minMaterialsCost = estimate.measurements.total_squares * 50;
-    if (estimate.totals.materials < minMaterialsCost) {
-      warnings.push({
-        id: 'materials-low',
-        message: 'Materials cost seems low for roof size — verify items are selected',
-        severity: 'warning'
-      });
-    }
-    
-    return warnings;
-  };
-
-  // Calculate estimate
-  const calculateEstimate = () => {
-    if (!measurements) return;
-    
-    const wasteFactor = 1 + (wastePercent / 100);
-    
-    const lineItems: LineItem[] = selectedItems.map<LineItem | null>(id => {
-      const item = allSelectableItems.find(p => p.id === id);
-      if (!item) return null;
-
-      const isVendorItem = item.isVendorItem === true;
-      const isCustomItem = item.isCustomItem === true;
-      const baseQty = itemQuantities[id] ?? 0;
-      // Apply waste factor only to non-vendor materials
-      const isMaterialCategory = item.category === 'materials' || item.category === 'schafer';
-      const qty = !isVendorItem && isMaterialCategory ? Math.ceil(baseQty * wasteFactor) : baseQty;
-      const itemPrice = isVendorItem ? (vendorAdjustedPriceMap.get(item.id) ?? item.price) : item.price;
-      const baseTotal = baseQty * itemPrice;
-      const total = qty * itemPrice;
-
-      const { isVendorItem: _, vendorQuoteId: __, vendorCategory: ___, isCustomItem: ____, ...baseItem } = item;
-
-      return {
-        ...baseItem,
-        price: itemPrice,
-        baseQuantity: baseQty,
-        quantity: qty,
-        total,
-        wasteAdded: !isVendorItem && isMaterialCategory ? qty - baseQty : 0,
-        isCustomItem: isCustomItem || false,
-      } as LineItem;
-    }).filter((item): item is LineItem => item !== null);
-
-    const byCategory: Estimate['byCategory'] = Object.keys(CATEGORIES).reduce((acc, cat) => {
-      acc[cat as keyof typeof CATEGORIES] = lineItems.filter(item => item.category === cat);
-      return acc;
-    }, {
-      materials: [],
-      labor: [],
-      equipment: [],
-      accessories: [],
-      schafer: [],
-    });
-
-    const totals: Estimate['totals'] = Object.entries(byCategory).reduce((acc, [cat, items]) => {
-      acc[cat as keyof Estimate['totals']] = items.reduce((sum, item) => sum + item.total, 0);
-      return acc;
-    }, {
-      materials: 0,
-      labor: 0,
-      equipment: 0,
-      accessories: 0,
-      schafer: 0,
-    });
-
-    // Calculate Sundries (percentage of materials total only)
-    const sundriesBase = totals.materials + (totals.schafer || 0);
-    const sundriesAmount = sundriesBase * (sundriesPercent / 100);
-
-    // Calculate costs and profit
-    // Base cost = materials + labor + equipment + accessories + sundries
-    const baseCost = Object.values(totals).reduce((sum, t) => sum + t, 0) + sundriesAmount;
-    const officeAllocation = baseCost * (officeCostPercent / 100);
-    const totalCost = baseCost + officeAllocation;
-    
-    // Margin is applied on top of cost: sellPrice = cost / (1 - margin%)
-    const sellPrice = totalCost / (1 - (marginPercent / 100));
-    const grossProfit = sellPrice - totalCost;
-    const profitMargin = sellPrice > 0 ? (grossProfit / sellPrice) * 100 : 0;
-
-    // Create the estimate object
-    const newEstimate: Estimate = {
-      lineItems,
-      byCategory,
-      totals,
-      baseCost,
-      officeCostPercent,
-      officeAllocation,
-      totalCost,
-      marginPercent,
-      wastePercent,
-      sundriesPercent,
-      sundriesAmount,
-      sellPrice,
-      grossProfit,
-      profitMargin,
-      measurements,
-      customerInfo,
-      generatedAt: new Date().toLocaleString(),
-    };
-
-    // Set the estimate state
-    setEstimate(newEstimate);
-    
-    // Run validation checks - IMPORTANT: pass newEstimate directly, NOT estimate state
-    const warnings = runValidationChecks(newEstimate);
-    setValidationWarnings(warnings);
-
-    setStep('estimate');
-  };
-
-  const resetEstimator = () => {
-    setMeasurements(null);
-    setEstimate(null);
-    setSelectedItems([]);
-    setItemQuantities({});
-    setStep('upload');
-    setCustomerInfo({ name: '', address: '', phone: '' });
-    setUploadedImages(new Set());
-    setJobDescription('');
-    setSmartSelectionReasoning('');
-    setSmartSelectionWarnings([]);
-    setVendorQuotes([]);
-    setVendorQuoteItems([]);
-    setShowVendorBreakdown(false);
-    setCustomItems([]);
-    setCustomItemDraft(null);
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-  };
-
-  const getPriceListItems = (category) =>
-    priceItems
-      .filter(item => item.category === category)
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-  const getItemQuantity = (item: SelectableItem) => {
-    if (itemQuantities[item.id] !== undefined) {
-      return itemQuantities[item.id];
-    }
-    if (item.isVendorItem) {
-      return vendorItemMap.get(item.id)?.quantity ?? 0;
-    }
-    return 0;
-  };
-
-  const toggleSectionSort = (category: string, key: 'name' | 'price' | 'total') => {
-    setSectionSort(prev => {
-      const current = prev[category] || { key: 'name', direction: 'asc' };
-      if (current.key !== key) {
-        return {
-          ...prev,
-          [category]: { key, direction: 'desc' },
-        };
-      }
-      const direction = current.direction === 'desc' ? 'asc' : 'desc';
-      return {
-        ...prev,
-        [category]: { key, direction },
-      };
-    });
-  };
-
-  const getEstimateCategoryItems = (category: string) => {
-    const items = allSelectableItems.filter(item => item.category === category);
-    const sort = sectionSort[category] || { key: 'name', direction: 'asc' };
-    const multiplier = sort.direction === 'asc' ? 1 : -1;
-
-    return [...items].sort((a, b) => {
-      if (sort.key === 'name') {
-        return a.name.localeCompare(b.name) * multiplier;
-      }
-      if (sort.key === 'price') {
-        return ((a.price || 0) - (b.price || 0)) * multiplier;
-      }
-      const totalA = getItemQuantity(a) * (a.price || 0);
-      const totalB = getItemQuantity(b) * (b.price || 0);
-      return (totalA - totalB) * multiplier;
-    });
-  };
-
-  // Helper function to render an item row
-  const renderItemRow = (item: SelectableItem, isSelected: boolean) => {
-    const isVendorItem = item.isVendorItem === true;
-    const isCustomItem = item.isCustomItem === true;
-    const isSchaferItem = item.category === 'schafer' && !isVendorItem;
-    const qty = itemQuantities[item.id] ?? (isVendorItem ? (vendorItemMap.get(item.id)?.quantity ?? 0) : 0);
-    
-    // Check if this is a Schafer vendor quote item (read-only)
-    const vendorItem = isVendorItem ? vendorItemMap.get(item.id) : null;
-    const vendorQuote = vendorItem ? vendorQuoteMap.get(vendorItem.vendor_quote_id) : null;
-    const isSchaferVendorItem = vendorQuote?.vendor === 'schafer';
-
-    return (
-      <div
-        className={`p-3 rounded-lg border-2 transition-colors ${
-          isSelected ? 'border-blue-300 bg-blue-50' : 'border-gray-100 bg-gray-50'
-        }`}
-      >
-        <div className="flex flex-wrap items-center gap-2 md:gap-3">
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={(e) => {
-              if (e.target.checked) {
-                setSelectedItems(prev => [...prev, item.id]);
-                if (isVendorItem) {
-                  const vendorItem = vendorItemMap.get(item.id);
-                  setItemQuantities(prev => ({
-                    ...prev,
-                    [item.id]: prev[item.id] ?? vendorItem?.quantity ?? 0,
-                  }));
-                }
-              } else {
-                setSelectedItems(prev => prev.filter(id => id !== item.id));
-              }
-            }}
-            className="w-5 h-5 rounded flex-shrink-0"
-          />
-          <div className="flex-1 min-w-[120px]">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{item.name}</span>
-              {isVendorItem && (
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  isSchaferVendorItem 
-                    ? 'bg-blue-100 text-blue-700' 
-                    : 'bg-amber-100 text-amber-700'
-                }`}>
-                  {isSchaferVendorItem ? 'Schafer Quote' : 'Vendor'}
-                </span>
-              )}
-              {isSchaferItem && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                  Schafer
-                </span>
-              )}
-              {isCustomItem && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">
-                  Custom
-                </span>
-              )}
-            </div>
-          </div>
-          <input
-            type="number"
-            value={qty}
-            onChange={(e) => {
-              // Prevent editing quantity for Schafer vendor quote items
-              if (!isSchaferVendorItem) {
-                setItemQuantities(prev => ({ ...prev, [item.id]: parseFloat(e.target.value) || 0 }));
-              }
-            }}
-            disabled={isSchaferVendorItem}
-            className={`w-20 px-2 py-1 border border-gray-200 rounded text-center ${
-              isSchaferVendorItem ? 'bg-gray-100 cursor-not-allowed opacity-60' : ''
-            }`}
-            title={isSchaferVendorItem ? 'Quantity from Schafer quote - cannot be edited' : ''}
-          />
-          <span className="text-gray-400 text-sm w-14">{item.unit}</span>
-          <span className="text-gray-400">×</span>
-          <span className={`w-24 text-right ${isSchaferVendorItem ? 'font-semibold' : ''}`}>
-            {formatCurrency(item.price)}
-          </span>
-          <span className="text-gray-400">=</span>
-          <span className="w-28 text-right font-semibold text-blue-600">
-            {formatCurrency(qty * item.price)}
-          </span>
-        </div>
-      </div>
-    );
-  };
-
-  const startCustomItem = (category: PriceItem['category']) => {
-    setCustomItemDraft({
-      category,
-      name: '',
-      quantity: 1,
-      unit: 'each',
-      price: 0,
-    });
-  };
-
-  const cancelCustomItem = () => setCustomItemDraft(null);
-
-  const addCustomItem = () => {
-    if (!customItemDraft || !customItemDraft.name.trim()) return;
-    const newItem: CustomItem = {
-      id: generateId(),
-      name: customItemDraft.name.trim(),
-      unit: customItemDraft.unit.trim() || 'each',
-      price: Number.isFinite(customItemDraft.price) ? customItemDraft.price : 0,
-      coverage: null,
-      coverageUnit: null,
-      category: customItemDraft.category,
-      proposalDescription: null,
-      isCustomItem: true,
-    };
-
-    setCustomItems(prev => [...prev, newItem]);
-    setSelectedItems(prev => Array.from(new Set([...prev, newItem.id])));
-    setItemQuantities(prev => ({
-      ...prev,
-      [newItem.id]: customItemDraft.quantity || 0,
-    }));
-    setCustomItemDraft(null);
-  };
-
-  // Load saved quotes from Supabase
-  const fetchSavedQuotes = async () => {
-    setIsLoadingQuotes(true);
-    try {
-      const quotes = await loadQuotes(user?.id);
-      setSavedQuotes(quotes);
-    } catch (error) {
-      console.error('Failed to load quotes:', error);
-      // Don't show alert on mount, only on user action
-    } finally {
-      setIsLoadingQuotes(false);
-    }
-  };
-
-  // Save current quote
-  const saveCurrentQuote = async () => {
-    if (!estimate) return;
-
-    const defaultName = `Quote #${savedQuotes.length + 1} - ${estimate.customerInfo.name || 'Customer'}`;
-    const quoteName = prompt('Enter quote name:', defaultName);
-    
-    if (!quoteName || quoteName.trim() === '') {
-      return;
-    }
-
-    setIsSavingQuote(true);
-    try {
-      // Include customer info in measurements for storage
-      const measurementsWithCustomer = {
-        ...estimate.measurements,
-        customerInfo: estimate.customerInfo,
-      };
-      
-      const estimateWithCustomerInfo = {
-        ...estimate,
-        measurements: measurementsWithCustomer,
-      };
-      
-      // Debug logging
-      console.log('Saving quote with user ID:', user?.id);
-      console.log('Full user object:', user);
-      console.log('User ID type:', typeof user?.id);
-      
-      // Validate user ID format
-      if (!user?.id) {
-        throw new Error('User is not authenticated. Please log in to save quotes.');
-      }
-      
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const isValidUUID = uuidRegex.test(user.id);
-      console.log('User ID format check:', isValidUUID ? 'Valid UUID' : 'Invalid format');
-      
-      if (!isValidUUID) {
-        console.error('Invalid user ID format:', user.id);
-        throw new Error('Invalid user ID format. Please log out and log back in.');
-      }
-      
-      const savedQuote = await saveQuote(estimateWithCustomerInfo, quoteName.trim(), user.id);
-
-      if (vendorQuotes.length > 0) {
-        await saveVendorQuotes(savedQuote.id, vendorQuotes, vendorQuoteItems);
-      }
-      alert('Quote saved successfully!');
-      await fetchSavedQuotes();
-    } catch (error) {
-      console.error('Failed to save quote:', error);
-      alert(`Failed to save quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsSavingQuote(false);
-    }
-  };
-
-  // Load a saved quote
-  const loadSavedQuote = async (quoteId: string) => {
-    try {
-      const savedQuote = await loadQuote(quoteId, user?.id);
-
-      setVendorQuotes([]);
-      setVendorQuoteItems([]);
-      
-      // Extract customer info from measurements if stored there
-      const measurements = savedQuote.measurements as any;
-      const customerInfo = measurements.customerInfo || {
-        name: measurements.fileName?.replace('Pasted image', '') || '',
-        address: '',
-        phone: '',
-      };
-      
-      // Restore measurements (without customerInfo)
-      const { customerInfo: _, ...cleanMeasurements } = measurements;
-      setMeasurements(cleanMeasurements);
-      
-      // Restore customer info
-      setCustomerInfo(customerInfo);
-
-      const restoredJobDescription = (savedQuote as any).job_description || (savedQuote as any).jobDescription || '';
-      if (restoredJobDescription) {
-        setJobDescription(restoredJobDescription);
-      }
-      analyzeJobForQuickSelections(cleanMeasurements, restoredJobDescription || jobDescription);
-
-      // Load vendor quotes tied to this estimate
-      try {
-        const { quotes, items } = await loadVendorQuotes(savedQuote.id);
-        setVendorQuotes(quotes);
-        setVendorQuoteItems(items);
-        setShowVendorBreakdown(false);
-      } catch (error) {
-        console.error('Failed to load vendor quotes:', error);
-      }
-      
-      // Restore financial settings
-      setMarginPercent(savedQuote.margin_percent);
-      setOfficeCostPercent(savedQuote.office_percent);
-      
-      // Restore sundries percent (calculate from saved estimate if available, otherwise use default)
-      // Note: We'll need to store sundriesPercent in the saved quote, but for now calculate from estimate
-      const restoredEstimateData = savedQuote as any;
-      if (restoredEstimateData.sundries_percent !== undefined) {
-        setSundriesPercent(restoredEstimateData.sundries_percent);
-      }
-      
-      // Calculate waste percent from line items (materials waste)
-      const materialsItems = savedQuote.line_items.filter(item => item.category === 'materials' || item.category === 'schafer');
-      let wastePercent = 10; // default
-      if (materialsItems.length > 0) {
-        const totalBaseQty = materialsItems.reduce((sum, item) => sum + (item.baseQuantity || item.quantity), 0);
-        const totalQty = materialsItems.reduce((sum, item) => sum + item.quantity, 0);
-        if (totalBaseQty > 0) {
-          wastePercent = ((totalQty - totalBaseQty) / totalBaseQty) * 100;
-        }
-      }
-      setWastePercent(wastePercent);
-      
-      // Restore line items and quantities
-      const restoredLineItems = savedQuote.line_items;
-      const restoredQuantities: Record<string, number> = {};
-      const restoredSelectedItems: string[] = [];
-      const restoredCustomItems: CustomItem[] = [];
-      
-      restoredLineItems.forEach(item => {
-        restoredQuantities[item.id] = item.baseQuantity || item.quantity;
-        restoredSelectedItems.push(item.id);
-        if ((item as any).isCustomItem) {
-          restoredCustomItems.push({
-            id: item.id,
-            name: item.name,
-            unit: item.unit,
-            price: item.price,
-            coverage: null,
-            coverageUnit: null,
-            category: item.category,
-            proposalDescription: item.proposalDescription ?? null,
-            isCustomItem: true,
-          });
-        }
-      });
-      
-      setItemQuantities(restoredQuantities);
-      setSelectedItems(restoredSelectedItems);
-      setCustomItems(restoredCustomItems);
-      
-      // Reconstruct estimate object
-      const byCategory = {
-        materials: restoredLineItems.filter(item => item.category === 'materials'),
-        labor: restoredLineItems.filter(item => item.category === 'labor'),
-        equipment: restoredLineItems.filter(item => item.category === 'equipment'),
-        accessories: restoredLineItems.filter(item => item.category === 'accessories'),
-        schafer: restoredLineItems.filter(item => item.category === 'schafer'),
-      };
-      
-      const totals = {
-        materials: byCategory.materials.reduce((sum, item) => sum + item.total, 0),
-        labor: byCategory.labor.reduce((sum, item) => sum + item.total, 0),
-        equipment: byCategory.equipment.reduce((sum, item) => sum + item.total, 0),
-        accessories: byCategory.accessories.reduce((sum, item) => sum + item.total, 0),
-        schafer: byCategory.schafer.reduce((sum, item) => sum + item.total, 0),
-      };
-      
-      const restoredEstimate: Estimate = {
-        lineItems: restoredLineItems,
-        byCategory,
-        totals,
-        baseCost: savedQuote.base_cost,
-        officeCostPercent: savedQuote.office_percent,
-        officeAllocation: savedQuote.office_amount,
-        totalCost: savedQuote.total_cost,
-        marginPercent: savedQuote.margin_percent,
-        wastePercent: wastePercent,
-        sundriesPercent: restoredEstimateData.sundries_percent !== undefined ? restoredEstimateData.sundries_percent : 10,
-        sundriesAmount: restoredEstimateData.sundries_amount !== undefined ? restoredEstimateData.sundries_amount : (totals.materials * 0.1),
-        sellPrice: savedQuote.sell_price,
-        grossProfit: savedQuote.gross_profit,
-        profitMargin: savedQuote.sell_price > 0 ? (savedQuote.gross_profit / savedQuote.sell_price) * 100 : 0,
-        measurements: cleanMeasurements,
-        customerInfo: customerInfo,
-        generatedAt: new Date(savedQuote.created_at).toLocaleString(),
-      };
-      
-      setEstimate(restoredEstimate);
-      setStep('estimate');
-      setShowSavedQuotes(false);
-      
-      // Trigger recalculation after all state is set to ensure waste % is applied correctly
-      setTimeout(() => {
-        calculateEstimate();
-      }, 0);
-    } catch (error) {
-      console.error('Failed to load quote:', error);
-      alert(`Failed to load quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
-  // Delete a saved quote
-  const deleteSavedQuote = async (quoteId: string, quoteName: string) => {
-    if (!confirm(`Are you sure you want to delete "${quoteName}"?`)) {
-      return;
-    }
-
-    try {
-      await deleteQuote(quoteId, user?.id);
-      await fetchSavedQuotes();
-    } catch (error) {
-      console.error('Failed to delete quote:', error);
-      alert(`Failed to delete quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
   // Handle PDF download with loading state
   const handleDownloadProposal = async () => {
     if (!estimate) return;
-    
+
     setIsGeneratingPDF(true);
     try {
-      const pdfEstimate = groupedVendorItems.length > 0 ? buildEstimateForClientPdf(estimate) : estimate;
+      const markupMultiplier = (1 + financialControls.officeCostPercent / 100) * (1 + financialControls.marginPercent / 100);
+      const pdfEstimate = vendorQuotes.groupedVendorItems.length > 0 ? buildEstimateForClientPdfWrapper(estimate, markupMultiplier) : estimate;
       const blob = await generateProposalPDF(pdfEstimate);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -3107,23 +397,24 @@ Only return the JSON, no other text.`;
 
   // Load quotes on mount
   useEffect(() => {
-    fetchSavedQuotes();
+    savedQuotes.fetchSavedQuotes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Close saved quotes dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (showSavedQuotes && !target.closest('.saved-quotes-dropdown')) {
-        setShowSavedQuotes(false);
+      if (uiState.showSavedQuotes && !target.closest('.saved-quotes-dropdown')) {
+        uiState.setShowSavedQuotes(false);
       }
     };
 
-    if (showSavedQuotes) {
+    if (uiState.showSavedQuotes) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [showSavedQuotes]);
+  }, [uiState.showSavedQuotes]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -3144,7 +435,7 @@ Only return the JSON, no other text.`;
                 <p className="text-xs text-gray-300">Roofing Estimate Calculator</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-4">
               <span className="text-sm text-gray-300 hidden sm:block">
                 {user?.email}
@@ -3159,44 +450,44 @@ Only return the JSON, no other text.`;
           </div>
         </div>
       </div>
-      
+
       {/* Navigation Bar */}
       <div className="bg-white border-b border-gray-200 sticky top-[73px] z-10">
         <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center gap-2">
               <button
-                onClick={() => setShowPrices(!showPrices)}
+                onClick={() => uiState.setShowPrices(!uiState.showPrices)}
                 className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm"
               >
                 <DollarSign className="w-4 h-4" />
                 <span className="hidden sm:inline">My Price List</span>
                 <span className="sm:hidden">Prices</span>
-                ({priceItems.length}{vendorItemCount > 0 ? ` + ${vendorItemCount} vendor` : ''})
-                {showPrices ? <ChevronUp className="w-4 h-4 hidden sm:inline" /> : <ChevronDown className="w-4 h-4 hidden sm:inline" />}
+                ({priceItems.priceItems.length}{vendorItemCount > 0 ? ` + ${vendorItemCount} vendor` : ''})
+                {uiState.showPrices ? <ChevronUp className="w-4 h-4 hidden sm:inline" /> : <ChevronDown className="w-4 h-4 hidden sm:inline" />}
               </button>
               <div className="relative saved-quotes-dropdown">
                 <button
-                  onClick={() => setShowSavedQuotes(!showSavedQuotes)}
-                  className={`flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 rounded-lg transition-colors text-sm ${showSavedQuotes ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 hover:bg-gray-200'}`}
+                  onClick={() => uiState.setShowSavedQuotes(!uiState.showSavedQuotes)}
+                  className={`flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 rounded-lg transition-colors text-sm ${uiState.showSavedQuotes ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 hover:bg-gray-200'}`}
                 >
                   <FileText className="w-4 h-4" />
                   <span className="hidden sm:inline">Saved Quotes</span>
                   <span className="sm:hidden">Quotes</span>
-                  ({savedQuotes.length})
-                  {showSavedQuotes ? <ChevronUp className="w-4 h-4 hidden sm:inline" /> : <ChevronDown className="w-4 h-4 hidden sm:inline" />}
+                  ({savedQuotes.savedQuotes.length})
+                  {uiState.showSavedQuotes ? <ChevronUp className="w-4 h-4 hidden sm:inline" /> : <ChevronDown className="w-4 h-4 hidden sm:inline" />}
                 </button>
-                {showSavedQuotes && (
+                {uiState.showSavedQuotes && (
                   <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-96 overflow-auto">
                     <div className="p-3 border-b border-gray-200">
                       <h3 className="font-semibold text-gray-900 text-sm">Saved Quotes</h3>
                     </div>
-                    {isLoadingQuotes ? (
+                    {savedQuotes.isLoadingQuotes ? (
                       <div className="p-6 text-center text-gray-500 text-sm">Loading...</div>
-                    ) : savedQuotes.length === 0 ? (
+                    ) : savedQuotes.savedQuotes.length === 0 ? (
                       <div className="p-6 text-center text-gray-500 text-sm">No saved quotes yet</div>
                     ) : (
                       <div className="divide-y divide-gray-100">
-                        {savedQuotes.map((quote) => (
+                        {savedQuotes.savedQuotes.map((quote) => (
                           <div key={quote.id} className="p-3 hover:bg-gray-50">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1 min-w-0">
@@ -3207,14 +498,14 @@ Only return the JSON, no other text.`;
                               </div>
                               <div className="flex items-center gap-1">
                                 <button
-                                  onClick={() => loadSavedQuote(quote.id)}
+                                  onClick={() => savedQuotes.loadSavedQuote(quote.id)}
                                   className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                                   title="Load quote"
                                 >
                                   <Check className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => deleteSavedQuote(quote.id, quote.name)}
+                                  onClick={() => savedQuotes.deleteSavedQuote(quote.id, quote.name)}
                                   className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
                                   title="Delete quote"
                                 >
@@ -3230,8 +521,8 @@ Only return the JSON, no other text.`;
                 )}
               </div>
               <button
-                onClick={() => setShowFinancials(!showFinancials)}
-                className={`flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 rounded-lg transition-colors text-sm ${showFinancials ? 'bg-green-100 text-green-700' : 'bg-gray-100 hover:bg-gray-200'}`}
+                onClick={() => uiState.setShowFinancials(!uiState.showFinancials)}
+                className={`flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 rounded-lg transition-colors text-sm ${uiState.showFinancials ? 'bg-green-100 text-green-700' : 'bg-gray-100 hover:bg-gray-200'}`}
               >
                 <Calculator className="w-4 h-4" />
                 <span className="hidden sm:inline">Margin & Profit</span>
@@ -3242,7 +533,7 @@ Only return the JSON, no other text.`;
         </div>
 
         {/* Financial Controls */}
-        {showFinancials && (
+        {uiState.showFinancials && (
           <div className="border-t border-gray-200 bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-3 md:py-4">
             <div className="max-w-5xl mx-auto">
               <div className="flex flex-wrap items-center gap-4 md:gap-8">
@@ -3251,8 +542,8 @@ Only return the JSON, no other text.`;
                   <div className="flex items-center bg-white rounded-lg border border-gray-200 overflow-hidden">
                     <input
                       type="number"
-                      value={wastePercent}
-                      onChange={(e) => setWastePercent(parseFloat(e.target.value) || 0)}
+                      value={financialControls.wastePercent}
+                      onChange={(e) => financialControls.setWastePercent(parseFloat(e.target.value) || 0)}
                       className="w-14 md:w-16 px-2 py-1.5 md:py-2 text-center font-semibold outline-none"
                       min="0"
                       max="50"
@@ -3266,8 +557,8 @@ Only return the JSON, no other text.`;
                   <div className="flex items-center bg-white rounded-lg border border-gray-200 overflow-hidden">
                     <input
                       type="number"
-                      value={officeCostPercent}
-                      onChange={(e) => setOfficeCostPercent(parseFloat(e.target.value) || 0)}
+                      value={financialControls.officeCostPercent}
+                      onChange={(e) => financialControls.setOfficeCostPercent(parseFloat(e.target.value) || 0)}
                       className="w-14 md:w-16 px-2 py-1.5 md:py-2 text-center font-semibold outline-none"
                       min="0"
                       max="50"
@@ -3275,14 +566,14 @@ Only return the JSON, no other text.`;
                     <span className="px-2 text-gray-400 bg-gray-50 text-sm">%</span>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-2">
                   <label className="text-sm font-medium text-gray-700">Margin</label>
                   <div className="flex items-center bg-white rounded-lg border border-gray-200 overflow-hidden">
                     <input
                       type="number"
-                      value={marginPercent}
-                      onChange={(e) => setMarginPercent(parseFloat(e.target.value) || 0)}
+                      value={financialControls.marginPercent}
+                      onChange={(e) => financialControls.setMarginPercent(parseFloat(e.target.value) || 0)}
                       className="w-14 md:w-16 px-2 py-1.5 md:py-2 text-center font-semibold outline-none"
                       min="0"
                       max="80"
@@ -3296,8 +587,8 @@ Only return the JSON, no other text.`;
                   <div className="flex items-center bg-white rounded-lg border border-gray-200 overflow-hidden">
                     <input
                       type="number"
-                      value={sundriesPercent}
-                      onChange={(e) => setSundriesPercent(parseFloat(e.target.value) || 0)}
+                      value={financialControls.sundriesPercent}
+                      onChange={(e) => financialControls.setSundriesPercent(parseFloat(e.target.value) || 0)}
                       className="w-14 md:w-16 px-2 py-1.5 md:py-2 text-center font-semibold outline-none"
                       min="0"
                       max="50"
@@ -3311,17 +602,17 @@ Only return the JSON, no other text.`;
         )}
 
       {/* Extracted Items Modal */}
-      {extractedItems && (
+      {priceItems.extractedItems && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-4 md:p-6 max-h-[85vh] overflow-auto">
             <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
               <Check className="w-5 h-5 text-green-600" />
-              Found {extractedItems.length} Items!
+              Found {priceItems.extractedItems.length} Items!
             </h3>
             <p className="text-sm text-gray-500 mb-4">Review and add to your price list</p>
 
             <div className="space-y-2 mb-6 max-h-64 md:max-h-96 overflow-auto">
-              {extractedItems.map((item, idx) => (
+              {priceItems.extractedItems.map((item, idx) => (
                 <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
                   <div className="flex-1 min-w-0">
                     <span className="font-medium text-sm block truncate">{item.name}</span>
@@ -3345,13 +636,13 @@ Only return the JSON, no other text.`;
 
             <div className="flex gap-3">
               <button
-                onClick={() => setExtractedItems(null)}
+                onClick={() => priceItems.setExtractedItems(null)}
                 className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium text-sm"
               >
                 Cancel
               </button>
               <button
-                onClick={applyExtractedPrices}
+                onClick={priceItems.applyExtractedPrices}
                 className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm"
               >
                 Add All to Price List
@@ -3362,644 +653,84 @@ Only return the JSON, no other text.`;
       )}
 
       {/* Price List Panel */}
-      {showPrices && (
-        <div className="border-b border-gray-200 bg-white">
-          <div className="max-w-5xl mx-auto px-4 py-4 md:py-6">
-            {/* Category Tabs - Scrollable on mobile */}
-            <div className="flex gap-2 mb-4 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
-              {Object.entries(CATEGORIES).map(([key, { label, icon: Icon, color }]) => (
-                <button
-                  key={key}
-                  onClick={() => setActiveCategory(key)}
-                  className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-1.5 md:py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-sm ${
-                    activeCategory === key
-                      ? key === 'schafer'
-                        ? 'bg-red-100 text-red-700 border-2 border-red-300'
-                        : `bg-${color}-100 text-${color}-700 border-2 border-${color}-300`
-                      : key === 'schafer'
-                        ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                  style={activeCategory === key ? {
-                    backgroundColor: key === 'schafer'
-                      ? '#dc2626'
-                      : color === 'blue'
-                        ? '#dbeafe'
-                        : color === 'green'
-                          ? '#dcfce7'
-                          : color === 'orange'
-                            ? '#ffedd5'
-                            : '#f3e8ff',
-                    color: key === 'schafer'
-                      ? '#ffffff'
-                      : color === 'blue'
-                        ? '#1d4ed8'
-                        : color === 'green'
-                          ? '#15803d'
-                          : color === 'orange'
-                            ? '#c2410c'
-                            : '#7e22ce',
-                  } : {}}
-                >
-                  <Icon className="w-4 h-4" />
-                  {label} ({getPriceListItems(key).length})
-                </button>
-              ))}
-            </div>
-
-            {/* Items List */}
-            <div className="bg-gray-50 rounded-xl p-3 md:p-4 max-h-64 overflow-auto">
-              {getPriceListItems(activeCategory).length === 0 ? (
-                <p className="text-center text-gray-400 py-8 text-sm">No items yet. Paste a price sheet or add manually.</p>
-              ) : (
-                <div className="space-y-2">
-                  {getPriceListItems(activeCategory).map(item => {
-                    const isVendorItem = false;
-                    return (
-                    <div key={item.id} className="flex items-center gap-2 md:gap-3 bg-white rounded-lg p-2 md:p-3 border border-gray-200">
-                      {editingItem === item.id ? (
-                        <>
-                          {/* Desktop edit layout */}
-                          <div className="hidden md:flex flex-1 items-center gap-2">
-                            <input
-                              type="text"
-                              value={item.name}
-                              onChange={(e) => updatePriceItem(item.id, { name: e.target.value })}
-                              className="flex-1 px-2 py-1 border rounded"
-                              autoFocus
-                            />
-                            <select
-                              value={item.unit}
-                              onChange={(e) => updatePriceItem(item.id, { unit: e.target.value })}
-                              className="px-2 py-1 border rounded"
-                            >
-                              {UNIT_TYPES.map(u => (
-                                <option key={u.value} value={u.value}>{u.label}</option>
-                              ))}
-                            </select>
-                            <div className="flex items-center gap-1">
-                              <span>$</span>
-                              <input
-                                type="number"
-                                value={item.price}
-                                onChange={(e) => updatePriceItem(item.id, { price: parseFloat(e.target.value) || 0 })}
-                                className="w-24 px-2 py-1 border rounded"
-                              />
-                            </div>
-                            {!isVendorItem && (
-                              <>
-                                <input
-                                  type="number"
-                                  value={item.coverage || ''}
-                                  onChange={(e) => updatePriceItem(item.id, { coverage: e.target.value ? parseFloat(e.target.value) : null })}
-                                  placeholder="Coverage"
-                                  className="w-20 px-2 py-1 border rounded text-sm"
-                                />
-                                <select
-                                  value={item.coverageUnit || ''}
-                                  onChange={(e) => updatePriceItem(item.id, { coverageUnit: e.target.value || null })}
-                                  className="px-2 py-1 border rounded text-sm"
-                                >
-                                  <option value="">Unit</option>
-                                  <option value="lf">lf</option>
-                                  <option value="sqft">sqft</option>
-                                  <option value="sq">sq</option>
-                                </select>
-                              </>
-                            )}
-                            <button
-                              onClick={() => setEditingItem(null)}
-                              className="p-1 text-green-600 hover:bg-green-50 rounded"
-                            >
-                              <Check className="w-4 h-4" />
-                            </button>
-                          </div>
-                          {!isVendorItem && (
-                            <div className="hidden md:block w-full mt-2">
-                              <label className="text-xs text-gray-600 block mb-1">Proposal Description (optional)</label>
-                              <textarea
-                                value={item.proposalDescription || ''}
-                                onChange={(e) => updatePriceItem(item.id, { proposalDescription: e.target.value || null })}
-                                placeholder="e.g., Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications"
-                                className="w-full px-2 py-1 border rounded text-sm"
-                                rows={3}
-                              />
-                            </div>
-                          )}
-                          {/* Mobile edit layout */}
-                          <div className="md:hidden flex-1 flex flex-col gap-2">
-                            <input
-                              type="text"
-                              value={item.name}
-                              onChange={(e) => updatePriceItem(item.id, { name: e.target.value })}
-                              className="flex-1 px-2 py-1 border rounded text-sm"
-                              autoFocus
-                            />
-                            <div className="flex gap-2">
-                              <select
-                                value={item.unit}
-                                onChange={(e) => updatePriceItem(item.id, { unit: e.target.value })}
-                                className="px-2 py-1 border rounded text-sm"
-                              >
-                                {UNIT_TYPES.map(u => (
-                                  <option key={u.value} value={u.value}>{u.label}</option>
-                                ))}
-                              </select>
-                              <div className="flex items-center gap-1">
-                                <span className="text-sm">$</span>
-                                <input
-                                  type="number"
-                                  value={item.price}
-                                  onChange={(e) => updatePriceItem(item.id, { price: parseFloat(e.target.value) || 0 })}
-                                  className="w-20 px-2 py-1 border rounded text-sm"
-                                />
-                              </div>
-                              <button
-                                onClick={() => setEditingItem(null)}
-                                className="p-1 text-green-600 hover:bg-green-50 rounded"
-                              >
-                                <Check className="w-4 h-4" />
-                              </button>
-                            </div>
-                            {!isVendorItem && (
-                              <>
-                                <div className="flex gap-2">
-                                  <input
-                                    type="number"
-                                    value={item.coverage || ''}
-                                    onChange={(e) => updatePriceItem(item.id, { coverage: e.target.value ? parseFloat(e.target.value) : null })}
-                                    placeholder="Coverage"
-                                    className="flex-1 px-2 py-1 border rounded text-sm"
-                                  />
-                                  <select
-                                    value={item.coverageUnit || ''}
-                                    onChange={(e) => updatePriceItem(item.id, { coverageUnit: e.target.value || null })}
-                                    className="px-2 py-1 border rounded text-sm"
-                                  >
-                                    <option value="">Unit</option>
-                                    <option value="lf">lf</option>
-                                    <option value="sqft">sqft</option>
-                                    <option value="sq">sq</option>
-                                  </select>
-                                </div>
-                                <div className="w-full mt-2">
-                                  <label className="text-xs text-gray-600 block mb-1">Proposal Description (optional)</label>
-                                  <textarea
-                                    value={item.proposalDescription || ''}
-                                    onChange={(e) => updatePriceItem(item.id, { proposalDescription: e.target.value || null })}
-                                    placeholder="e.g., Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications"
-                                    className="w-full px-2 py-1 border rounded text-sm"
-                                    rows={3}
-                                  />
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="font-medium text-sm md:text-base truncate">{item.name}</span>
-                              {isVendorItem && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
-                                  Vendor
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <span className="text-gray-400 text-sm hidden md:inline">{item.unit}</span>
-                          <span className="font-semibold text-sm md:text-base">{formatCurrency(item.price)}</span>
-                          {!isVendorItem && item.coverage && item.coverageUnit && (
-                            <span className="text-gray-400 text-xs hidden md:inline">
-                              ({item.coverage} {item.coverageUnit})
-                            </span>
-                          )}
-                          <button
-                            onClick={() => setEditingItem(item.id)}
-                            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          {!isVendorItem && (
-                            <button
-                              onClick={() => deletePriceItem(item.id)}
-                              className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-                </div>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4">
-              <button
-                onClick={addPriceItem}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium text-sm"
-              >
-                <Plus className="w-4 h-4" />
-                Add Item
-              </button>
-              
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handlePriceSheetUpload}
-                className="hidden"
-                id="price-sheet-upload"
-              />
-              <label
-                htmlFor="price-sheet-upload"
-                className={`flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium cursor-pointer text-sm ${priceSheetProcessing ? 'opacity-50 pointer-events-none' : ''}`}
-              >
-                {priceSheetProcessing ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Extracting...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4" />
-                    Paste or Upload Price Sheet
-                  </>
-                )}
-              </label>
-
-              <button
-                onClick={generateAllDescriptions}
-                disabled={isGeneratingDescriptions || priceItems.filter(item => !item.proposalDescription?.trim()).length === 0}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors text-sm"
-              >
-                <Bot className="w-4 h-4" />
-                {isGeneratingDescriptions 
-                  ? `Generating ${generationProgress?.current || 0} of ${generationProgress?.total || 0}...`
-                  : 'Generate Descriptions'
-                }
-              </button>
-            </div>
-
-            <p className="text-xs text-gray-400 mt-3 hidden sm:block">
-              💡 Tip: Copy your price sheet and press <kbd className="px-1.5 py-0.5 bg-gray-200 rounded">Ctrl+V</kbd> to auto-extract
-            </p>
-          </div>
-        </div>
+      {uiState.showPrices && (
+        <PriceListPanel
+          activeCategory={uiState.activeCategory}
+          editingItem={uiState.editingItem}
+          priceSheetProcessing={priceItems.priceSheetProcessing}
+          isGeneratingDescriptions={priceItems.isGeneratingDescriptions}
+          generationProgress={priceItems.generationProgress}
+          onCategoryChange={uiState.setActiveCategory}
+          onEditItem={uiState.setEditingItem}
+          onSaveItem={() => uiState.setEditingItem(null)}
+          onAddItem={priceItems.addPriceItem}
+          onDeleteItem={priceItems.deletePriceItem}
+          onUpdateItem={priceItems.updatePriceItem}
+          onPriceSheetUpload={imageExtraction.handlePriceSheetUpload}
+          onGenerateDescriptions={priceItems.generateAllDescriptions}
+          getPriceListItems={getPriceListItems}
+        />
       )}
 
       {/* Main Content */}
       <div className="max-w-5xl mx-auto px-4 py-6 md:py-8">
         {/* Upload Step */}
-        {step === 'upload' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-            <div
-              onDrop={handleDrop}
-              onDragOver={(e) => e.preventDefault()}
-              onClick={() => document.getElementById('file-upload').click()}
-              className="border-2 border-dashed border-gray-300 rounded-2xl p-8 md:p-10 text-center bg-white hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer"
-            >
-              <input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg"
-                onChange={handleFileUpload}
-                className="hidden"
-                id="file-upload"
-              />
-              <div className="w-14 h-14 md:w-16 md:h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Upload className="w-7 h-7 md:w-8 md:h-8 text-blue-600" />
-              </div>
-              <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-2">
-                Upload RoofScope
-              </h2>
-              <p className="text-gray-500 mb-2 text-sm md:text-base">
-                For measurements
-              </p>
-              <p className="text-xs md:text-sm text-gray-400">
-                <kbd className="px-2 py-1 bg-gray-100 rounded text-xs md:text-sm font-mono">Ctrl+V</kbd> to paste, or tap to upload
-              </p>
-            </div>
-
-            <div
-              onClick={() => document.getElementById('vendor-quote-upload').click()}
-              className="border-2 border-dashed border-gray-300 rounded-2xl p-8 md:p-10 bg-white hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer"
-            >
-              <input
-                type="file"
-                accept="application/pdf,.pdf"
-                multiple
-                onChange={handleVendorQuoteUpload}
-                className="hidden"
-                id="vendor-quote-upload"
-              />
-              <div className="text-center">
-                <div className="w-14 h-14 md:w-16 md:h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <FileText className="w-7 h-7 md:w-8 md:h-8 text-blue-600" />
-                </div>
-                <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-2">
-                  Upload Vendor Quotes
-                </h2>
-                <p className="text-gray-500 mb-2 text-sm md:text-base">
-                  Optional - Schafer, TRA, Rocky Mountain
-                </p>
-                {isExtractingVendorQuote && (
-                  <div className="flex items-center justify-center gap-2 text-sm text-blue-600">
-                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    Extracting quote...
-                  </div>
-                )}
-              </div>
-
-              {vendorQuotes.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  {vendorQuotes.map((quote) => {
-                    const itemCount = vendorQuoteItems.filter(item => item.vendor_quote_id === quote.id).length;
-                    return (
-                      <div key={quote.id} className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm text-gray-900 truncate">
-                            {formatVendorName(quote.vendor)} {quote.quote_number ? `• ${quote.quote_number}` : ''}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {itemCount} items • {formatCurrency(quote.total > 0 ? quote.total : (quote.subtotal > 0 ? quote.subtotal : 0))}
-                          </div>
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeVendorQuoteFromState(quote.id);
-                          }}
-                          className="p-1 text-red-500 hover:bg-red-50 rounded"
-                          title="Remove quote"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Processing */}
-        {isProcessing && (
-          <div className="bg-white rounded-2xl p-12 text-center">
-            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Reading Measurements...</h2>
-            <p className="text-gray-500">Extracting roof data from your image</p>
-          </div>
+        {(step === 'upload' || imageExtraction.isProcessing) && (
+          <UploadStep
+            vendorQuotes={vendorQuotes.vendorQuotes}
+            vendorQuoteItems={vendorQuotes.vendorQuoteItems}
+            isExtractingVendorQuote={vendorQuotes.isExtractingVendorQuote}
+            isProcessing={imageExtraction.isProcessing}
+            onFileUpload={imageExtraction.handleFileUpload}
+            onDrop={imageExtraction.handleDrop}
+            onVendorQuoteUpload={vendorQuotes.handleVendorQuoteUpload}
+            onRemoveVendorQuote={vendorQuotes.removeVendorQuoteFromState}
+          />
         )}
 
         {/* Review & Build Estimate */}
         {step === 'extracted' && measurements && (
           <div className="space-y-4 md:space-y-6">
-            {/* Measurements Summary */}
-            <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <h2 className="font-semibold text-gray-900">Roof Measurements</h2>
-                  {/* Upload indicators */}
-                  <div className="flex items-center gap-2">
-                    {uploadedImages.has('summary') && (
-                      <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                        <Check className="w-3 h-3" />
-                        RoofScope Summary
-                      </span>
-                    )}
-                    {uploadedImages.has('analysis') && (
-                      <span className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                        <Check className="w-3 h-3" />
-                        Roof Area Analysis
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button onClick={resetEstimator} className="text-xs md:text-sm text-gray-500 hover:text-gray-700">
-                  Upload Different
-                </button>
-              </div>
+            <ReviewStep
+              measurements={measurements}
+              customerInfo={customerInfo}
+              uploadedImages={uploadedImages}
+              vendorQuotes={vendorQuotes.vendorQuotes}
+              vendorQuoteItems={vendorQuotes.vendorQuoteItems}
+              isExtractingVendorQuote={vendorQuotes.isExtractingVendorQuote}
+              jobDescription={smartSelection.jobDescription}
+              quickSelections={smartSelection.quickSelections}
+              smartSelectionReasoning={smartSelection.smartSelectionReasoning}
+              smartSelectionWarnings={smartSelection.smartSelectionWarnings}
+              isGeneratingSelection={smartSelection.isGeneratingSelection}
+              allSelectableItemsLength={allSelectableItems.length}
+              onCustomerInfoChange={(field, value) => {
+                setCustomerInfo(prev => ({ ...prev, [field]: value }));
+              }}
+              onReset={resetEstimator}
+              onVendorQuoteUpload={vendorQuotes.handleVendorQuoteUpload}
+              onRemoveVendorQuote={vendorQuotes.removeVendorQuoteFromState}
+              onJobDescriptionChange={smartSelection.setJobDescription}
+              onToggleQuickSelection={(optionId) => {
+                smartSelection.setQuickSelections(prev => prev.map(opt => {
+                  if (opt.id === optionId) {
+                    const nextSelected = !opt.selected;
+                    smartSelection.setJobDescription(prevDesc => {
+                      const hasKeyword = prevDesc.toLowerCase().includes(opt.keyword.toLowerCase());
+                      if (!nextSelected) {
+                        return removeKeywordFromDescription(prevDesc, opt.keyword);
+                      }
+                      if (hasKeyword) return prevDesc;
+                      return prevDesc ? `${prevDesc}, ${opt.keyword}` : opt.keyword;
+                    });
+                    return { ...opt, selected: nextSelected };
+                  }
+                  return opt;
+                }));
+              }}
+              onGenerateSmartSelection={smartSelection.generateSmartSelection}
+            />
 
-              {/* Hint for additional image */}
-              {uploadedImages.has('summary') && !uploadedImages.has('analysis') && (
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-700 flex items-center gap-2">
-                    <Upload className="w-4 h-4" />
-                    <span>Paste your <strong>Roof Area Analysis</strong> image to extract slope breakdown (steep vs standard squares)</span>
-                  </p>
-                </div>
-              )}
-
-              {/* Vendor Quote Upload */}
-              <div
-                onClick={() => document.getElementById('vendor-quote-upload').click()}
-                className="border-2 border-dashed border-gray-200 rounded-2xl p-4 md:p-6 bg-white hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer mb-4"
-              >
-                <input
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  multiple
-                  onChange={handleVendorQuoteUpload}
-                  className="hidden"
-                  id="vendor-quote-upload"
-                />
-                <div className="text-center">
-                  <div className="w-12 h-12 md:w-14 md:h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <FileText className="w-6 h-6 md:w-7 md:h-7 text-blue-600" />
-                  </div>
-                  <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-1">
-                    Upload Vendor Quotes
-                  </h3>
-                  <p className="text-gray-500 mb-2 text-sm">
-                    Optional - Schafer, TRA, Rocky Mountain
-                  </p>
-                  {isExtractingVendorQuote && (
-                    <div className="flex items-center justify-center gap-2 text-sm text-blue-600">
-                      <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                      Extracting quote...
-                    </div>
-                  )}
-                </div>
-
-                {vendorQuotes.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {vendorQuotes.map((quote) => {
-                      const itemCount = vendorQuoteItems.filter(item => item.vendor_quote_id === quote.id).length;
-                      return (
-                        <div key={quote.id} className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
-                          <div className="min-w-0">
-                            <div className="font-medium text-sm text-gray-900 truncate">
-                              {formatVendorName(quote.vendor)} {quote.quote_number ? `• ${quote.quote_number}` : ''}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {itemCount} items • {formatCurrency(quote.total > 0 ? quote.total : (quote.subtotal > 0 ? quote.subtotal : 0))}
-                            </div>
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeVendorQuoteFromState(quote.id);
-                            }}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            title="Remove quote"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Customer Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mb-4 md:mb-6 p-3 md:p-4 bg-gray-50 rounded-xl">
-                <input
-                  type="text"
-                  value={customerInfo.name}
-                  onChange={(e) => setCustomerInfo(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Customer Name"
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                />
-                <input
-                  type="text"
-                  value={customerInfo.address}
-                  onChange={(e) => setCustomerInfo(prev => ({ ...prev, address: e.target.value }))}
-                  placeholder="Address"
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                />
-                <input
-                  type="text"
-                  value={customerInfo.phone}
-                  onChange={(e) => setCustomerInfo(prev => ({ ...prev, phone: e.target.value }))}
-                  placeholder="Phone"
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                />
-              </div>
-
-              {/* Quick Selection Options */}
-              {measurements && quickSelections.length > 0 && (
-                <div className="bg-white rounded-2xl p-4 border border-gray-200 mb-4 md:mb-6">
-                  <h3 className="font-medium text-gray-900 mb-3 text-sm">Quick Options</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {quickSelections.map(option => (
-                      <button
-                        key={option.id}
-                        onClick={() => {
-                          const nextSelected = !option.selected;
-                          setQuickSelections(prev => prev.map(opt => (
-                            opt.id === option.id ? { ...opt, selected: nextSelected } : opt
-                          )));
-
-                          setJobDescription(prev => {
-                            const hasKeyword = prev.toLowerCase().includes(option.keyword.toLowerCase());
-                            if (!nextSelected) {
-                              return removeKeywordFromDescription(prev, option.keyword);
-                            }
-                            if (hasKeyword) return prev;
-                            return prev ? `${prev}, ${option.keyword}` : option.keyword;
-                          });
-                        }}
-                        className={`
-                          px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
-                          flex items-center gap-1.5
-                          ${option.selected
-                            ? 'bg-blue-600 text-white'
-                            : option.suggested
-                              ? 'bg-amber-50 border-2 border-amber-300 text-amber-800'
-                              : 'bg-gray-100 border border-gray-300 text-gray-700 hover:bg-gray-200'
-                          }
-                        `}
-                      >
-                        <span>{option.icon}</span>
-                        <span>{option.label}</span>
-                        {option.suggested && !option.selected && (
-                          <span className="text-xs opacity-75">(Suggested)</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  {quickSelections.some(option => option.suggested && !option.selected) && (
-                    <p className="text-xs text-gray-500 mt-2">
-                      💡 Amber buttons are AI suggestions based on job measurements
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Measurements Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-                {[
-                  { key: 'total_squares', label: 'Squares', unit: 'sq' },
-                  { key: 'predominant_pitch', label: 'Pitch', unit: '' },
-                  { key: 'ridge_length', label: 'Ridge', unit: 'ft' },
-                  { key: 'hip_length', label: 'Hips', unit: 'ft' },
-                  { key: 'valley_length', label: 'Valleys', unit: 'ft' },
-                  { key: 'eave_length', label: 'Eaves', unit: 'ft' },
-                  { key: 'rake_length', label: 'Rakes', unit: 'ft' },
-                  { key: 'penetrations', label: 'Penetrations', unit: '' },
-                ].map(({ key, label, unit }) => (
-                  <div key={key} className="bg-gray-50 rounded-lg p-2 md:p-3">
-                    <div className="text-xs text-gray-500">{label}</div>
-                    <div className="text-lg md:text-xl font-bold">
-                      {measurements[key]} <span className="text-xs md:text-sm font-normal text-gray-400">{unit}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Job Description and Smart Selection */}
-            <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
-              <h2 className="font-semibold text-gray-900 mb-4">Job Description</h2>
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
-                  placeholder="Describe this job (e.g., 'Brava tile, tear-off, Hugo's crew, copper valleys')"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
-                />
-                <button
-                  onClick={() => generateSmartSelection()}
-                  disabled={!jobDescription.trim() || allSelectableItems.length === 0 || isGeneratingSelection}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium rounded-lg flex items-center justify-center gap-2 text-sm"
-                >
-                  {isGeneratingSelection ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Generating Selection...
-                    </>
-                  ) : (
-                    <>
-                      <Calculator className="w-4 h-4" />
-                      Generate Smart Selection
-                    </>
-                  )}
-                </button>
-                {smartSelectionReasoning && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm font-medium text-blue-900 mb-1">AI Reasoning:</p>
-                    <p className="text-sm text-blue-700">{smartSelectionReasoning}</p>
-                  </div>
-                )}
-                {smartSelectionWarnings.length > 0 && (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                    <p className="text-sm font-medium text-amber-900 mb-1">Warnings:</p>
-                    <ul className="list-disc list-inside text-sm text-amber-700 space-y-1">
-                      {smartSelectionWarnings.map((warning, idx) => (
-                        <li key={idx}>{warning}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
 
             {/* Line Item Builder */}
             <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
@@ -4009,558 +740,83 @@ Only return the JSON, no other text.`;
                 <div className="text-center py-8 text-gray-400">
                   <p className="mb-2 text-sm">No price items or vendor items yet.</p>
                   <button
-                    onClick={() => setShowPrices(true)}
+                    onClick={() => uiState.setShowPrices(true)}
                     className="text-blue-600 hover:text-blue-700 font-medium text-sm"
                   >
                     Add your prices first →
                   </button>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  {/* Selected Items - Green Box */}
-                  {(() => {
-                    const selectedItemsList = allSelectableItems.filter(item => selectedItems.includes(item.id));
-                    const selectedByCategory = Object.entries(CATEGORIES).map(([catKey, { label, icon: Icon }]) => {
-                      const items = selectedItemsList.filter(item => item.category === catKey);
-                      return { catKey, label, icon: Icon, items };
-                    }).filter(({ items }) => items.length > 0);
-
-                    if (selectedItemsList.length === 0) {
-                      return null;
+                <EstimateBuilder
+                  allSelectableItems={allSelectableItems}
+                  selectedItems={selectedItems}
+                  itemQuantities={itemQuantities}
+                  collapsedSections={uiState.collapsedSections}
+                  customItemDraft={customItems.customItemDraft}
+                  sectionSort={uiState.sectionSort}
+                  vendorItemMap={vendorQuotes.vendorItemMap}
+                  vendorQuoteMap={vendorQuotes.vendorQuoteMap}
+                  onToggleSelection={(itemId, selected) => {
+                    if (selected) {
+                      setSelectedItems(prev => [...prev, itemId]);
+                      const isVendorItem = vendorQuotes.vendorItemMap.has(itemId);
+                      if (isVendorItem) {
+                        const vendorItem = vendorQuotes.vendorItemMap.get(itemId);
+                        setItemQuantities(prev => ({
+                          ...prev,
+                          [itemId]: prev[itemId] ?? vendorItem?.quantity ?? 0,
+                        }));
+                      }
+                    } else {
+                      setSelectedItems(prev => prev.filter(id => id !== itemId));
                     }
-
-                    return (
-                      <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 md:p-6">
-                        <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                          <Check className="w-5 h-5" />
-                          In This Estimate ({selectedItemsList.length})
-                        </h3>
-                        <div className="space-y-4">
-                          {selectedByCategory.map(({ catKey, label, icon: Icon, items }) => (
-                            <div key={catKey}>
-                              <div className="flex items-center gap-2 mb-2">
-                                <Icon className="w-4 h-4 text-[#00293f]" />
-                                <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                                  {label}
-                                </h4>
-                              </div>
-                              <div className="space-y-2">
-                                {items.map(item => (
-                                  <React.Fragment key={item.id}>
-                                    {renderItemRow(item, true)}
-                                  </React.Fragment>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Available Items */}
-                  <div>
-                    <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-4">Available Items</h3>
-                    <div className="space-y-4">
-                      {Object.entries(CATEGORIES).map(([catKey, { label, icon: Icon }]) => {
-                        const allItems = getEstimateCategoryItems(catKey);
-                        const availableItems = allItems.filter(item => !selectedItems.includes(item.id));
-                        const isCollapsed = collapsedSections[catKey] ?? false;
-                        const itemCount = availableItems.length;
-
-                        if (availableItems.length === 0 && allItems.length === 0) {
-                          return null;
-                        }
-
-                        return (
-                          <div key={catKey}>
-                            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                              <button
-                                onClick={() => setCollapsedSections(prev => ({ ...prev, [catKey]: !prev[catKey] }))}
-                                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                              >
-                                {isCollapsed ? (
-                                  <ChevronRight className="w-5 h-5 text-[#00293f]" />
-                                ) : (
-                                  <ChevronDown className="w-5 h-5 text-[#00293f]" />
-                                )}
-                                <Icon className="w-5 h-5 text-[#00293f]" />
-                                <h3 className="text-lg md:text-xl font-bold text-[#00293f] uppercase tracking-wide">
-                                  {label} ({itemCount})
-                                </h3>
-                              </button>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => startCustomItem(catKey as PriceItem['category'])}
-                                  className="p-1 rounded text-gray-500 hover:bg-gray-100"
-                                  title="Add custom item"
-                                >
-                                  <Plus className="w-4 h-4" />
-                                </button>
-                                {(['name', 'price', 'total'] as const).map((key) => {
-                                  const sortState = sectionSort[catKey];
-                                  const isActive = sortState?.key === key;
-                                  const arrow = isActive ? (sortState.direction === 'desc' ? '↓' : '↑') : '';
-                                  return (
-                                    <button
-                                      key={key}
-                                      onClick={() => toggleSectionSort(catKey, key)}
-                                      className={`text-xs px-2 py-1 rounded border transition-colors ${
-                                        isActive
-                                          ? 'bg-blue-500 text-white border-blue-500'
-                                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                                      }`}
-                                    >
-                                      {key === 'name' ? 'Name' : key === 'price' ? 'Price' : 'Total'} {arrow}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {customItemDraft?.category === catKey && (
-                              <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                                  <input
-                                    type="text"
-                                    value={customItemDraft.name}
-                                    onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, name: e.target.value } : prev)}
-                                    placeholder="Item name"
-                                    className="px-2 py-1 border border-gray-200 rounded text-sm"
-                                  />
-                                  <input
-                                    type="number"
-                                    value={customItemDraft.quantity}
-                                    onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, quantity: parseFloat(e.target.value) || 0 } : prev)}
-                                    placeholder="Qty"
-                                    className="px-2 py-1 border border-gray-200 rounded text-sm"
-                                  />
-                                  <input
-                                    type="text"
-                                    value={customItemDraft.unit}
-                                    onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, unit: e.target.value } : prev)}
-                                    placeholder="Unit"
-                                    className="px-2 py-1 border border-gray-200 rounded text-sm"
-                                  />
-                                  <input
-                                    type="number"
-                                    value={customItemDraft.price}
-                                    onChange={(e) => setCustomItemDraft(prev => prev ? { ...prev, price: parseFloat(e.target.value) || 0 } : prev)}
-                                    placeholder="Unit price"
-                                    className="px-2 py-1 border border-gray-200 rounded text-sm"
-                                  />
-                                </div>
-                                <div className="mt-2 flex items-center gap-2">
-                                  <button
-                                    onClick={addCustomItem}
-                                    className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm"
-                                  >
-                                    Add
-                                  </button>
-                                  <button
-                                    onClick={cancelCustomItem}
-                                    className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-sm"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                            {availableItems.length === 0 ? (
-                              <div className="text-sm text-gray-400 py-3">
-                                No available items in this section.
-                              </div>
-                            ) : !isCollapsed ? (
-                              <div className="space-y-2">
-                                {availableItems.map(item => (
-                                  <React.Fragment key={item.id}>
-                                    {renderItemRow(item, false)}
-                                  </React.Fragment>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
+                  }}
+                  onQuantityChange={(itemId, quantity) => {
+                    setItemQuantities(prev => ({ ...prev, [itemId]: quantity }));
+                  }}
+                  onToggleCollapse={(sectionKey) => {
+                    uiState.setCollapsedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
+                  }}
+                  onStartCustomItem={customItems.startCustomItem}
+                  onCancelCustomItem={customItems.cancelCustomItem}
+                  onAddCustomItem={customItems.addCustomItem}
+                  onUpdateCustomItemDraft={(updates) => {
+                    customItems.setCustomItemDraft(prev => prev ? { ...prev, ...updates } : prev);
+                  }}
+                  onToggleSectionSort={toggleSectionSort}
+                  onCalculateEstimate={calculateEstimate}
+                  getEstimateCategoryItems={getEstimateCategoryItems}
+                />
               )}
             </div>
-
-            {/* Generate Button */}
-            {allSelectableItems.length > 0 && (
-              <button
-                onClick={calculateEstimate}
-                disabled={selectedItems.length === 0}
-                className="w-full py-3 md:py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
-              >
-                <Calculator className="w-5 h-5" />
-                Generate Estimate ({selectedItems.length} items)
-              </button>
-            )}
           </div>
         )}
 
         {/* Final Estimate */}
         {step === 'estimate' && estimate && (
-          <div className="space-y-4 md:space-y-6">
-            {/* Validation Warnings */}
-            {validationWarnings.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="font-medium text-amber-800 mb-2">
-                      ⚠️ {validationWarnings.length} issue{validationWarnings.length > 1 ? 's' : ''} to review:
-                    </div>
-                    <ul className="space-y-1">
-                      {validationWarnings.map(warning => (
-                        <li key={warning.id} className="text-amber-700 text-sm">
-                          • {warning.message}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <button 
-                    onClick={() => setValidationWarnings([])}
-                    className="ml-4 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Download Proposal PDF Button */}
-            <div className="flex justify-end">
-              <button
-                onClick={handleDownloadProposal}
-                disabled={isGeneratingPDF}
-                className={`flex items-center gap-2 px-4 py-2 rounded text-white transition-colors ${
-                  isGeneratingPDF 
-                    ? 'bg-gray-400 cursor-not-allowed' 
-                    : 'bg-green-600 hover:bg-green-700'
-                }`}
-              >
-                {isGeneratingPDF ? 'Generating Proposal...' : '📄 Download Proposal PDF'}
-              </button>
-            </div>
-
-            {/* Profit Summary Card */}
-            <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-4 md:p-6 text-white">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-                  <div>
-                    <p className="text-green-100 text-xs md:text-sm">Total Cost</p>
-                    <p className="text-lg md:text-2xl font-bold">{formatCurrency(estimate.totalCost)}</p>
-                  </div>
-                  <div>
-                    <p className="text-green-100 text-xs md:text-sm">Sell Price</p>
-                    <p className="text-lg md:text-2xl font-bold">{formatCurrency(estimate.sellPrice)}</p>
-                  </div>
-                  <div>
-                    <p className="text-green-100 text-xs md:text-sm">Net Profit</p>
-                    <p className="text-lg md:text-2xl font-bold">{formatCurrency(estimate.grossProfit)}</p>
-                  </div>
-                  <div>
-                    <p className="text-green-100 text-xs md:text-sm">Profit Margin</p>
-                    <p className="text-lg md:text-2xl font-bold">{estimate.profitMargin.toFixed(1)}%</p>
-                  </div>
-                </div>
-              </div>
-
-            {vendorQuotes.length > 0 && (
-              <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
-                <button
-                  onClick={() => setShowVendorBreakdown(prev => !prev)}
-                  className="w-full flex items-center justify-between text-left"
-                >
-                  <div>
-                    <h3 className="text-sm md:text-base font-semibold text-gray-900">Vendor Breakdown</h3>
-                    <p className="text-xs md:text-sm text-gray-500">Quote details and vendor totals</p>
-                  </div>
-                  {showVendorBreakdown ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-                </button>
-                {showVendorBreakdown && (
-                  <div className="mt-4 space-y-2">
-                    {vendorQuotes.map(quote => (
-                      <div key={quote.id} className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-lg">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-gray-900 truncate">
-                            {formatVendorName(quote.vendor)} {quote.quote_number ? `• ${quote.quote_number}` : ''}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {quote.quote_date || 'Date unknown'}
-                          </div>
-                        </div>
-                        <div className="text-sm font-semibold text-gray-900">
-                          {formatCurrency(quote.total > 0 ? quote.total : (quote.subtotal > 0 ? quote.subtotal : 0))}
-                        </div>
-                      </div>
-                    ))}
-                    <div className="flex items-center justify-between pt-2 border-t border-gray-200 text-sm font-semibold">
-                      <span>Total Vendor Cost</span>
-                      <span>
-                        {formatCurrency(
-                          vendorQuotes.reduce((sum, quote) => sum + (quote.total > 0 ? quote.total : (quote.subtotal > 0 ? quote.subtotal : 0)), 0)
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
-                <div>
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">Roofing Estimate</h2>
-                  <p className="text-gray-500 text-sm">
-                    {estimate.customerInfo.name || 'Customer'} • {estimate.customerInfo.address || 'Address'}
-                  </p>
-                  <p className="text-xs md:text-sm text-gray-400">{estimate.generatedAt}</p>
-                </div>
-                <div className="text-left sm:text-right">
-                  <p className="text-xs md:text-sm text-gray-500">Quote to Customer</p>
-                  <p className="text-2xl md:text-4xl font-bold text-gray-900">{formatCurrency(estimate.sellPrice)}</p>
-                </div>
-              </div>
-
-              {/* Line Items by Category - Collapsible Sections */}
-              {Object.entries(CATEGORIES).map(([catKey, { label }]) => {
-                const items = estimate.byCategory[catKey];
-                if (!items || items.length === 0) return null;
-                const isExpanded = expandedSections.has(catKey);
-
-                return (
-                  <div key={catKey} className="mb-4 md:mb-6">
-                    <button
-                      onClick={() => toggleSection(catKey)}
-                      className="w-full flex items-center justify-between py-2 px-3 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors mb-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        {isExpanded ? (
-                          <ChevronDown className="w-4 h-4 text-gray-500" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-gray-500" />
-                        )}
-                        <h3 className="text-xs md:text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                          {label} ({items.length} {items.length === 1 ? 'item' : 'items'})
-                        </h3>
-                      </div>
-                      <span className="font-bold text-sm">{formatCurrency(estimate.totals[catKey])}</span>
-                    </button>
-                    
-                    {isExpanded && (
-                      <div className="mt-2 space-y-2">
-                        {items.map((item, idx) => {
-                          const vendorItem = vendorItemMap.get(item.id);
-                          const vendorQuote = vendorItem ? vendorQuoteMap.get(vendorItem.vendor_quote_id) : null;
-                          const displayPrice = vendorItem ? (vendorItem.price || 0) : item.price;
-                          const displayTotal = vendorItem ? (item.quantity * displayPrice) : item.total;
-
-                          return (
-                            <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium text-sm block truncate">{item.name}</span>
-                                  {vendorItem && vendorQuote && (
-                                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
-                                      {formatVendorName(vendorQuote.vendor)} Vendor
-                                    </span>
-                                  )}
-                                </div>
-                                <span className="text-gray-400 text-xs">
-                                  {item.quantity} {item.unit} × {formatCurrency(displayPrice)}
-                                  {item.wasteAdded > 0 && (
-                                    <span className="text-orange-500 ml-1">(+{item.wasteAdded} waste)</span>
-                                  )}
-                                </span>
-                              </div>
-                              <span className="font-semibold text-sm ml-2">{formatCurrency(displayTotal)}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* Financial Summary */}
-              <div className="border-t-2 border-gray-200 pt-4 mt-4 md:mt-6 space-y-2 md:space-y-3 text-sm">
-                <div className="flex justify-between text-gray-600">
-                  <span>Materials Subtotal ({estimate.wastePercent}% waste)</span>
-                  <span>{formatCurrency(estimate.totals.materials)}</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Labor Subtotal</span>
-                  <span>{formatCurrency(estimate.totals.labor)}</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Equipment Subtotal</span>
-                  <span>{formatCurrency(estimate.totals.equipment)}</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Accessories Subtotal</span>
-                  <span>{formatCurrency(estimate.totals.accessories)}</span>
-                </div>
-                {vendorTaxFeesTotal > 0 && (
-                  <div className="flex justify-between text-gray-600">
-                    <span>Vendor Tax & Fees (included)</span>
-                    <span>{formatCurrency(vendorTaxFeesTotal)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-gray-600">
-                  <span>Materials Allowance ({estimate.sundriesPercent}%)</span>
-                  <span>{formatCurrency(estimate.sundriesAmount)}</span>
-                </div>
-                <div className="flex justify-between font-medium border-t border-gray-200 pt-2 md:pt-3">
-                  <span>Base Cost</span>
-                  <span>{formatCurrency(estimate.baseCost)}</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Office ({estimate.officeCostPercent}%)</span>
-                  <span>+{formatCurrency(estimate.officeAllocation)}</span>
-                </div>
-                <div className="flex justify-between font-medium border-t border-gray-200 pt-2 md:pt-3">
-                  <span>Total Cost</span>
-                  <span>{formatCurrency(estimate.totalCost)}</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Margin ({estimate.marginPercent}%)</span>
-                  <span>+{formatCurrency(estimate.grossProfit)}</span>
-                </div>
-                <div className="flex justify-between items-center border-t-2 border-gray-900 pt-3 md:pt-4">
-                  <div>
-                    <p className="text-lg md:text-xl font-bold">Customer Price</p>
-                    <p className="text-xs md:text-sm text-gray-500">
-                      {estimate.measurements.total_squares} sq • {estimate.measurements.predominant_pitch}
-                    </p>
-                  </div>
-                  <p className="text-2xl md:text-3xl font-bold">{formatCurrency(estimate.sellPrice)}</p>
-                </div>
-              </div>
-
-              {/* Profit Breakdown (Internal Only) */}
-              {(
-                <div className="mt-4 md:mt-6 p-3 md:p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                  <div className="flex items-center gap-2 text-amber-800 mb-2">
-                    <AlertCircle className="w-4 h-4" />
-                    <span className="font-semibold text-xs md:text-sm">Internal Only</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 md:gap-4 text-xs md:text-sm">
-                    <div>
-                      <span className="text-amber-700 block">Cost</span>
-                      <span className="font-bold text-amber-900">{formatCurrency(estimate.totalCost)}</span>
-                    </div>
-                    <div>
-                      <span className="text-amber-700 block">Profit</span>
-                      <span className="font-bold text-green-700">{formatCurrency(estimate.grossProfit)}</span>
-                    </div>
-                    <div>
-                      <span className="text-amber-700 block">Margin</span>
-                      <span className="font-bold text-green-700">{estimate.profitMargin.toFixed(1)}%</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Profit Split Panel (Internal Only) */}
-              {(() => {
-                const salesCommission = estimate.grossProfit * 0.5;
-                const ownerProfit = estimate.grossProfit * 0.5;
-                const trueOwnerMargin = estimate.sellPrice > 0 ? (ownerProfit / estimate.sellPrice) * 100 : 0;
-                const marginColor = trueOwnerMargin >= 20 ? 'text-green-600' : trueOwnerMargin >= 15 ? 'text-yellow-600' : 'text-red-600';
-                
-                return (
-                  <div className="mt-4 md:mt-6 p-4 md:p-6 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl">
-                    <div className="flex items-center gap-2 text-emerald-800 mb-4">
-                      <span className="text-lg">💰</span>
-                      <span className="font-semibold text-sm md:text-base">Profit Split (50/50)</span>
-                    </div>
-                    <div className="space-y-2 text-xs md:text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-700">Sell Price:</span>
-                        <span className="font-semibold text-gray-900">{formatCurrency(estimate.sellPrice)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-700">Total Cost:</span>
-                        <span className="font-semibold text-gray-900">-{formatCurrency(estimate.totalCost)}</span>
-                      </div>
-                      <div className="border-t border-emerald-200 my-2"></div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-700 font-medium">Net Profit:</span>
-                        <span className="font-bold text-gray-900">{formatCurrency(estimate.grossProfit)}</span>
-                      </div>
-                      <div className="mt-3 space-y-1">
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-700">Sales Commission:</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-gray-900">{formatCurrency(salesCommission)}</span>
-                            <span className="text-gray-500 text-xs">(50%)</span>
-                          </div>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-700">Owner Profit:</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-gray-900">{formatCurrency(ownerProfit)}</span>
-                            <span className="text-gray-500 text-xs">(50%)</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="border-t border-emerald-200 my-2"></div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-700 font-medium">TRUE Owner Margin:</span>
-                        <div className="flex items-center gap-2">
-                          <span className={`font-bold text-lg ${marginColor}`}>
-                            {trueOwnerMargin.toFixed(1)}%
-                          </span>
-                          <span className={`${marginColor}`}>●</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
-              <button
-                onClick={() => {
-                  setStep('extracted');
-                  setValidationWarnings([]);
-                }}
-                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm md:text-base"
-              >
-                Edit Estimate
-              </button>
-              <button
-                onClick={saveCurrentQuote}
-                disabled={isSavingQuote}
-                className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-semibold rounded-xl flex items-center justify-center gap-2 text-sm md:text-base"
-              >
-                {isSavingQuote ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <FileText className="w-5 h-5" />
-                    Save Quote
-                  </>
-                )}
-              </button>
-              <button
-                onClick={resetEstimator}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 text-sm md:text-base"
-              >
-                <Upload className="w-5 h-5" />
-                New Estimate
-              </button>
-            </div>
-          </div>
+          <EstimateView
+            estimate={estimate}
+            validationWarnings={validationWarnings}
+            isGeneratingPDF={isGeneratingPDF}
+            isSavingQuote={savedQuotes.isSavingQuote}
+            expandedSections={uiState.expandedSections}
+            showVendorBreakdown={vendorQuotes.showVendorBreakdown}
+            vendorQuotes={vendorQuotes.vendorQuotes}
+            vendorQuoteItems={vendorQuotes.vendorQuoteItems}
+            vendorItemMap={vendorQuotes.vendorItemMap}
+            vendorQuoteMap={vendorQuotes.vendorQuoteMap}
+            vendorTaxFeesTotal={vendorQuotes.vendorTaxFeesTotal}
+            onDismissWarnings={() => setValidationWarnings([])}
+            onDownloadProposal={handleDownloadProposal}
+            onToggleSection={toggleSection}
+            onToggleVendorBreakdown={() => vendorQuotes.setShowVendorBreakdown(prev => !prev)}
+            onEditEstimate={() => {
+              setStep('extracted');
+              setValidationWarnings([]);
+            }}
+            onSaveQuote={savedQuotes.saveCurrentQuote}
+            onReset={resetEstimator}
+          />
         )}
       </div>
     </div>
