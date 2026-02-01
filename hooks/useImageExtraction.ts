@@ -12,6 +12,7 @@ interface UseImageExtractionProps {
   onSetExtractedItems: (items: PriceItem[] | null) => void;
   onSetPriceSheetProcessing: (processing: boolean) => void;
   onAnalyzeJobForQuickSelections: (m: Measurements, descriptionOverride?: string) => void;
+  onApplyAutoSelection: (m: Measurements) => void;
   onExtractVendorQuoteFromPdf: (file: File) => Promise<{ quote: any; items: any[] }>;
   onSetVendorQuotes: (quotes: any[] | ((prev: any[]) => any[])) => void;
   onSetVendorQuoteItems: (items: any[] | ((prev: any[]) => any[])) => void;
@@ -30,6 +31,7 @@ export const useImageExtraction = ({
   onSetExtractedItems,
   onSetPriceSheetProcessing,
   onAnalyzeJobForQuickSelections,
+  onApplyAutoSelection,
   onExtractVendorQuoteFromPdf,
   onSetVendorQuotes,
   onSetVendorQuoteItems,
@@ -219,19 +221,21 @@ Use 0 for any values not visible. Use empty string for address fields if not vis
           }));
         }
         const newMeasurements = { ...extracted, fileName: file.name || 'Pasted image' };
-        
+
         if (measurements) {
           // Merge with existing measurements
           const merged = mergeMeasurements(measurements, newMeasurements);
           onSetMeasurements(merged);
           onAnalyzeJobForQuickSelections(merged);
+          onApplyAutoSelection(merged);
         } else {
           // Set initial measurements
           onSetMeasurements(newMeasurements);
           onAnalyzeJobForQuickSelections(newMeasurements);
+          onApplyAutoSelection(newMeasurements);
           onSetStep('extracted');
         }
-        
+
         onSetUploadedImages(prev => new Set(Array.from(prev).concat('summary')));
       } else {
         throw new Error('Could not parse measurements');

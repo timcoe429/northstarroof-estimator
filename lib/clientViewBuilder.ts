@@ -98,9 +98,14 @@ export const buildClientViewSections = ({
   groupableItems.forEach(item => {
     const itemName = item.name.toLowerCase();
     let assigned = false;
-    
+
+    // Check panels kit
+    if (kits.panels.keywords.some(kw => itemName.includes(kw))) {
+      kits.panels.items.push(item);
+      assigned = true;
+    }
     // Check flashing kit
-    if (kits.flashing.keywords.some(kw => itemName.includes(kw))) {
+    else if (kits.flashing.keywords.some(kw => itemName.includes(kw))) {
       kits.flashing.items.push(item);
       assigned = true;
     }
@@ -114,7 +119,7 @@ export const buildClientViewSections = ({
       kits.sealants.items.push(item);
       assigned = true;
     }
-    
+
     // If no match, put in "Additional Materials"
     if (!assigned) {
       kits.other.items.push(item);

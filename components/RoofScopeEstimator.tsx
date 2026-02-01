@@ -13,6 +13,7 @@ import { fileToBase64, generateId, normalizeVendor, formatVendorName, toNumber, 
 import { matchSchaferDescription } from '@/lib/schaferMatching';
 import { useEstimateCalculation } from '@/hooks/useEstimateCalculation';
 import { buildClientViewSections, buildEstimateForClientPdf, copyClientViewToClipboard as copyClientViewToClipboardUtil } from '@/lib/clientViewBuilder';
+import { applyAutoSelectionRules } from '@/lib/autoSelectionRules';
 import { usePriceItems } from '@/hooks/usePriceItems';
 import { useVendorQuotes } from '@/hooks/useVendorQuotes';
 import { useImageExtraction } from '@/hooks/useImageExtraction';
@@ -112,6 +113,85 @@ export default function RoofScopeEstimator() {
     },
   });
 
+  // Auto-selection callback - triggers after RoofScope upload
+  const handleApplyAutoSelection = useCallback((m: Measurements) => {
+    // Only auto-select if we have price items available
+    if (allSelectableItems.length === 0) {
+      return;
+    }
+
+    try {
+      const result = applyAutoSelectionRules({
+        jobDescription: smartSelection.jobDescription,
+        availablePriceItems: allSelectableItems,
+        vendorQuotes: vendorQuotes.vendorQuotes,
+        vendorQuoteItems: vendorQuotes.vendorQuoteItems,
+        selectedLaborItems: selectedItems.filter(id => {
+          const item = allSelectableItems.find(i => i.id === id);
+          return item?.category === 'labor';
+        }),
+      });
+
+      // Calculate quantities for auto-selected items
+      const autoSelectedQuantities: Record<string, number> = {};
+      result.autoSelectedItemIds.forEach(itemId => {
+        const item = allSelectableItems.find(i => i.id === itemId);
+        if (!item) return;
+
+        const itemName = item.name.toLowerCase();
+        let qty = 0;
+
+        // Equipment items: Porto Potty, Rolloff/Dumpster = 1
+        if (itemName.includes('porto') || itemName.includes('porta potty') ||
+            itemName.includes('rolloff') || itemName.includes('dumpster') ||
+            itemName.includes('landfill') || itemName.includes('overnights')) {
+          qty = 1;
+        }
+        // Materials with coverage: calculate based on roof size
+        else if (item.coverage && item.coverageUnit) {
+          const coverage = typeof item.coverage === 'string' ? parseFloat(item.coverage) : item.coverage;
+          const coverageUnit = item.coverageUnit.toLowerCase();
+
+          if (coverageUnit === 'sq') {
+            // Coverage in squares
+            qty = Math.ceil(m.total_squares / coverage);
+          } else if (coverageUnit === 'sqft') {
+            // Coverage in square feet
+            qty = Math.ceil((m.total_squares * 100) / coverage);
+          } else if (coverageUnit === 'lf') {
+            // Linear coverage - use perimeter as default
+            const perimeter = (m.eave_length || 0) + (m.rake_length || 0);
+            qty = Math.ceil(perimeter / coverage);
+          }
+        }
+        // Default to 1 for other items
+        else {
+          qty = 1;
+        }
+
+        autoSelectedQuantities[itemId] = qty;
+      });
+
+      // Merge auto-selected items with any existing selections (e.g., from vendor quotes)
+      setSelectedItems(prev => {
+        const combined = [...prev, ...result.autoSelectedItemIds];
+        return Array.from(new Set(combined)); // Remove duplicates
+      });
+
+      // Merge auto-selected quantities with existing quantities
+      setItemQuantities(prev => ({
+        ...prev,
+        ...autoSelectedQuantities,
+      }));
+
+      console.log('Auto-selection applied:', result.appliedRules);
+      console.log('Auto-selected quantities:', autoSelectedQuantities);
+    } catch (error) {
+      console.error('Auto-selection error:', error);
+      // Don't alert user - auto-selection is optional enhancement
+    }
+  }, [allSelectableItems, smartSelection.jobDescription, vendorQuotes.vendorQuotes, vendorQuotes.vendorQuoteItems, selectedItems]);
+
   // Initialize image extraction hook
   const imageExtraction = useImageExtraction({
     measurements,
@@ -123,6 +203,7 @@ export default function RoofScopeEstimator() {
     onSetExtractedItems: priceItems.setExtractedItems,
     onSetPriceSheetProcessing: priceItems.setPriceSheetProcessing,
     onAnalyzeJobForQuickSelections: smartSelection.analyzeJobForQuickSelections,
+    onApplyAutoSelection: handleApplyAutoSelection,
     onExtractVendorQuoteFromPdf: vendorQuotes.extractVendorQuoteFromPdf,
     onSetVendorQuotes: vendorQuotes.setVendorQuotes,
     onSetVendorQuoteItems: vendorQuotes.setVendorQuoteItems,
@@ -130,6 +211,33 @@ export default function RoofScopeEstimator() {
     onSetSelectedItems: setSelectedItems,
     onSetItemQuantities: setItemQuantities,
   });
+
+  // Auto-select Overnights when Sergio or Hugo labor is selected
+  useEffect(() => {
+    // Check if Sergio or Hugo labor is currently selected
+    const hasSergio = selectedItems.some(itemId => {
+      const item = allSelectableItems.find(i => i.id === itemId);
+      return item?.category === 'labor' && item.name.toLowerCase().includes('sergio');
+    });
+
+    const hasHugo = selectedItems.some(itemId => {
+      const item = allSelectableItems.find(i => i.id === itemId);
+      return item?.category === 'labor' && item.name.toLowerCase().includes('hugo');
+    });
+
+    if (hasSergio || hasHugo) {
+      // Find Overnights item
+      const overnightsItem = allSelectableItems.find(item =>
+        item.name.toLowerCase().includes('overnight')
+      );
+
+      // Only add if Overnights exists and isn't already selected
+      if (overnightsItem && !selectedItems.includes(overnightsItem.id)) {
+        setSelectedItems(prev => [...prev, overnightsItem.id]);
+        console.log('Auto-selected Overnights for', hasSergio ? 'Sergio' : 'Hugo');
+      }
+    }
+  }, [selectedItems, allSelectableItems]);
 
   // Initialize estimate calculation hook
   const {
@@ -162,6 +270,27 @@ export default function RoofScopeEstimator() {
       setStep('estimate');
     }
   }, [calculateEstimateHook, calcValidationWarnings]);
+
+  // Calculate quantities for ALL items when measurements change
+  useEffect(() => {
+    if (measurements && priceItems.priceItems.length > 0) {
+      const calculatedQtys = calculateItemQuantities(measurements);
+      setItemQuantities(prev => {
+        // Merge calculated quantities with existing quantities
+        // Preserve any manually set quantities or vendor item quantities
+        const merged = { ...calculatedQtys };
+        // Override with any existing non-zero quantities (user may have manually adjusted)
+        Object.keys(prev).forEach(key => {
+          if (prev[key] !== undefined && prev[key] !== calculatedQtys[key]) {
+            // Keep the existing value if it differs (user likely set it manually)
+            merged[key] = prev[key];
+          }
+        });
+        return merged;
+      });
+      console.log('Calculated quantities for all items after measurements changed');
+    }
+  }, [measurements, priceItems.priceItems, calculateItemQuantities]);
 
   // Initialize saved quotes hook
   const savedQuotes = useSavedQuotes({

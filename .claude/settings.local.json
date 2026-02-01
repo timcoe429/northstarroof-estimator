@@ -7,7 +7,15 @@
       "Bash(bash replace_estimate_manual.sh:*)",
       "Bash(ls:*)",
       "Bash(npx tsc:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(wc -l \"C:\\\\Users\\\\mxb18\\\\OneDrive\\\\Documents\\\\GitHub\\\\northstarroof-estimator\"/{components,hooks,lib,types}/**/*.{ts,tsx})",
+      "Bash(done)",
+      "Bash(grep:*)",
+      "Bash(npm run dev:*)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(timeout 10 tail:*)"
     ]
   }
 }

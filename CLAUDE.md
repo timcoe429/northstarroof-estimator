@@ -20,6 +20,14 @@ After reading, confirm what phase we're in and what the next task is.
 
 # Development Rules
 
+## Working Rules
+
+1. **Plan before executing** — For any change, first explain what you'll do and wait for approval
+2. **No silent reverts** — Never revert code without explicitly stating what you're reverting and why
+3. **Show don't guess** — When debugging, show actual error messages, don't guess at causes
+4. **One change at a time** — Make one logical change, verify it works, then move to the next
+5. **Git hygiene** — Commit working states before making risky changes
+
 ## File Size Limits
 
 - **No file over 600 lines**
