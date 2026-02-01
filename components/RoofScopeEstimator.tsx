@@ -37,6 +37,7 @@ export default function RoofScopeEstimator() {
   const [itemQuantities, setItemQuantities] = useState<Record<string, number>>({});
   const [uploadedImages, setUploadedImages] = useState<Set<string>>(new Set());
   const [validationWarnings, setValidationWarnings] = useState<ValidationWarning[]>([]);
+  const [isLoadingQuote, setIsLoadingQuote] = useState(false);
 
   // Initialize hooks
   const financialControls = useFinancialControls();
@@ -272,7 +273,9 @@ export default function RoofScopeEstimator() {
   }, [calculateEstimateHook, calcValidationWarnings]);
 
   // Calculate quantities for ALL items when measurements change
+  // Skip recalculation when loading a saved quote to prevent overwriting restored quantities
   useEffect(() => {
+    if (isLoadingQuote) return; // Skip during quote load
     if (measurements && priceItems.priceItems.length > 0) {
       const calculatedQtys = calculateItemQuantities(measurements);
       setItemQuantities(prev => {
@@ -290,7 +293,7 @@ export default function RoofScopeEstimator() {
       });
       console.log('Calculated quantities for all items after measurements changed');
     }
-  }, [measurements, priceItems.priceItems, calculateItemQuantities]);
+  }, [measurements, priceItems.priceItems, calculateItemQuantities, isLoadingQuote]);
 
   // Initialize saved quotes hook
   const savedQuotes = useSavedQuotes({
@@ -318,6 +321,7 @@ export default function RoofScopeEstimator() {
     onSetShowVendorBreakdown: vendorQuotes.setShowVendorBreakdown,
     onAnalyzeJobForQuickSelections: smartSelection.analyzeJobForQuickSelections,
     onCalculateEstimate: calculateEstimate,
+    onSetIsLoadingQuote: setIsLoadingQuote,
     jobDescription: smartSelection.jobDescription,
   });
 

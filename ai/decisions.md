@@ -34,3 +34,21 @@
 - **Smart Item Suggestions**: AI analyzes job description and measurements to suggest relevant items (e.g., "steep pitch" suggests high-slope products).
 - **Vendor Quote Integration**: Vendor quotes can be imported and items selected directly into estimates, maintaining pricing accuracy.
 - **Saved Quotes**: Estimates can be saved with customer info, measurements, and line items for future reference or modification.
+
+## Save/Load Data Loss Fix (February 2026)
+
+- **Root Causes Identified:**
+  1. Quantity restoration used `||` instead of `??` — treated `0` as falsy
+  2. useEffect recalculated quantities on measurement change, overwriting restored values
+  3. Vendor item quantities from vendor_quote_items table weren't merged into state
+  4. Missing database columns (sundries_percent, waste_percent, job_description)
+  5. Race condition with 100ms setTimeout before recalculation
+
+- **Fixes Applied:**
+  1. Changed `baseQuantity || quantity` to `baseQuantity ?? quantity ?? 0`
+  2. Added `isLoadingQuote` flag to skip recalculation during quote load
+  3. Merge vendor item quantities after loading from database
+  4. Added missing columns to estimates table schema
+  5. Increased timeout and added proper flag coordination
+
+- **Why:** Quotes saved at $100k were loading at $17k due to vendor item quantities being lost

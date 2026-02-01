@@ -25,6 +25,7 @@ interface UseSavedQuotesProps {
   onSetShowVendorBreakdown: (show: boolean) => void;
   onAnalyzeJobForQuickSelections: (m: any, descriptionOverride?: string) => void;
   onCalculateEstimate: () => void;
+  onSetIsLoadingQuote: (loading: boolean) => void;
   jobDescription: string;
 }
 
@@ -50,6 +51,7 @@ export const useSavedQuotes = ({
   onSetShowVendorBreakdown,
   onAnalyzeJobForQuickSelections,
   onCalculateEstimate,
+  onSetIsLoadingQuote,
   jobDescription,
 }: UseSavedQuotesProps) => {
   const [savedQuotes, setSavedQuotes] = useState<any[]>([]);
@@ -112,7 +114,7 @@ export const useSavedQuotes = ({
         throw new Error('Invalid user ID format. Please log out and log back in.');
       }
       
-      const savedQuote = await saveQuote(estimateWithCustomerInfo, quoteName.trim(), userId);
+      const savedQuote = await saveQuote(estimateWithCustomerInfo, quoteName.trim(), userId, jobDescription);
 
       if (vendorQuotes.length > 0) {
         await saveVendorQuotes(savedQuote.id, vendorQuotes, vendorQuoteItems);
@@ -130,6 +132,9 @@ export const useSavedQuotes = ({
   // Load a saved quote
   const loadSavedQuote = async (quoteId: string) => {
     try {
+      // Set loading flag to prevent quantity recalculation from overwriting restored data
+      onSetIsLoadingQuote(true);
+      
       const savedQuote = await loadQuote(quoteId, userId);
 
       onSetVendorQuotes([]);
@@ -150,6 +155,7 @@ export const useSavedQuotes = ({
       // Restore customer info
       onSetCustomerInfo(customerInfo);
 
+      // Restore job description from database (now saved explicitly)
       const restoredJobDescription = (savedQuote as any).job_description || (savedQuote as any).jobDescription || '';
       if (restoredJobDescription) {
         onSetJobDescription(restoredJobDescription);
@@ -157,10 +163,12 @@ export const useSavedQuotes = ({
       onAnalyzeJobForQuickSelections(cleanMeasurements, restoredJobDescription || jobDescription);
 
       // Load vendor quotes tied to this estimate
+      let loadedVendorItems: VendorQuoteItem[] = [];
       try {
         const { quotes, items } = await loadVendorQuotes(savedQuote.id);
         onSetVendorQuotes(quotes);
         onSetVendorQuoteItems(items);
+        loadedVendorItems = items;
         onSetShowVendorBreakdown(false);
       } catch (error) {
         console.error('Failed to load vendor quotes:', error);
@@ -170,21 +178,28 @@ export const useSavedQuotes = ({
       onSetMarginPercent(savedQuote.margin_percent);
       onSetOfficeCostPercent(savedQuote.office_percent);
       
-      // Restore sundries percent (calculate from saved estimate if available, otherwise use default)
-      // Note: We'll need to store sundriesPercent in the saved quote, but for now calculate from estimate
+      // Restore sundries percent from database (now saved explicitly)
       const restoredEstimateData = savedQuote as any;
-      if (restoredEstimateData.sundries_percent !== undefined) {
+      if (restoredEstimateData.sundries_percent !== undefined && restoredEstimateData.sundries_percent !== null) {
         onSetSundriesPercent(restoredEstimateData.sundries_percent);
+      } else {
+        // Fallback to default if not saved
+        onSetSundriesPercent(10);
       }
       
-      // Calculate waste percent from line items (materials waste)
-      const materialsItems = savedQuote.line_items.filter((item: any) => item.category === 'materials' || item.category === 'schafer');
+      // Restore waste percent from database (now saved explicitly)
       let wastePercent = 10; // default
-      if (materialsItems.length > 0) {
-        const totalBaseQty = materialsItems.reduce((sum: number, item: any) => sum + (item.baseQuantity || item.quantity), 0);
-        const totalQty = materialsItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
-        if (totalBaseQty > 0) {
-          wastePercent = ((totalQty - totalBaseQty) / totalBaseQty) * 100;
+      if (restoredEstimateData.waste_percent !== undefined && restoredEstimateData.waste_percent !== null) {
+        wastePercent = restoredEstimateData.waste_percent;
+      } else {
+        // Fallback: Calculate waste percent from line items (materials waste)
+        const materialsItems = savedQuote.line_items.filter((item: any) => item.category === 'materials' || item.category === 'schafer');
+        if (materialsItems.length > 0) {
+          const totalBaseQty = materialsItems.reduce((sum: number, item: any) => sum + (item.baseQuantity ?? item.quantity ?? 0), 0);
+          const totalQty = materialsItems.reduce((sum: number, item: any) => sum + (item.quantity ?? 0), 0);
+          if (totalBaseQty > 0) {
+            wastePercent = ((totalQty - totalBaseQty) / totalBaseQty) * 100;
+          }
         }
       }
       onSetWastePercent(wastePercent);
@@ -196,7 +211,9 @@ export const useSavedQuotes = ({
       const restoredCustomItems: CustomItem[] = [];
       
       restoredLineItems.forEach((item: any) => {
-        restoredQuantities[item.id] = item.baseQuantity || item.quantity;
+        // Use nullish coalescing to handle baseQuantity: 0 correctly
+        // Vendor items legitimately have baseQuantity: 0 (no waste applied)
+        restoredQuantities[item.id] = item.baseQuantity ?? item.quantity ?? 0;
         restoredSelectedItems.push(item.id);
         if (item.isCustomItem) {
           restoredCustomItems.push({
@@ -212,6 +229,18 @@ export const useSavedQuotes = ({
           });
         }
       });
+      
+      // Merge vendor item quantities from vendor_quote_items table
+      // This ensures vendor items have correct quantities even if they weren't in line_items
+      if (loadedVendorItems && loadedVendorItems.length > 0) {
+        loadedVendorItems.forEach(vendorItem => {
+          restoredQuantities[vendorItem.id] = vendorItem.quantity ?? 0;
+          
+          if (!restoredSelectedItems.includes(vendorItem.id)) {
+            restoredSelectedItems.push(vendorItem.id);
+          }
+        });
+      }
       
       onSetItemQuantities(restoredQuantities);
       onSetSelectedItems(restoredSelectedItems);
@@ -258,10 +287,14 @@ export const useSavedQuotes = ({
       onSetStep('estimate');
       setShowSavedQuotes(false);
       
+      // Clear loading flag now that all state is restored
+      onSetIsLoadingQuote(false);
+      
       // Trigger recalculation after all state is set to ensure waste % is applied correctly
+      // Increased timeout to ensure all state updates have propagated
       setTimeout(() => {
         onCalculateEstimate();
-      }, 0);
+      }, 500);
     } catch (error) {
       console.error('Failed to load quote:', error);
       alert(`Failed to load quote: ${error instanceof Error ? error.message : 'Unknown error'}`);

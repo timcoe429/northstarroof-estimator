@@ -8,7 +8,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholde
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Save quote to Supabase
-export async function saveQuote(estimate: Estimate, quoteName: string, userId: string | undefined): Promise<SavedQuote> {
+export async function saveQuote(estimate: Estimate, quoteName: string, userId: string | undefined, jobDescription?: string): Promise<SavedQuote> {
   // Debug logging
   console.log('saveQuote received userId:', userId);
   console.log('saveQuote userId type:', typeof userId);
@@ -18,7 +18,7 @@ export async function saveQuote(estimate: Estimate, quoteName: string, userId: s
     throw new Error('User ID is required to save quote');
   }
   
-  const quoteData = {
+  const quoteData: any = {
     user_id: userId,
     customer_id: null, // Will link customers later
     name: quoteName,
@@ -28,11 +28,19 @@ export async function saveQuote(estimate: Estimate, quoteName: string, userId: s
     office_percent: estimate.officeCostPercent,
     office_amount: estimate.officeAllocation,
     margin_percent: estimate.marginPercent,
+    waste_percent: estimate.wastePercent,
+    sundries_percent: estimate.sundriesPercent,
+    sundries_amount: estimate.sundriesAmount,
     total_cost: estimate.totalCost,
     sell_price: estimate.sellPrice,
     gross_profit: estimate.grossProfit,
     status: 'draft',
   };
+  
+  // Add job_description if provided
+  if (jobDescription !== undefined) {
+    quoteData.job_description = jobDescription;
+  }
 
   // Debug logging - log quoteData before insert
   console.log('saveQuote quoteData:', quoteData);
@@ -258,7 +266,7 @@ export async function updateQuote(id: string, estimate: Estimate, quoteName: str
     throw new Error('User ID is required to update quote');
   }
   
-  const quoteData = {
+  const quoteData: any = {
     name: quoteName,
     measurements: estimate.measurements,
     line_items: estimate.lineItems,
@@ -266,6 +274,9 @@ export async function updateQuote(id: string, estimate: Estimate, quoteName: str
     office_percent: estimate.officeCostPercent,
     office_amount: estimate.officeAllocation,
     margin_percent: estimate.marginPercent,
+    waste_percent: estimate.wastePercent,
+    sundries_percent: estimate.sundriesPercent,
+    sundries_amount: estimate.sundriesAmount,
     total_cost: estimate.totalCost,
     sell_price: estimate.sellPrice,
     gross_profit: estimate.grossProfit,

@@ -86,6 +86,10 @@ export interface SavedQuote {
   office_percent: number;
   office_amount: number;
   margin_percent: number;
+  waste_percent?: number;
+  sundries_percent?: number;
+  sundries_amount?: number;
+  job_description?: string;
   total_cost: number;
   sell_price: number;
   gross_profit: number;

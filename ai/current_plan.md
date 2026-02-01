@@ -1,7 +1,7 @@
 # Current Plan
 
 ## Last Updated
-January 31, 2026
+February 1, 2026
 
 ## What's Complete
 
@@ -11,46 +11,43 @@ January 31, 2026
 - Financial controls (waste %, office overhead %, profit margin %, sundries %)
 - PDF proposal generation with custom templates
 - Vendor quote parsing (Schafer, TRA, Rocky Mountain)
-- Schafer quote system - description library only, quote items are read-only
+- Schafer quote system overhaul - converted from pricing system to description library only
+- Fixed vendor quote extraction - captures ALL line items with exact quantities/prices
+- Schafer quote items are read-only (quote is source of truth)
 - Saved quotes functionality (save, load, delete)
 - Custom items creation
 - Price list management
 - Authentication with Supabase
 - Mobile responsive UI
-- **Estimate Builder UX Overhaul** (January 2026):
-  - Green box for selected items - clear visual separation at top
-  - Collapsible section headers - large navy blue (#00293f) headers with chevron icons
-  - Improved quantity parsing - AI now correctly extracts explicit quantities (e.g., "2 dumpsters" → quantity = 2)
-- **Major Refactoring - Phase 4 & 5** (January 2026):
-  - Extracted 9 UI components from main file into [`components/estimator/`](components/estimator/)
-  - Created custom hooks for business logic in [`hooks/`](hooks/)
-  - Reduced main component from 4,000 lines to 824 lines (79% reduction)
-  - Improved code maintainability with clear separation of concerns
-  - All hooks: useFinancialControls, useUIState, useCustomItems, usePriceItems, useVendorQuotes, useImageExtraction, useSmartSelection, useSavedQuotes, useEstimateCalculation
-  - Fixed paste handler for RoofScope uploads (Ctrl+V functionality restored)
+- Custom hooks architecture for state management
+- **Quote Save/Load Data Loss Fixes (Phase 2):**
+  - Fixed quantity restoration bug (baseQuantity ?? instead of ||)
+  - Fixed vendor item quantities not merging on load
+  - Added isLoadingQuote flag to prevent recalculation overwrite
+  - Added missing database columns (sundries_percent, waste_percent, job_description)
+  - Fixed recalculation timing race condition
 
-## What's Next
+## What's Partially Done
 
-- Continue testing and refinement
-- Monitor for any issues with refactored code
-- Future enhancements as needed
+- **Quote Save/Load Fixes** — Code complete, build passing, NEEDS TESTING
 
-## Verified Features
+## What's Next (Priority Order)
 
-All critical features verified after refactor:
-- ✅ Smart grouping for client view/PDF proposals (items $1,500+ standalone, others grouped into kits)
-- ✅ Waste % defaults to 10 for new estimates
-- ✅ Validation warnings working:
-  - Waste % is 0 → warning
-  - No labor selected → warning
-  - No underlayment → warning
-  - Margin too low (<25%) or too high (>60%) → warning
-  - No drip edge → warning
-  - Materials cost seems low → warning
+1. **TEST Save/Load Fixes** — Verify quotes save and load with correct totals
+2. **Phase 3: Fix Margin Distribution** — Client view line items don't add up to total
+3. **Phase 4: Fix Price List UX** — New items can't be edited/deleted
+4. **Phase 5: Component Refactor** — Break up 4300+ line monolith (optional, do when stable)
+
+## Known Issues (Not Yet Fixed)
+
+- **Margin distribution incorrect** — markupMultiplier formula wrong (1.54x vs 1.833x)
+- **Sundries not distributed** — 10% materials allowance not spread to client line items
+- **Vendor tax not distributed** — Tax not spread across vendor items in client view
+- **New item creation bug** — Items appear blank and can't be edited/deleted
+- **4300+ line component** — RoofScopeEstimator.tsx needs refactoring
 
 ## Notes
 
-- Main component: [`components/RoofScopeEstimator.tsx`](components/RoofScopeEstimator.tsx) (now 824 lines, down from 4,000)
-- UI Components: [`components/estimator/`](components/estimator/)
-- Custom Hooks: [`hooks/`](hooks/)
-- API routes in [`app/api/`](app/api/)
+- Phase 1 (Diagnosis) revealed 5 root causes for save/load data loss
+- Phase 2 fixes have been implemented but not yet tested
+- Next session: Start with testing save/load, then move to Phase 3
