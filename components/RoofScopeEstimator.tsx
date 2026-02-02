@@ -391,19 +391,17 @@ export default function RoofScopeEstimator() {
   }, [uiState.showPrices, step, measurements, uploadedImages, imageExtraction]);
 
   // Build client view sections wrapper
-  const buildClientViewSectionsWrapper = (estimate: Estimate, markupMultiplier: number) => {
+  const buildClientViewSectionsWrapper = (estimate: Estimate) => {
     return buildClientViewSections({
       estimate,
-      markupMultiplier,
       vendorQuoteItems: vendorQuotes.vendorQuoteItems,
       groupedVendorItems: vendorQuotes.groupedVendorItems,
     });
   };
 
-  const buildEstimateForClientPdfWrapper = (estimate: Estimate, markupMultiplier: number) => {
+  const buildEstimateForClientPdfWrapper = (estimate: Estimate) => {
     return buildEstimateForClientPdf(
       estimate,
-      markupMultiplier,
       vendorQuotes.vendorQuoteItems,
       vendorQuotes.groupedVendorItems
     );
@@ -413,7 +411,6 @@ export default function RoofScopeEstimator() {
     if (!estimate) return;
     await copyClientViewToClipboardUtil(
       estimate,
-      1,
       vendorQuotes.vendorQuoteItems,
       vendorQuotes.groupedVendorItems
     );
@@ -509,8 +506,7 @@ export default function RoofScopeEstimator() {
 
     setIsGeneratingPDF(true);
     try {
-      const markupMultiplier = (1 + financialControls.officeCostPercent / 100) * (1 + financialControls.marginPercent / 100);
-      const pdfEstimate = vendorQuotes.groupedVendorItems.length > 0 ? buildEstimateForClientPdfWrapper(estimate, markupMultiplier) : estimate;
+      const pdfEstimate = vendorQuotes.groupedVendorItems.length > 0 ? buildEstimateForClientPdfWrapper(estimate) : estimate;
       const blob = await generateProposalPDF(pdfEstimate);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

@@ -4,17 +4,18 @@ import { formatCurrency } from '@/lib/estimatorUtils';
 
 interface BuildClientViewSectionsParams {
   estimate: Estimate;
-  markupMultiplier: number;
   vendorQuoteItems: VendorQuoteItem[];
   groupedVendorItems: GroupedVendorItem[];
 }
 
 export const buildClientViewSections = ({
   estimate,
-  markupMultiplier,
   vendorQuoteItems,
   groupedVendorItems,
 }: BuildClientViewSectionsParams) => {
+  // Calculate effective multiplier that makes line items sum to sellPrice
+  const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
+  const effectiveMultiplier = rawTotal > 0 ? estimate.sellPrice / rawTotal : 1;
   const vendorItemIds = new Set(vendorQuoteItems.map(item => item.id));
 
   const nonVendorMaterials = estimate.byCategory.materials.filter(item => !vendorItemIds.has(item.id));
@@ -91,8 +92,8 @@ export const buildClientViewSections = ({
   ];
 
   // Step 1: Check INDIVIDUAL items against threshold BEFORE any grouping
-  const standAloneItems = allMaterials.filter(item => (item.total * markupMultiplier) >= GROUPING_THRESHOLD);
-  const groupableItems = allMaterials.filter(item => (item.total * markupMultiplier) < GROUPING_THRESHOLD);
+  const standAloneItems = allMaterials.filter(item => (item.total * effectiveMultiplier) >= GROUPING_THRESHOLD);
+  const groupableItems = allMaterials.filter(item => (item.total * effectiveMultiplier) < GROUPING_THRESHOLD);
 
   // Step 2: Group small items by kit type
   groupableItems.forEach(item => {
@@ -171,32 +172,38 @@ export const buildClientViewSections = ({
 
 export const buildEstimateForClientPdf = (
   estimate: Estimate,
-  markupMultiplier: number,
   vendorQuoteItems: VendorQuoteItem[],
   groupedVendorItems: GroupedVendorItem[]
 ): Estimate => {
   const clientSections = buildClientViewSections({
     estimate,
-    markupMultiplier,
     vendorQuoteItems,
     groupedVendorItems,
   });
+  
+  // Calculate effective multiplier for applying to line items
+  const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
+  const effectiveMultiplier = rawTotal > 0 ? estimate.sellPrice / rawTotal : 1;
 
   const buildLineItems = (items: Array<{ name: string; description: string; total: number }>, category: LineItem['category']) => {
-    return items.map((item, idx) => ({
-      id: `client_${category}_${idx}`,
-      name: item.name,
-      unit: 'lot',
-      price: item.total,
-      coverage: null,
-      coverageUnit: null,
-      category,
-      proposalDescription: item.description,
-      baseQuantity: 1,
-      quantity: 1,
-      total: item.total,
-      wasteAdded: 0,
-    }));
+    return items.map((item, idx) => {
+      // Apply effective multiplier to get client-facing price
+      const clientPrice = Math.round(item.total * effectiveMultiplier * 100) / 100;
+      return {
+        id: `client_${category}_${idx}`,
+        name: item.name,
+        unit: 'lot',
+        price: clientPrice,
+        coverage: null,
+        coverageUnit: null,
+        category,
+        proposalDescription: item.description,
+        baseQuantity: 1,
+        quantity: 1,
+        total: clientPrice,
+        wasteAdded: 0,
+      };
+    });
   };
 
   const materials = buildLineItems(clientSections.materials, 'materials');
@@ -229,7 +236,6 @@ export const buildEstimateForClientPdf = (
 
 export const copyClientViewToClipboard = async (
   estimate: Estimate,
-  markupMultiplier: number,
   vendorQuoteItems: VendorQuoteItem[],
   groupedVendorItems: GroupedVendorItem[]
 ) => {
@@ -240,10 +246,13 @@ export const copyClientViewToClipboard = async (
 
   const clientSections = buildClientViewSections({
     estimate,
-    markupMultiplier,
     vendorQuoteItems,
     groupedVendorItems,
   });
+  
+  // Calculate effective multiplier for applying to line items
+  const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
+  const effectiveMultiplier = rawTotal > 0 ? estimate.sellPrice / rawTotal : 1;
 
   const sectionConfig = [
     { key: 'materials', label: 'Materials', items: clientSections.materials },
@@ -255,11 +264,11 @@ export const copyClientViewToClipboard = async (
     if (!section.items || section.items.length === 0) return;
     text += `${section.label.toUpperCase()}\n`;
     section.items.forEach(item => {
-      const clientPrice = Math.round(item.total * markupMultiplier * 100) / 100;
+      const clientPrice = Math.round(item.total * effectiveMultiplier * 100) / 100;
       text += `${item.description}\t${formatCurrency(clientPrice)}\n`;
     });
     const sectionTotal = section.items.reduce((sum, item) => sum + item.total, 0);
-    const clientSubtotal = Math.round(sectionTotal * markupMultiplier * 100) / 100;
+    const clientSubtotal = Math.round(sectionTotal * effectiveMultiplier * 100) / 100;
     text += `${section.label} Subtotal\t${formatCurrency(clientSubtotal)}\n\n`;
   });
 

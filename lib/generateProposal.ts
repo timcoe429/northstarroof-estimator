@@ -521,8 +521,12 @@ interface PageContent {
 }
 
 // Generate line item pages using two-pass approach
-async function generateLineItemPages(estimate: Estimate, markupMultiplier: number): Promise<PDFDocument[]> {
+async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]> {
   const pages: PDFDocument[] = [];
+  
+  // Calculate effective multiplier that makes line items sum to sellPrice
+  const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
+  const effectiveMultiplier = rawTotal > 0 ? estimate.sellPrice / rawTotal : 1;
   
   // Combine materials and accessories into MATERIALS section
   const materialsItems = [...estimate.byCategory.materials, ...estimate.byCategory.accessories];
@@ -600,7 +604,7 @@ async function generateLineItemPages(estimate: Estimate, markupMultiplier: numbe
     }
     
     // Add item to current page content
-    const clientPrice = Math.round(item.total * markupMultiplier * 100) / 100;
+    const clientPrice = Math.round(item.total * effectiveMultiplier * 100) / 100;
     currentPageContent.items.push({
       item,
       section,
@@ -898,9 +902,6 @@ function drawSectionHeader(page: any, y: number, sectionName: string, boldFont: 
 
 // Main function to generate proposal PDF
 export async function generateProposalPDF(estimate: Estimate): Promise<Blob> {
-  // Calculate markup multiplier
-  const markupMultiplier = (1 + estimate.officeCostPercent / 100) * (1 + estimate.marginPercent / 100);
-  
   // Load static templates
   const coverPDF = await loadPDFTemplate('/templates/cover.pdf');
   const importantLinksPDF = await loadPDFTemplate('/templates/important-links.pdf');
@@ -913,8 +914,8 @@ export async function generateProposalPDF(estimate: Estimate): Promise<Blob> {
   const intro = await generateIntroductionLetter(customerName, customerAddress, projectItems);
   const introPDF = await generateIntroductionPage(intro);
   
-  // Generate line item pages
-  const lineItemPages = await generateLineItemPages(estimate, markupMultiplier);
+  // Generate line item pages (effective multiplier calculated inside)
+  const lineItemPages = await generateLineItemPages(estimate);
   
   // Combine all pages
   const finalPDF = await PDFDocument.create();
