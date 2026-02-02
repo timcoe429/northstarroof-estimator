@@ -63,6 +63,7 @@ export const useCustomItems = ({ onItemAdded }: UseCustomItemsProps = {}) => {
   return {
     customItems,
     customItemDraft,
+    setCustomItems,
     setCustomItemDraft,
     startCustomItem,
     cancelCustomItem,

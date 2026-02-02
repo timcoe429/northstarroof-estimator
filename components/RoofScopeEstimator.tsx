@@ -313,8 +313,8 @@ export default function RoofScopeEstimator() {
     onSetItemQuantities: setItemQuantities,
     onSetSelectedItems: setSelectedItems,
     onSetCustomItems: (items) => {
-      // Custom items are managed by the useCustomItems hook, but we need to restore them
-      // This is handled internally by useSavedQuotes
+      // Restore custom items when loading a saved quote
+      customItems.setCustomItems(items);
     },
     onSetEstimate: setEstimate,
     onSetStep: setStep,
