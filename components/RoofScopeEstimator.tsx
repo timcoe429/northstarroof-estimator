@@ -63,6 +63,7 @@ export default function RoofScopeEstimator() {
     userId: user?.id,
     vendorQuoteItems: vendorQuotes.vendorQuoteItems,
     vendorQuoteMap: vendorQuotes.vendorQuoteMap,
+    onSetEditingItem: uiState.setEditingItem,
     onUpdateVendorItem: (id, updates) => {
       const item = vendorQuotes.vendorQuoteItems.find(i => i.id === id);
       if (!item) return;

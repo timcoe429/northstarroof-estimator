@@ -8,6 +8,7 @@ interface UsePriceItemsProps {
   vendorQuoteMap: Map<string, any>;
   onUpdateVendorItem?: (id: string, updates: Partial<PriceItem>) => void;
   onDeleteVendorItem?: (id: string) => void;
+  onSetEditingItem?: (itemId: string | null) => void;
 }
 
 export const usePriceItems = ({
@@ -16,12 +17,12 @@ export const usePriceItems = ({
   vendorQuoteMap,
   onUpdateVendorItem,
   onDeleteVendorItem,
+  onSetEditingItem,
 }: UsePriceItemsProps) => {
   const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
   const [showPrices, setShowPrices] = useState(false);
   const [priceSheetProcessing, setPriceSheetProcessing] = useState(false);
   const [extractedItems, setExtractedItems] = useState<PriceItem[] | null>(null);
-  const [editingItem, setEditingItem] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState('materials');
   const [isLoadingPriceItems, setIsLoadingPriceItems] = useState(false);
   const [isGeneratingDescriptions, setIsGeneratingDescriptions] = useState(false);
@@ -103,17 +104,14 @@ export const usePriceItems = ({
     
     // Update local state immediately
     setPriceItems(prev => [...prev, newItem]);
-    setEditingItem(newItem.id);
-
-    // Save to Supabase
-    try {
-      await savePriceItem(newItem, userId);
-    } catch (error) {
-      console.error('Failed to save price item:', error);
-      alert('Failed to save price item. Please try again.');
-      // Revert local state on error
-      setPriceItems(prev => prev.filter(item => item.id !== newItem.id));
+    
+    // Set editing mode via UI state callback
+    if (onSetEditingItem) {
+      onSetEditingItem(newItem.id);
     }
+
+    // DO NOT save to database yet - wait for user to edit and click save
+    // The item will be saved when updatePriceItem is called (via save button)
   };
 
   const updatePriceItem = async (id: string, updates: Partial<PriceItem>) => {
@@ -182,15 +180,28 @@ export const usePriceItems = ({
     const itemToDelete = priceItems.find(item => item.id === id);
     if (!itemToDelete) return;
 
+    // Remove from local state immediately (optimistic update)
+    setPriceItems(prev => prev.filter(item => item.id !== id));
+    
+    // Clear editing state if this item was being edited
+    if (onSetEditingItem) {
+      onSetEditingItem(null);
+    }
+
+    // Try to delete from Supabase (may fail if item was never saved)
     try {
-      // Delete from Supabase first
       await deletePriceItemFromDB(id, userId);
-      
-      // Only update local state if delete succeeds
-      setPriceItems(prev => prev.filter(item => item.id !== id));
     } catch (error) {
-      console.error('Failed to delete price item:', error);
-      alert('Failed to delete price item. Please try again.');
+      // If item doesn't exist in database (e.g., new item that wasn't saved yet),
+      // that's fine - we already removed it from local state
+      // Only show error if it's a different kind of error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (!errorMessage.includes('not found') && !errorMessage.includes('does not exist')) {
+        console.error('Failed to delete price item:', error);
+        alert('Failed to delete price item. Please try again.');
+        // Revert local state on unexpected error
+        setPriceItems(prev => [...prev, itemToDelete]);
+      }
     }
   };
 
@@ -280,8 +291,6 @@ CRITICAL: Return ONLY the description in the format "Product Name - 6-13 word de
     setPriceSheetProcessing,
     extractedItems,
     setExtractedItems,
-    editingItem,
-    setEditingItem,
     activeCategory,
     setActiveCategory,
     isLoadingPriceItems,
