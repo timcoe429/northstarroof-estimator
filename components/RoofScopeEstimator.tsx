@@ -22,7 +22,7 @@ import { useSavedQuotes } from '@/hooks/useSavedQuotes';
 import { useFinancialControls } from '@/hooks/useFinancialControls';
 import { useUIState } from '@/hooks/useUIState';
 import { useCustomItems } from '@/hooks/useCustomItems';
-import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView } from '@/components/estimator';
+import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView, CalculatedAccessories } from '@/components/estimator';
 
 export default function RoofScopeEstimator() {
   const { user, signOut } = useAuth();
@@ -38,6 +38,7 @@ export default function RoofScopeEstimator() {
   const [uploadedImages, setUploadedImages] = useState<Set<string>>(new Set());
   const [validationWarnings, setValidationWarnings] = useState<ValidationWarning[]>([]);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+  const [skylightCount, setSkylightCount] = useState(0);
 
   // Initialize hooks
   const financialControls = useFinancialControls();
@@ -92,6 +93,11 @@ export default function RoofScopeEstimator() {
   const allSelectableItems: SelectableItem[] = useMemo(() => {
     return [...priceItems.priceItems, ...vendorQuotes.vendorSelectableItems, ...customItems.customItems];
   }, [priceItems.priceItems, vendorQuotes.vendorSelectableItems, customItems.customItems]);
+
+  // Detect metal roof (Schafer vendor quote present)
+  const isMetalRoof = useMemo(() => {
+    return vendorQuotes.vendorQuotes.some(q => q.vendor === 'schafer');
+  }, [vendorQuotes.vendorQuotes]);
 
   const vendorItemCount = vendorQuotes.vendorQuoteItems.length;
 
@@ -431,6 +437,7 @@ export default function RoofScopeEstimator() {
     smartSelection.setJobDescription('');
     smartSelection.setQuickSelections([]);
     setValidationWarnings([]);
+    setSkylightCount(0);
   };
 
   // Helper functions for child components
@@ -916,6 +923,41 @@ export default function RoofScopeEstimator() {
                   onToggleSectionSort={toggleSectionSort}
                   onCalculateEstimate={calculateEstimate}
                   getEstimateCategoryItems={getEstimateCategoryItems}
+                />
+              )}
+
+              {/* Calculated Accessories */}
+              {measurements && measurements.eave_length && (
+                <CalculatedAccessories
+                  measurements={measurements}
+                  isMetalRoof={isMetalRoof}
+                  priceItems={priceItems.priceItems}
+                  selectedItems={selectedItems}
+                  onAddToEstimate={(materialItemId, laborItemId, materialQty, laborQty) => {
+                    // Add material item
+                    setSelectedItems(prev => {
+                      if (!prev.includes(materialItemId)) {
+                        return [...prev, materialItemId];
+                      }
+                      return prev;
+                    });
+                    setItemQuantities(prev => ({ ...prev, [materialItemId]: materialQty }));
+                    
+                    // Add labor item
+                    setSelectedItems(prev => {
+                      if (!prev.includes(laborItemId)) {
+                        return [...prev, laborItemId];
+                      }
+                      return prev;
+                    });
+                    setItemQuantities(prev => ({ ...prev, [laborItemId]: laborQty }));
+                    
+                    // Trigger recalculation
+                    setTimeout(() => calculateEstimate(), 100);
+                  }}
+                  skylightCount={skylightCount}
+                  onAddSkylight={() => setSkylightCount(prev => prev + 1)}
+                  onRemoveSkylight={() => setSkylightCount(prev => Math.max(0, prev - 1))}
                 />
               )}
             </div>

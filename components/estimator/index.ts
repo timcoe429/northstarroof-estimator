@@ -8,3 +8,4 @@ export { EstimateBuilder } from './EstimateBuilder';
 export { UploadStep } from './UploadStep';
 export { ReviewStep } from './ReviewStep';
 export { EstimateView } from './EstimateView';
+export { CalculatedAccessories } from './CalculatedAccessories';
