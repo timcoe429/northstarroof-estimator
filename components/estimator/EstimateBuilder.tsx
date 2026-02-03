@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react';
-import { Check, Plus, Calculator } from 'lucide-react';
+import { Check, Plus, Calculator, AlertCircle } from 'lucide-react';
 import type { PriceItem } from '@/types';
 import type { SelectableItem, CustomItem } from '@/types/estimator';
 import { CATEGORIES } from '@/lib/constants';
@@ -33,6 +33,8 @@ interface EstimateBuilderProps {
   vendorItemMap: Map<string, any>;
   /** Map of vendor quotes */
   vendorQuoteMap: Map<string, any>;
+  /** Missing accessory items from Calculated Accessories */
+  missingAccessoryItems?: string[];
   /** Callback to toggle item selection */
   onToggleSelection: (itemId: string, selected: boolean) => void;
   /** Callback to update item quantity */
@@ -68,6 +70,7 @@ export function EstimateBuilder({
   sectionSort,
   vendorItemMap,
   vendorQuoteMap,
+  missingAccessoryItems = [],
   onToggleSelection,
   onQuantityChange,
   onToggleCollapse,
@@ -282,6 +285,21 @@ export function EstimateBuilder({
           })}
         </div>
       </div>
+
+      {/* Missing Price Items Warning */}
+      {missingAccessoryItems.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800 mb-1">Missing Price Items</p>
+              <p className="text-xs text-amber-700">
+                Add these items to your price list: {missingAccessoryItems.join(', ')}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Generate Button */}
       {allSelectableItems.length > 0 && (

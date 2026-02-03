@@ -39,6 +39,7 @@ export default function RoofScopeEstimator() {
   const [validationWarnings, setValidationWarnings] = useState<ValidationWarning[]>([]);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
   const [skylightCount, setSkylightCount] = useState(0);
+  const [missingAccessoryItems, setMissingAccessoryItems] = useState<string[]>([]);
 
   // Initialize hooks
   const financialControls = useFinancialControls();
@@ -800,7 +801,7 @@ export default function RoofScopeEstimator() {
           onCategoryChange={uiState.setActiveCategory}
           onEditItem={uiState.setEditingItem}
           onSaveItem={() => uiState.setEditingItem(null)}
-          onAddItem={priceItems.addPriceItem}
+          onAddItem={() => priceItems.addPriceItem(uiState.activeCategory)}
           onDeleteItem={priceItems.deletePriceItem}
           onUpdateItem={priceItems.updatePriceItem}
           onPriceSheetUpload={imageExtraction.handlePriceSheetUpload}
@@ -893,6 +894,7 @@ export default function RoofScopeEstimator() {
                   sectionSort={uiState.sectionSort}
                   vendorItemMap={vendorQuotes.vendorItemMap}
                   vendorQuoteMap={vendorQuotes.vendorQuoteMap}
+                  missingAccessoryItems={missingAccessoryItems}
                   onToggleSelection={(itemId, selected) => {
                     if (selected) {
                       setSelectedItems(prev => [...prev, itemId]);
@@ -958,6 +960,7 @@ export default function RoofScopeEstimator() {
                   skylightCount={skylightCount}
                   onAddSkylight={() => setSkylightCount(prev => prev + 1)}
                   onRemoveSkylight={() => setSkylightCount(prev => Math.max(0, prev - 1))}
+                  onMissingItemsChange={setMissingAccessoryItems}
                 />
               )}
             </div>

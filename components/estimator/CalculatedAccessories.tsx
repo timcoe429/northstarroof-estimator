@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Plus, Minus, AlertCircle } from 'lucide-react';
 import type { Measurements, PriceItem } from '@/types';
 import { 
@@ -23,6 +23,7 @@ interface CalculatedAccessoriesProps {
   skylightCount: number;
   onAddSkylight: () => void;
   onRemoveSkylight: () => void;
+  onMissingItemsChange?: (missingItems: string[]) => void;
 }
 
 export function CalculatedAccessories({
@@ -34,6 +35,7 @@ export function CalculatedAccessories({
   skylightCount,
   onAddSkylight,
   onRemoveSkylight,
+  onMissingItemsChange,
 }: CalculatedAccessoriesProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [heatTapeQty, setHeatTapeQty] = useState<number | null>(null);
@@ -109,15 +111,29 @@ export function CalculatedAccessories({
     selectedItems.includes(snowRetentionLaborItem.id);
 
   // Check for missing price items
-  const missingItems: string[] = [];
-  if (!heatTapeMaterialItem) missingItems.push('Heat Tape (materials)');
-  if (!heatTapeLaborItem) missingItems.push('Heat Tape Install (labor)');
-  if (!snowRetentionMaterialItem) {
-    missingItems.push(isMetalRoof ? 'Snow Fence (materials)' : 'Snow Guard (materials)');
-  }
-  if (!snowRetentionLaborItem) {
-    missingItems.push(isMetalRoof ? 'Snow Fence Install (labor)' : 'Snow Guard Install (labor)');
-  }
+  const missingItems: string[] = useMemo(() => {
+    const items: string[] = [];
+    if (!heatTapeMaterialItem) items.push('Heat Tape (materials)');
+    if (!heatTapeLaborItem) items.push('Heat Tape Install (labor)');
+    if (!snowRetentionMaterialItem) {
+      items.push(isMetalRoof ? 'Snow Fence (materials)' : 'Snow Guard (materials)');
+    }
+    if (!snowRetentionLaborItem) {
+      items.push(isMetalRoof ? 'Snow Fence Install (labor)' : 'Snow Guard Install (labor)');
+    }
+    return items;
+  }, [heatTapeMaterialItem, heatTapeLaborItem, snowRetentionMaterialItem, snowRetentionLaborItem, isMetalRoof]);
+
+  // Notify parent of missing items changes
+  useEffect(() => {
+    if (onMissingItemsChange) {
+      if (!calculations || !measurements?.eave_length) {
+        onMissingItemsChange([]);
+      } else {
+        onMissingItemsChange(missingItems);
+      }
+    }
+  }, [missingItems, calculations, measurements, onMissingItemsChange]);
 
   if (!calculations || !measurements?.eave_length) {
     return null;
@@ -139,20 +155,6 @@ export function CalculatedAccessories({
 
       {isExpanded && (
         <div className="space-y-4">
-          {missingItems.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-amber-800 mb-1">Missing Price Items</p>
-                  <p className="text-xs text-amber-700">
-                    Add these items to your price list: {missingItems.join(', ')}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Heat Tape */}
           <div className="border border-gray-200 rounded-lg p-4">
             <div className="flex items-center justify-between mb-2">

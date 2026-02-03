@@ -85,11 +85,14 @@ export const usePriceItems = ({
   };
 
   // Price item management
-  const addPriceItem = async () => {
+  const addPriceItem = async (category?: string) => {
     if (!userId) {
       alert('You must be logged in to add price items');
       return;
     }
+
+    // Use passed category or fall back to internal activeCategory state
+    const itemCategory = (category || activeCategory) as PriceItem['category'];
 
     const newItem: PriceItem = {
       id: `item_${Date.now()}`,
@@ -98,7 +101,7 @@ export const usePriceItems = ({
       price: 0,
       coverage: null,
       coverageUnit: null,
-      category: activeCategory as PriceItem['category'],
+      category: itemCategory,
       proposalDescription: null,
     };
     
