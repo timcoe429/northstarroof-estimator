@@ -35,13 +35,13 @@
 - **Vendor Quote Integration**: Vendor quotes can be imported and items selected directly into estimates, maintaining pricing accuracy.
 - **Saved Quotes**: Estimates can be saved with customer info, measurements, and line items for future reference or modification.
 
-## Save/Load Data Loss Fix (February 2026)
+## Phase 2: Save/Load Data Loss Fix (February 2026)
 
 - **Root Causes Identified:**
   1. Quantity restoration used `||` instead of `??` — treated `0` as falsy
   2. useEffect recalculated quantities on measurement change, overwriting restored values
   3. Vendor item quantities from vendor_quote_items table weren't merged into state
-  4. Missing database columns (sundries_percent, waste_percent, job_description)
+  4. Missing database columns (sundries_percent, sundries_amount, waste_percent, job_description)
   5. Race condition with 100ms setTimeout before recalculation
 
 - **Fixes Applied:**
@@ -52,3 +52,38 @@
   5. Increased timeout and added proper flag coordination
 
 - **Why:** Quotes saved at $100k were loading at $17k due to vendor item quantities being lost
+
+## Phase 2b: Custom Items Restoration (February 2026)
+
+- **Problem:** Custom items (created via + button) weren't restoring on quote load
+- **Root Cause:** Duplicate editingItem state — usePriceItems hook set one, UI read from another. Also, onSetCustomItems callback was empty.
+- **Fix:** Exposed setCustomItems from useCustomItems hook, wired up the callback properly
+
+## Phase 3: Margin Distribution Fix (February 2026)
+
+- **Problem:** Client view line items summed to ~$70k but total showed $87k
+- **Root Cause:** markupMultiplier formula `(1 + office) × (1 + margin)` = 1.54x didn't match internal calculation which effectively used 1.833x
+- **Fix:** Replaced with effectiveMultiplier = sellPrice / rawTotal, which automatically distributes all costs (sundries, vendor tax, office, margin) proportionally
+- **Files Changed:** lib/clientViewBuilder.ts, lib/generateProposal.ts, components/RoofScopeEstimator.tsx
+
+## Phase 4: Price List UX Fix (February 2026)
+
+- **Problem:** "+ Add Item" created blank items that couldn't be edited or deleted
+- **Root Cause:** Two separate editingItem states (usePriceItems hook vs useUIState hook) weren't synchronized. Also, items were saved to DB immediately before user could edit.
+- **Fix:** 
+  1. Removed duplicate state from usePriceItems
+  2. Added onSetEditingItem callback to use UI state
+  3. Deferred database save until user clicks save button
+
+## Phase 6: Auto-Calculate Accessories (February 2026 - In Progress)
+
+- **Feature:** Auto-calculate heat tape, snow guards/fence, skylights from RoofScope measurements
+- **Heat Tape Formula:** triangles = eave ÷ 3, cable = triangles × 6 + valley length
+- **Snow Retention Formula:** quantity = eave × rows (1-4 rows based on pitch)
+- **Roof Type Detection:** Schafer vendor quote present = metal roof = snow fence; otherwise = snow guards
+- **Skylights:** Optional items, not included in quote total
+- **Pricing:**
+  - Heat Tape: $5.00/lf material, $7.50/lf labor
+  - Snow Fence: $12.00/lf material, $5.00/lf labor
+  - Snow Guards: $7.00/ea material, $5.00/ea labor
+  - Skylights: $2,400/ea

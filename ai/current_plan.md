@@ -1,7 +1,7 @@
 # Current Plan
 
 ## Last Updated
-February 1, 2026
+February 2, 2026
 
 ## What's Complete
 
@@ -20,34 +20,56 @@ February 1, 2026
 - Authentication with Supabase
 - Mobile responsive UI
 - Custom hooks architecture for state management
-- **Quote Save/Load Data Loss Fixes (Phase 2):**
+- **Phase 2: Quote Save/Load Data Loss Fixes** ✅
   - Fixed quantity restoration bug (baseQuantity ?? instead of ||)
-  - Fixed vendor item quantities not merging on load
+  - Fixed vendor item quantities merging on load
   - Added isLoadingQuote flag to prevent recalculation overwrite
-  - Added missing database columns (sundries_percent, waste_percent, job_description)
+  - Added missing database columns (sundries_percent, sundries_amount, waste_percent, job_description)
   - Fixed recalculation timing race condition
+- **Phase 2b: Custom Items Restoration** ✅
+  - Fixed custom items not restoring on quote load
+  - Exposed setCustomItems from useCustomItems hook
+  - Wired up onSetCustomItems callback
+- **Phase 3: Margin Distribution Fix** ✅
+  - Fixed markupMultiplier formula (was 1.54x, now uses effectiveMultiplier)
+  - Client view line items now sum correctly to sellPrice
+  - Sundries, vendor tax, office overhead distributed proportionally
+  - PDF generation matches web client view
+- **Phase 4: Price List UX Fix** ✅
+  - Fixed duplicate editingItem state between hooks
+  - New items now enter edit mode immediately
+  - Deferred database save until user clicks save
+  - Edit and delete buttons work correctly
+- **Phase 6: Auto-Calculate Accessories** ✅
+  - Heat Tape calculation (eave ÷ 3 × 6 + valley)
+  - Snow Guards/Snow Fence calculation (eave × rows based on pitch)
+  - Metal roof detection (Schafer vendor quote)
+  - Calculated Accessories section with editable quantities
+  - Add to Estimate functionality for materials + labor
+  - Optional skylights display (not included in totals)
 
-## What's Partially Done
+## What's In Progress
 
-- **Quote Save/Load Fixes** — Code complete, build passing, NEEDS TESTING
+- None currently
 
-## What's Next (Priority Order)
+## What's Next
 
-1. **TEST Save/Load Fixes** — Verify quotes save and load with correct totals
-2. **Phase 3: Fix Margin Distribution** — Client view line items don't add up to total
-3. **Phase 4: Fix Price List UX** — New items can't be edited/deleted
-4. **Phase 5: Component Refactor** — Break up 4300+ line monolith (optional, do when stable)
+1. **Test Phase 6** — Verify calculations, add to estimate, PDF output
+2. **Future: Additional vendors** — TRA Snow & Sun, Rocky Mountain Snow Guards integration
 
-## Known Issues (Not Yet Fixed)
+## Known Issues / Blockers
 
-- **Margin distribution incorrect** — markupMultiplier formula wrong (1.54x vs 1.833x)
-- **Sundries not distributed** — 10% materials allowance not spread to client line items
-- **Vendor tax not distributed** — Tax not spread across vendor items in client view
-- **New item creation bug** — Items appear blank and can't be edited/deleted
-- **4300+ line component** — RoofScopeEstimator.tsx needs refactoring
+- None currently
 
 ## Notes
 
-- Phase 1 (Diagnosis) revealed 5 root causes for save/load data loss
-- Phase 2 fixes have been implemented but not yet tested
-- Next session: Start with testing save/load, then move to Phase 3
+- Phase 5 (Component Refactor) was already done — main component reduced from 4300 to ~824 lines
+- Database columns added: sundries_percent, sundries_amount, waste_percent, job_description
+- Price list items needed for Phase 6:
+  - Heat Tape | materials | lf | $5.00
+  - Heat Tape Install | labor | lf | $7.50
+  - Snow Fence (ColorGard) | materials | lf | $12.00
+  - Snow Fence Install | labor | lf | $5.00
+  - RMSG Yeti Snowguard | materials | each | $7.00 (exists)
+  - Snowguard Install | labor | each | $5.00 (exists)
+  - Skylight | accessories | each | $2,400
