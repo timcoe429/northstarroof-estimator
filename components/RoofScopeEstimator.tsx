@@ -925,42 +925,42 @@ export default function RoofScopeEstimator() {
                   onToggleSectionSort={toggleSectionSort}
                   onCalculateEstimate={calculateEstimate}
                   getEstimateCategoryItems={getEstimateCategoryItems}
-                />
-              )}
-
-              {/* Calculated Accessories */}
-              {measurements && measurements.eave_length && (
-                <CalculatedAccessories
-                  measurements={measurements}
-                  isMetalRoof={isMetalRoof}
-                  priceItems={priceItems.priceItems}
-                  selectedItems={selectedItems}
-                  onAddToEstimate={(materialItemId, laborItemId, materialQty, laborQty) => {
-                    // Add material item
-                    setSelectedItems(prev => {
-                      if (!prev.includes(materialItemId)) {
-                        return [...prev, materialItemId];
-                      }
-                      return prev;
-                    });
-                    setItemQuantities(prev => ({ ...prev, [materialItemId]: materialQty }));
-                    
-                    // Add labor item
-                    setSelectedItems(prev => {
-                      if (!prev.includes(laborItemId)) {
-                        return [...prev, laborItemId];
-                      }
-                      return prev;
-                    });
-                    setItemQuantities(prev => ({ ...prev, [laborItemId]: laborQty }));
-                    
-                    // Trigger recalculation
-                    setTimeout(() => calculateEstimate(), 100);
-                  }}
-                  skylightCount={skylightCount}
-                  onAddSkylight={() => setSkylightCount(prev => prev + 1)}
-                  onRemoveSkylight={() => setSkylightCount(prev => Math.max(0, prev - 1))}
-                  onMissingItemsChange={setMissingAccessoryItems}
+                  calculatedAccessories={
+                    measurements && measurements.eave_length ? (
+                      <CalculatedAccessories
+                        measurements={measurements}
+                        isMetalRoof={isMetalRoof}
+                        priceItems={priceItems.priceItems}
+                        selectedItems={selectedItems}
+                        onAddToEstimate={(materialItemId, laborItemId, materialQty, laborQty) => {
+                          // Add material item
+                          setSelectedItems(prev => {
+                            if (!prev.includes(materialItemId)) {
+                              return [...prev, materialItemId];
+                            }
+                            return prev;
+                          });
+                          setItemQuantities(prev => ({ ...prev, [materialItemId]: materialQty }));
+                          
+                          // Add labor item
+                          setSelectedItems(prev => {
+                            if (!prev.includes(laborItemId)) {
+                              return [...prev, laborItemId];
+                            }
+                            return prev;
+                          });
+                          setItemQuantities(prev => ({ ...prev, [laborItemId]: laborQty }));
+                          
+                          // Trigger recalculation
+                          setTimeout(() => calculateEstimate(), 100);
+                        }}
+                        skylightCount={skylightCount}
+                        onAddSkylight={() => setSkylightCount(prev => prev + 1)}
+                        onRemoveSkylight={() => setSkylightCount(prev => Math.max(0, prev - 1))}
+                        onMissingItemsChange={setMissingAccessoryItems}
+                      />
+                    ) : undefined
+                  }
                 />
               )}
             </div>

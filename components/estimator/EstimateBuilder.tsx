@@ -35,6 +35,8 @@ interface EstimateBuilderProps {
   vendorQuoteMap: Map<string, any>;
   /** Missing accessory items from Calculated Accessories */
   missingAccessoryItems?: string[];
+  /** Calculated Accessories component to render */
+  calculatedAccessories?: React.ReactNode;
   /** Callback to toggle item selection */
   onToggleSelection: (itemId: string, selected: boolean) => void;
   /** Callback to update item quantity */
@@ -71,6 +73,7 @@ export function EstimateBuilder({
   vendorItemMap,
   vendorQuoteMap,
   missingAccessoryItems = [],
+  calculatedAccessories,
   onToggleSelection,
   onQuantityChange,
   onToggleCollapse,
@@ -165,7 +168,7 @@ export function EstimateBuilder({
           {Object.entries(CATEGORIES).map(([catKey, { label, icon: Icon }]) => {
             const allItems = getEstimateCategoryItems(catKey);
             const availableItems = allItems.filter(item => !selectedItems.includes(item.id));
-            const isCollapsed = collapsedSections[catKey] ?? false;
+            const isCollapsed = collapsedSections[catKey] ?? true;
             const itemCount = availableItems.length;
 
             if (availableItems.length === 0 && allItems.length === 0) {
@@ -285,6 +288,9 @@ export function EstimateBuilder({
           })}
         </div>
       </div>
+
+      {/* Calculated Accessories */}
+      {calculatedAccessories}
 
       {/* Missing Price Items Warning */}
       {missingAccessoryItems.length > 0 && (

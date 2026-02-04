@@ -144,7 +144,7 @@ export function CalculatedAccessories({
   const displaySnowRetentionQty = snowRetentionQty ?? snowRetention.totalQuantity;
 
   return (
-    <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200 mb-4">
+    <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 md:p-6 mb-4">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between mb-4"
