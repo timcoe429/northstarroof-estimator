@@ -950,9 +950,6 @@ export default function RoofScopeEstimator() {
                             return prev;
                           });
                           setItemQuantities(prev => ({ ...prev, [laborItemId]: laborQty }));
-                          
-                          // Trigger recalculation
-                          setTimeout(() => calculateEstimate(), 100);
                         }}
                         skylightCount={skylightCount}
                         onAddSkylight={() => setSkylightCount(prev => prev + 1)}
