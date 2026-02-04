@@ -73,7 +73,7 @@ export const useSavedQuotes = ({
   };
 
   // Save current quote
-  const saveCurrentQuote = async () => {
+  const saveCurrentQuote = async (): Promise<string | undefined> => {
     if (!estimate) return;
 
     const defaultName = `Quote #${savedQuotes.length + 1} - ${estimate.customerInfo.name || 'Customer'}`;
@@ -119,18 +119,22 @@ export const useSavedQuotes = ({
       if (vendorQuotes.length > 0) {
         await saveVendorQuotes(savedQuote.id, vendorQuotes, vendorQuoteItems);
       }
+      
+      // Return saved quote ID for share functionality
       alert('Quote saved successfully!');
       await fetchSavedQuotes();
+      return savedQuote.id;
     } catch (error) {
       console.error('Failed to save quote:', error);
       alert(`Failed to save quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return undefined;
     } finally {
       setIsSavingQuote(false);
     }
   };
 
   // Load a saved quote
-  const loadSavedQuote = async (quoteId: string) => {
+  const loadSavedQuote = async (quoteId: string): Promise<{ estimateId: string; shareToken: string | null; shareEnabled: boolean } | undefined> => {
     try {
       // Set loading flag to prevent quantity recalculation from overwriting restored data
       onSetIsLoadingQuote(true);
@@ -205,12 +209,15 @@ export const useSavedQuotes = ({
       onSetWastePercent(wastePercent);
       
       // Restore line items and quantities
-      const restoredLineItems = savedQuote.line_items;
+      const allRestoredLineItems = savedQuote.line_items;
+      // Separate optional items from regular items
+      const restoredLineItems = allRestoredLineItems.filter((item: any) => !item.isOptional);
+      const restoredOptionalItems = allRestoredLineItems.filter((item: any) => item.isOptional === true);
       const restoredQuantities: Record<string, number> = {};
       const restoredSelectedItems: string[] = [];
       const restoredCustomItems: CustomItem[] = [];
       
-      restoredLineItems.forEach((item: any) => {
+      allRestoredLineItems.forEach((item: any) => {
         // Use nullish coalescing to handle baseQuantity: 0 correctly
         // Vendor items legitimately have baseQuantity: 0 (no waste applied)
         restoredQuantities[item.id] = item.baseQuantity ?? item.quantity ?? 0;
@@ -265,6 +272,7 @@ export const useSavedQuotes = ({
       
       const restoredEstimate: Estimate = {
         lineItems: restoredLineItems,
+        optionalItems: restoredOptionalItems,
         byCategory,
         totals,
         baseCost: savedQuote.base_cost,
@@ -287,8 +295,17 @@ export const useSavedQuotes = ({
       onSetStep('estimate');
       setShowSavedQuotes(false);
       
+      // Return saved quote ID and share settings for share functionality
+      const shareData = {
+        estimateId: savedQuote.id,
+        shareToken: (savedQuote as any).share_token || null,
+        shareEnabled: (savedQuote as any).share_enabled || false,
+      };
+      
       // Clear loading flag now that all state is restored
       onSetIsLoadingQuote(false);
+      
+      return shareData;
       
       // Trigger recalculation after all state is set to ensure waste % is applied correctly
       // Increased timeout to ensure all state updates have propagated

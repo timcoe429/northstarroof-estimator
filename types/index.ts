@@ -35,6 +35,7 @@ export interface LineItem extends PriceItem {
   total: number;
   wasteAdded: number;
   isCustomItem?: boolean;
+  isOptional?: boolean;
 }
 
 export interface CustomerInfo {
@@ -45,6 +46,7 @@ export interface CustomerInfo {
 
 export interface Estimate {
   lineItems: LineItem[];
+  optionalItems: LineItem[];
   byCategory: {
     materials: LineItem[];
     labor: LineItem[];

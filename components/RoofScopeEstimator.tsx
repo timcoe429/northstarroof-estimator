@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, ChevronRight, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText, Copy, Bot } from 'lucide-react';
 import Image from 'next/image';
 import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQuote, VendorQuote, VendorQuoteItem } from '@/types';
-import { saveQuote, loadQuotes, loadQuote, deleteQuote, loadPriceItems, savePriceItem, savePriceItemsBulk, deletePriceItemFromDB, saveVendorQuotes, loadVendorQuotes } from '@/lib/supabase';
+import { saveQuote, loadQuotes, loadQuote, deleteQuote, loadPriceItems, savePriceItem, savePriceItemsBulk, deletePriceItemFromDB, saveVendorQuotes, loadVendorQuotes, updateShareSettings } from '@/lib/supabase';
 import { generateProposalPDF } from '@/lib/generateProposal';
 import { useAuth } from '@/lib/AuthContext';
 import { CATEGORIES, UNIT_TYPES, CALC_MAPPINGS, descriptionMap } from '@/lib/constants';
@@ -40,6 +40,9 @@ export default function RoofScopeEstimator() {
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
   const [skylightCount, setSkylightCount] = useState(0);
   const [missingAccessoryItems, setMissingAccessoryItems] = useState<string[]>([]);
+  const [savedEstimateId, setSavedEstimateId] = useState<string | undefined>(undefined);
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [shareEnabled, setShareEnabled] = useState(false);
 
   // Initialize hooks
   const financialControls = useFinancialControls();
@@ -636,7 +639,14 @@ export default function RoofScopeEstimator() {
                               </div>
                               <div className="flex items-center gap-1">
                                 <button
-                                  onClick={() => savedQuotes.loadSavedQuote(quote.id)}
+                                  onClick={async () => {
+                                    const shareData = await savedQuotes.loadSavedQuote(quote.id);
+                                    if (shareData) {
+                                      setSavedEstimateId(shareData.estimateId);
+                                      setShareToken(shareData.shareToken);
+                                      setShareEnabled(shareData.shareEnabled);
+                                    }
+                                  }}
                                   className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                                   title="Load quote"
                                 >
@@ -954,6 +964,15 @@ export default function RoofScopeEstimator() {
                         skylightCount={skylightCount}
                         onAddSkylight={() => setSkylightCount(prev => prev + 1)}
                         onRemoveSkylight={() => setSkylightCount(prev => Math.max(0, prev - 1))}
+                        onAddSkylightsToEstimate={(skylightItemId, quantity) => {
+                          setSelectedItems(prev => {
+                            if (!prev.includes(skylightItemId)) {
+                              return [...prev, skylightItemId];
+                            }
+                            return prev;
+                          });
+                          setItemQuantities(prev => ({ ...prev, [skylightItemId]: quantity }));
+                        }}
                         onMissingItemsChange={setMissingAccessoryItems}
                       />
                     ) : undefined
@@ -986,7 +1005,27 @@ export default function RoofScopeEstimator() {
               setStep('extracted');
               setValidationWarnings([]);
             }}
-            onSaveQuote={savedQuotes.saveCurrentQuote}
+            onSaveQuote={async () => {
+              const savedId = await savedQuotes.saveCurrentQuote();
+              if (savedId) {
+                setSavedEstimateId(savedId);
+              }
+            }}
+            estimateId={savedEstimateId}
+            shareToken={shareToken}
+            shareEnabled={shareEnabled}
+            onUpdateShareSettings={async (enabled: boolean, token: string | null) => {
+              if (!savedEstimateId || !user?.id) return;
+              
+              try {
+                await updateShareSettings(savedEstimateId, enabled, token, user.id);
+                setShareEnabled(enabled);
+                setShareToken(token);
+              } catch (error) {
+                console.error('Failed to update share settings:', error);
+                alert('Failed to update share settings. Please try again.');
+              }
+            }}
             onReset={resetEstimator}
           />
         )}

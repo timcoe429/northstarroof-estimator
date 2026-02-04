@@ -260,16 +260,18 @@ export const useEstimateCalculation = ({
     
     const wasteFactor = 1 + (wastePercent / 100);
     
-    const lineItems: LineItem[] = selectedItems.map<LineItem | null>(id => {
+    const allLineItems: LineItem[] = selectedItems.map<LineItem | null>(id => {
       const item = allSelectableItems.find(p => p.id === id);
       if (!item) return null;
 
       const isVendorItem = item.isVendorItem === true;
       const isCustomItem = item.isCustomItem === true;
       const baseQty = itemQuantities[id] ?? 0;
-      // Apply waste factor only to non-vendor materials
+      // Check if item is optional (skylights)
+      const isOptional = item.name.toLowerCase().includes('skylight');
+      // Apply waste factor only to non-vendor materials (and not optional items)
       const isMaterialCategory = item.category === 'materials' || item.category === 'schafer';
-      const qty = !isVendorItem && isMaterialCategory ? Math.ceil(baseQty * wasteFactor) : baseQty;
+      const qty = !isVendorItem && isMaterialCategory && !isOptional ? Math.ceil(baseQty * wasteFactor) : baseQty;
       const itemPrice = isVendorItem ? (vendorAdjustedPriceMap.get(item.id) ?? item.price) : item.price;
       const baseTotal = baseQty * itemPrice;
       const total = qty * itemPrice;
@@ -282,10 +284,15 @@ export const useEstimateCalculation = ({
         baseQuantity: baseQty,
         quantity: qty,
         total,
-        wasteAdded: !isVendorItem && isMaterialCategory ? qty - baseQty : 0,
+        wasteAdded: !isVendorItem && isMaterialCategory && !isOptional ? qty - baseQty : 0,
         isCustomItem: isCustomItem || false,
+        isOptional: isOptional || false,
       } as LineItem;
     }).filter((item): item is LineItem => item !== null);
+
+    // Separate optional items from regular line items
+    const lineItems = allLineItems.filter(item => !item.isOptional);
+    const optionalItems = allLineItems.filter(item => item.isOptional);
 
     const byCategory: Estimate['byCategory'] = Object.keys(CATEGORIES).reduce((acc, cat) => {
       acc[cat as keyof typeof CATEGORIES] = lineItems.filter(item => item.category === cat);
@@ -327,6 +334,7 @@ export const useEstimateCalculation = ({
     // Create the estimate object
     const newEstimate: Estimate = {
       lineItems,
+      optionalItems,
       byCategory,
       totals,
       baseCost,

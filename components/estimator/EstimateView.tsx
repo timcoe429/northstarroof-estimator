@@ -1,7 +1,7 @@
 'use client'
 
-import React from 'react';
-import { ChevronDown, ChevronUp, ChevronRight, FileText, Upload } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronDown, ChevronUp, ChevronRight, FileText, Upload, Share2, X, Copy, Check } from 'lucide-react';
 import type { Estimate, VendorQuote, VendorQuoteItem } from '@/types';
 import type { ValidationWarning } from '@/types/estimator';
 import { CATEGORIES } from '@/lib/constants';
@@ -11,6 +11,12 @@ import { FinancialSummary } from './FinancialSummary';
 interface EstimateViewProps {
   /** The generated estimate */
   estimate: Estimate;
+  /** Saved estimate ID (if estimate has been saved) */
+  estimateId?: string;
+  /** Current share token (if sharing is enabled) */
+  shareToken?: string | null;
+  /** Whether sharing is currently enabled */
+  shareEnabled?: boolean;
   /** Validation warnings */
   validationWarnings: ValidationWarning[];
   /** Whether PDF is being generated */
@@ -45,6 +51,8 @@ interface EstimateViewProps {
   onSaveQuote: () => void;
   /** Callback to reset estimator */
   onReset: () => void;
+  /** Callback to update share settings */
+  onUpdateShareSettings?: (enabled: boolean, token: string | null) => void;
 }
 
 /**
@@ -53,6 +61,9 @@ interface EstimateViewProps {
  */
 export function EstimateView({
   estimate,
+  estimateId,
+  shareToken,
+  shareEnabled = false,
   validationWarnings,
   isGeneratingPDF,
   isSavingQuote,
@@ -70,7 +81,43 @@ export function EstimateView({
   onEditEstimate,
   onSaveQuote,
   onReset,
+  onUpdateShareSettings,
 }: EstimateViewProps) {
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [localShareEnabled, setLocalShareEnabled] = useState(shareEnabled);
+  const [localShareToken, setLocalShareToken] = useState<string | null>(shareToken || null);
+  const [copied, setCopied] = useState(false);
+
+  const handleToggleSharing = async (enabled: boolean) => {
+    if (!estimateId) {
+      alert('Please save the estimate first before enabling sharing.');
+      return;
+    }
+
+    let token = localShareToken;
+    if (enabled && !token) {
+      // Generate new token
+      token = crypto.randomUUID();
+      setLocalShareToken(token);
+    }
+
+    setLocalShareEnabled(enabled);
+    
+    if (onUpdateShareSettings) {
+      onUpdateShareSettings(enabled, enabled ? token : null);
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (localShareToken) {
+      const shareUrl = `${window.location.origin}/share/${localShareToken}`;
+      navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const shareUrl = localShareToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/share/${localShareToken}` : '';
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Validation Warnings */}
@@ -99,20 +146,134 @@ export function EstimateView({
         </div>
       )}
 
-      {/* Download Proposal PDF Button */}
-      <div className="flex justify-end">
-        <button
-          onClick={onDownloadProposal}
-          disabled={isGeneratingPDF}
-          className={`flex items-center gap-2 px-4 py-2 rounded text-white transition-colors ${
-            isGeneratingPDF
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-green-600 hover:bg-green-700'
-          }`}
-        >
-          {isGeneratingPDF ? 'Generating Proposal...' : '📄 Download Proposal PDF'}
-        </button>
-      </div>
+      {/* Download Proposal PDF and Share Buttons */}
+      {onUpdateShareSettings && (
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={() => setShowShareModal(true)}
+            disabled={!estimateId}
+            className={`flex items-center gap-2 px-4 py-2 rounded text-white transition-colors ${
+              !estimateId
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            <Share2 className="w-4 h-4" />
+            Share
+          </button>
+          <button
+            onClick={onDownloadProposal}
+            disabled={isGeneratingPDF}
+            className={`flex items-center gap-2 px-4 py-2 rounded text-white transition-colors ${
+              isGeneratingPDF
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-green-600 hover:bg-green-700'
+            }`}
+          >
+            {isGeneratingPDF ? 'Generating Proposal...' : '📄 Download Proposal PDF'}
+          </button>
+        </div>
+      )}
+      {!onUpdateShareSettings && (
+        <div className="flex justify-end">
+          <button
+            onClick={onDownloadProposal}
+            disabled={isGeneratingPDF}
+            className={`flex items-center gap-2 px-4 py-2 rounded text-white transition-colors ${
+              isGeneratingPDF
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-green-600 hover:bg-green-700'
+            }`}
+          >
+            {isGeneratingPDF ? 'Generating Proposal...' : '📄 Download Proposal PDF'}
+          </button>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Share Estimate</h3>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {!estimateId ? (
+              <div className="text-sm text-gray-600 mb-4">
+                Please save the estimate first before enabling sharing.
+              </div>
+            ) : (
+              <>
+                <div className="mb-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={localShareEnabled}
+                      onChange={(e) => handleToggleSharing(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Enable sharing</span>
+                  </label>
+                </div>
+
+                {localShareEnabled ? (
+                  <div className="space-y-3">
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <div className="text-xs text-gray-500 mb-1">Shareable Link</div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={shareUrl}
+                          readOnly
+                          className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded bg-white"
+                        />
+                        <button
+                          onClick={handleCopyLink}
+                          className="flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
+                        >
+                          {copied ? (
+                            <>
+                              <Check className="w-4 h-4" />
+                              Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-4 h-4" />
+                              Copy
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Anyone with this link can view the estimate. Disable sharing to revoke access.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">
+                    Sharing is disabled. Enable sharing to generate a shareable link.
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Profit Summary Card */}
       <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-4 md:p-6 text-white">
@@ -255,6 +416,32 @@ export function EstimateView({
             </div>
           );
         })}
+
+        {/* Optional Items Section */}
+        {estimate.optionalItems && estimate.optionalItems.length > 0 && (
+          <div className="mb-4 md:mb-6">
+            <div className="w-full py-2 px-3 bg-gray-50 rounded-lg mb-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs md:text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                  OPTIONAL ITEMS (Not Included in Quote Total)
+                </h3>
+              </div>
+            </div>
+            <div className="mt-2 space-y-2">
+              {estimate.optionalItems.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg opacity-75">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm text-gray-600 block truncate">{item.name}</div>
+                    <span className="text-gray-400 text-xs">
+                      {item.quantity} {item.unit} × {formatCurrency(item.price)}
+                    </span>
+                  </div>
+                  <span className="font-semibold text-sm text-gray-600 ml-2">{formatCurrency(item.total)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Financial Summary */}
         <div className="border-t-2 border-gray-200 pt-4 mt-4 md:mt-6 space-y-2 md:space-y-3 text-sm">

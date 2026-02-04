@@ -23,7 +23,7 @@ export async function saveQuote(estimate: Estimate, quoteName: string, userId: s
     customer_id: null, // Will link customers later
     name: quoteName,
     measurements: estimate.measurements,
-    line_items: estimate.lineItems,
+    line_items: [...estimate.lineItems, ...(estimate.optionalItems || [])],
     base_cost: estimate.baseCost,
     office_percent: estimate.officeCostPercent,
     office_amount: estimate.officeAllocation,
@@ -424,4 +424,45 @@ export async function deletePriceItemFromDB(itemId: string, userId: string): Pro
   if (error) {
     throw new Error(`Failed to delete price item: ${error.message}`);
   }
+}
+
+// Update share settings for an estimate
+export async function updateShareSettings(
+  estimateId: string,
+  shareEnabled: boolean,
+  shareToken: string | null,
+  userId: string | undefined
+): Promise<void> {
+  if (!userId) {
+    throw new Error('User ID is required to update share settings');
+  }
+
+  const { error } = await supabase
+    .from('estimates')
+    .update({
+      share_enabled: shareEnabled,
+      share_token: shareToken,
+    })
+    .eq('id', estimateId)
+    .eq('user_id', userId);
+
+  if (error) {
+    throw new Error(`Failed to update share settings: ${error.message}`);
+  }
+}
+
+// Get estimate by share token (public, no auth required)
+export async function getEstimateByShareToken(token: string): Promise<SavedQuote | null> {
+  const { data, error } = await supabase
+    .from('estimates')
+    .select('*')
+    .eq('share_token', token)
+    .eq('share_enabled', true)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data as SavedQuote;
 }

@@ -517,7 +517,7 @@ async function generateIntroductionPage(intro: StructuredIntro): Promise<PDFDocu
 
 // Page content data structure for two-pass approach
 interface PageContent {
-  items: Array<{ item: any; section: string; descLines: string[]; price: number }>;
+  items: Array<{ item: any; section: string; descLines: string[]; price: number; isOptional?: boolean }>;
 }
 
 // Generate line item pages using two-pass approach
@@ -532,12 +532,14 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
   const materialsItems = [...estimate.byCategory.materials, ...estimate.byCategory.accessories];
   const laborItems = estimate.byCategory.labor;
   const equipmentItems = estimate.byCategory.equipment;
+  const optionalItems = estimate.optionalItems || [];
   
-  // All items grouped by section (only THREE sections)
-  const allItems: Array<{ item: typeof materialsItems[0]; section: string }> = [
+  // All items grouped by section (FOUR sections including optional)
+  const allItems: Array<{ item: typeof materialsItems[0]; section: string; isOptional?: boolean }> = [
     ...materialsItems.map(item => ({ item, section: 'MATERIALS' })),
     ...laborItems.map(item => ({ item, section: 'LABOR' })),
     ...equipmentItems.map(item => ({ item, section: 'EQUIPMENT & FEES' })),
+    ...optionalItems.map(item => ({ item, section: 'OPTIONAL ITEMS (Not Included in Quote Total)', isOptional: true })),
   ];
   
   if (allItems.length === 0) {
@@ -604,12 +606,16 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     }
     
     // Add item to current page content
-    const clientPrice = Math.round(item.total * effectiveMultiplier * 100) / 100;
+    // Optional items don't use effectiveMultiplier (they're not included in quote total)
+    const clientPrice = allItems[i].isOptional 
+      ? Math.round(item.total * 100) / 100
+      : Math.round(item.total * effectiveMultiplier * 100) / 100;
     currentPageContent.items.push({
       item,
       section,
       descLines: wordWrap(description, font, 10, maxDescWidth),
       price: clientPrice,
+      isOptional: allItems[i].isOptional || false,
     });
     
     // Update Y position
@@ -651,7 +657,7 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
         ? contentItem.item.proposalDescription 
         : contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
-      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection);
+      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false);
       
       // Ensure we don't exceed the bottom margin
       if (newYPos < REGULAR_PAGE_BOTTOM_MARGIN) {
@@ -692,7 +698,7 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
         ? contentItem.item.proposalDescription 
         : contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
-      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection);
+      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false);
       
       // Ensure we don't exceed the bottom margin (quote page has larger margin for the box)
       if (newYPos < QUOTE_PAGE_BOTTOM_MARGIN) {
@@ -783,7 +789,8 @@ function drawLineItemRow(
   description: string, 
   price: string, 
   font: any, 
-  isFirstInSection: boolean = false
+  isFirstInSection: boolean = false,
+  isOptional: boolean = false
 ): number {
   const maxDescWidth = DESC_COLUMN_WIDTH - ROW_PADDING * 2;
   const fontSize = 10;
@@ -850,13 +857,16 @@ function drawLineItemRow(
   const textStartY = centerY + (totalTextHeight / 2) - fontSize;
   let textY = textStartY;
   
+  // Use lighter gray color for optional items
+  const textColor = isOptional ? rgb(0.5, 0.5, 0.5) : rgb(0, 0, 0);
+  
   for (const line of lines) {
     page.drawText(line, {
       x: DESC_COLUMN_LEFT + ROW_PADDING,
       y: textY,
       size: fontSize,
       font: font,
-      color: rgb(0, 0, 0),
+      color: textColor,
     });
     textY -= (fontSize + 4);
   }
@@ -870,7 +880,7 @@ function drawLineItemRow(
       y: priceY,
       size: fontSize,
       font: font,
-      color: rgb(0, 0, 0),
+      color: textColor,
     });
   }
   

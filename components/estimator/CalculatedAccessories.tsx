@@ -23,6 +23,7 @@ interface CalculatedAccessoriesProps {
   skylightCount: number;
   onAddSkylight: () => void;
   onRemoveSkylight: () => void;
+  onAddSkylightsToEstimate?: (skylightItemId: string, quantity: number) => void;
   onMissingItemsChange?: (missingItems: string[]) => void;
 }
 
@@ -35,6 +36,7 @@ export function CalculatedAccessories({
   skylightCount,
   onAddSkylight,
   onRemoveSkylight,
+  onAddSkylightsToEstimate,
   onMissingItemsChange,
 }: CalculatedAccessoriesProps) {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -109,6 +111,9 @@ export function CalculatedAccessories({
   const snowRetentionAdded = snowRetentionMaterialItem && snowRetentionLaborItem &&
     selectedItems.includes(snowRetentionMaterialItem.id) &&
     selectedItems.includes(snowRetentionLaborItem.id);
+
+  const skylightsAdded = skylightItem && skylightCount > 0 &&
+    selectedItems.includes(skylightItem.id);
 
   // Check for missing price items
   const missingItems: string[] = useMemo(() => {
@@ -271,14 +276,14 @@ export function CalculatedAccessories({
             <h4 className="font-medium text-gray-900 mb-3">Optional (not included in total)</h4>
 
             {/* Skylights */}
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium text-sm">Skylights</div>
-                <div className="text-xs text-gray-600">
-                  {formatCurrency(prices.skylight)} each
-                </div>
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-gray-900">Skylights</h4>
+                <span className="text-sm text-gray-600">
+                  {formatCurrency(skylightCount * prices.skylight)}
+                </span>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 mb-3">
                 <button
                   onClick={onRemoveSkylight}
                   disabled={skylightCount <= 0}
@@ -293,10 +298,33 @@ export function CalculatedAccessories({
                 >
                   <Plus className="w-4 h-4" />
                 </button>
-                <span className="w-24 text-right font-medium">
-                  {formatCurrency(skylightCount * prices.skylight)}
+                <span className="text-xs text-gray-600 flex-1 text-right">
+                  {formatCurrency(prices.skylight)} each
                 </span>
               </div>
+              {skylightItem ? (
+                <button
+                  onClick={() => {
+                    if (skylightCount > 0 && onAddSkylightsToEstimate) {
+                      onAddSkylightsToEstimate(skylightItem.id, skylightCount);
+                    }
+                  }}
+                  disabled={skylightsAdded || skylightCount <= 0}
+                  className={`w-full py-2 px-4 rounded-lg font-medium text-sm ${
+                    skylightsAdded
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : skylightCount > 0
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  {skylightsAdded ? 'Already Added' : 'Add to Estimate'}
+                </button>
+              ) : (
+                <div className="text-xs text-amber-600 py-2">
+                  Missing price item: Skylight (accessories or materials)
+                </div>
+              )}
             </div>
           </div>
         </div>
