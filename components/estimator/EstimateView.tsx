@@ -17,6 +17,8 @@ interface EstimateViewProps {
   shareToken?: string | null;
   /** Whether sharing is currently enabled */
   shareEnabled?: boolean;
+  /** Whether this is a read-only view (e.g., shared estimate) */
+  readOnly?: boolean;
   /** Validation warnings */
   validationWarnings: ValidationWarning[];
   /** Whether PDF is being generated */
@@ -64,6 +66,7 @@ export function EstimateView({
   estimateId,
   shareToken,
   shareEnabled = false,
+  readOnly = false,
   validationWarnings,
   isGeneratingPDF,
   isSavingQuote,
@@ -420,26 +423,38 @@ export function EstimateView({
         {/* Optional Items Section */}
         {estimate.optionalItems && estimate.optionalItems.length > 0 && (
           <div className="mb-4 md:mb-6">
-            <div className="w-full py-2 px-3 bg-gray-50 rounded-lg mb-2">
+            <button
+              onClick={() => onToggleSection('optional')}
+              className="w-full flex items-center justify-between py-2 px-3 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors mb-2"
+            >
               <div className="flex items-center gap-2">
-                <h3 className="text-xs md:text-sm font-semibold text-gray-600 uppercase tracking-wide">
-                  OPTIONAL ITEMS (Not Included in Quote Total)
+                {expandedSections.has('optional') ? (
+                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                )}
+                <h3 className="text-xs md:text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                  OPTIONAL ITEMS (Not Included in Quote Total) ({estimate.optionalItems.length} {estimate.optionalItems.length === 1 ? 'item' : 'items'})
                 </h3>
               </div>
-            </div>
-            <div className="mt-2 space-y-2">
-              {estimate.optionalItems.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg opacity-75">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm text-gray-600 block truncate">{item.name}</div>
-                    <span className="text-gray-400 text-xs">
-                      {item.quantity} {item.unit} × {formatCurrency(item.price)}
-                    </span>
+              <span className="font-bold text-sm">{formatCurrency(estimate.optionalItems.reduce((sum, item) => sum + item.total, 0))}</span>
+            </button>
+
+            {expandedSections.has('optional') && (
+              <div className="mt-2 space-y-2">
+                {estimate.optionalItems.map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg opacity-75">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm text-gray-600 block truncate">{item.name}</div>
+                      <span className="text-gray-400 text-xs">
+                        {item.quantity} {item.unit} × {formatCurrency(item.price)}
+                      </span>
+                    </div>
+                    <span className="font-semibold text-sm text-gray-600 ml-2">{formatCurrency(item.total)}</span>
                   </div>
-                  <span className="font-semibold text-sm text-gray-600 ml-2">{formatCurrency(item.total)}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -508,38 +523,40 @@ export function EstimateView({
       </div>
 
       {/* Actions */}
-      <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
-        <button
-          onClick={onEditEstimate}
-          className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm md:text-base"
-        >
-          Edit Estimate
-        </button>
-        <button
-          onClick={onSaveQuote}
-          disabled={isSavingQuote}
-          className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-semibold rounded-xl flex items-center justify-center gap-2 text-sm md:text-base"
-        >
-          {isSavingQuote ? (
-            <>
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <FileText className="w-5 h-5" />
-              Save Quote
-            </>
-          )}
-        </button>
-        <button
-          onClick={onReset}
-          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 text-sm md:text-base"
-        >
-          <Upload className="w-5 h-5" />
-          New Estimate
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
+          <button
+            onClick={onEditEstimate}
+            className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm md:text-base"
+          >
+            Edit Estimate
+          </button>
+          <button
+            onClick={onSaveQuote}
+            disabled={isSavingQuote}
+            className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-semibold rounded-xl flex items-center justify-center gap-2 text-sm md:text-base"
+          >
+            {isSavingQuote ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <FileText className="w-5 h-5" />
+                Save Quote
+              </>
+            )}
+          </button>
+          <button
+            onClick={onReset}
+            className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 text-sm md:text-base"
+          >
+            <Upload className="w-5 h-5" />
+            New Estimate
+          </button>
+        </div>
+      )}
     </div>
   );
 }

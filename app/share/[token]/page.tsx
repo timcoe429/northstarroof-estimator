@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import type { SavedQuote, Estimate, VendorQuote, VendorQuoteItem } from '@/types';
 import { EstimateView } from '@/components/estimator';
 import { formatCurrency } from '@/lib/estimatorUtils';
+import { generateProposalPDF } from '@/lib/generateProposal';
 
 export default function SharePage() {
   const params = useParams();
@@ -12,6 +13,8 @@ export default function SharePage() {
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   useEffect(() => {
     const fetchEstimate = async () => {
@@ -94,6 +97,40 @@ export default function SharePage() {
     }
   }, [token]);
 
+  const handleToggleSection = (sectionKey: string) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionKey)) {
+        next.delete(sectionKey);
+      } else {
+        next.add(sectionKey);
+      }
+      return next;
+    });
+  };
+
+  const handleDownloadProposal = async () => {
+    if (!estimate) return;
+
+    setIsGeneratingPDF(true);
+    try {
+      const blob = await generateProposalPDF(estimate);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Proposal_${estimate.customerInfo.name || 'Customer'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Error generating PDF. Please try again.');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -127,9 +164,9 @@ export default function SharePage() {
         <EstimateView
           estimate={estimate}
           validationWarnings={[]}
-          isGeneratingPDF={false}
+          isGeneratingPDF={isGeneratingPDF}
           isSavingQuote={false}
-          expandedSections={new Set()}
+          expandedSections={expandedSections}
           showVendorBreakdown={false}
           vendorQuotes={[]}
           vendorQuoteItems={[]}
@@ -137,12 +174,13 @@ export default function SharePage() {
           vendorQuoteMap={new Map()}
           vendorTaxFeesTotal={0}
           onDismissWarnings={() => {}}
-          onDownloadProposal={() => {}}
-          onToggleSection={() => {}}
+          onDownloadProposal={handleDownloadProposal}
+          onToggleSection={handleToggleSection}
           onToggleVendorBreakdown={() => {}}
           onEditEstimate={() => {}}
           onSaveQuote={() => {}}
           onReset={() => {}}
+          readOnly={true}
         />
       </div>
     </div>
