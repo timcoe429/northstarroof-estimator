@@ -25,6 +25,12 @@ export const useFinancialControls = () => {
     return saved ? parseFloat(saved) : 10;
   });
 
+  const [salesTaxPercent, setSalesTaxPercent] = useState(() => {
+    if (typeof window === 'undefined') return 10;
+    const saved = localStorage.getItem('roofscope_sales_tax');
+    return saved ? parseFloat(saved) : 10;
+  });
+
   // Save to localStorage when values change
   useEffect(() => {
     localStorage.setItem('roofscope_margin', marginPercent.toString());
@@ -42,6 +48,10 @@ export const useFinancialControls = () => {
     localStorage.setItem('roofscope_sundries', sundriesPercent.toString());
   }, [sundriesPercent]);
 
+  useEffect(() => {
+    localStorage.setItem('roofscope_sales_tax', salesTaxPercent.toString());
+  }, [salesTaxPercent]);
+
   return {
     marginPercent,
     setMarginPercent,
@@ -51,5 +61,7 @@ export const useFinancialControls = () => {
     setWastePercent,
     sundriesPercent,
     setSundriesPercent,
+    salesTaxPercent,
+    setSalesTaxPercent,
   };
 };

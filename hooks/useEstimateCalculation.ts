@@ -11,6 +11,7 @@ interface UseEstimateCalculationProps {
   vendorAdjustedPriceMap: Map<string, number>;
   wastePercent: number;
   sundriesPercent: number;
+  salesTaxPercent: number;
   marginPercent: number;
   officeCostPercent: number;
   customerInfo: CustomerInfo;
@@ -26,6 +27,7 @@ export const useEstimateCalculation = ({
   vendorAdjustedPriceMap,
   wastePercent,
   sundriesPercent,
+  salesTaxPercent,
   marginPercent,
   officeCostPercent,
   customerInfo,
@@ -331,6 +333,10 @@ export const useEstimateCalculation = ({
     const grossProfit = sellPrice - totalCost;
     const profitMargin = sellPrice > 0 ? (grossProfit / sellPrice) * 100 : 0;
 
+    // Calculate sales tax AFTER sell price (applied to final sell price)
+    const salesTaxAmount = sellPrice * (salesTaxPercent / 100);
+    const finalPrice = sellPrice + salesTaxAmount;
+
     // Create the estimate object
     const newEstimate: Estimate = {
       lineItems,
@@ -346,6 +352,9 @@ export const useEstimateCalculation = ({
       sundriesPercent,
       sundriesAmount,
       sellPrice,
+      salesTaxPercent,
+      salesTaxAmount,
+      finalPrice,
       grossProfit,
       profitMargin,
       measurements,
@@ -366,6 +375,7 @@ export const useEstimateCalculation = ({
     vendorAdjustedPriceMap,
     wastePercent,
     sundriesPercent,
+    salesTaxPercent,
     marginPercent,
     officeCostPercent,
     customerInfo,

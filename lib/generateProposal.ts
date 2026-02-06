@@ -1,5 +1,6 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import type { Estimate } from '@/types';
+import { toTitleCase } from '@/lib/formatters';
 
 // Content safe zone constants (72 points = 1 inch)
 const PAGE_WIDTH = 612; // Letter size
@@ -524,9 +525,18 @@ interface PageContent {
 async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]> {
   const pages: PDFDocument[] = [];
   
-  // Calculate effective multiplier that makes line items sum to sellPrice
+  // Calculate effective multiplier that makes line items sum to finalPrice (includes sales tax)
   const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
-  const effectiveMultiplier = rawTotal > 0 ? estimate.sellPrice / rawTotal : 1;
+  const effectiveMultiplier = rawTotal > 0 ? estimate.finalPrice / rawTotal : 1;
+  
+  // Get custom section headers or use defaults
+  const sectionHeaders = estimate.sectionHeaders || {
+    materials: 'Materials',
+    labor: 'Labor',
+    equipment: 'Equipment & Fees',
+    accessories: 'Accessories',
+    schafer: 'Vendor Quote',
+  };
   
   // Combine materials and accessories into MATERIALS section
   const materialsItems = [...estimate.byCategory.materials, ...estimate.byCategory.accessories];
@@ -536,9 +546,9 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
   
   // All items grouped by section (FOUR sections including optional)
   const allItems: Array<{ item: typeof materialsItems[0]; section: string; isOptional?: boolean }> = [
-    ...materialsItems.map(item => ({ item, section: 'MATERIALS' })),
-    ...laborItems.map(item => ({ item, section: 'LABOR' })),
-    ...equipmentItems.map(item => ({ item, section: 'EQUIPMENT & FEES' })),
+    ...materialsItems.map(item => ({ item, section: sectionHeaders.materials.toUpperCase() })),
+    ...laborItems.map(item => ({ item, section: sectionHeaders.labor.toUpperCase() })),
+    ...equipmentItems.map(item => ({ item, section: sectionHeaders.equipment.toUpperCase() })),
     ...optionalItems.map(item => ({ item, section: 'OPTIONAL ITEMS (Not Included in Quote Total)', isOptional: true })),
   ];
   
@@ -559,10 +569,11 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     const { item, section } = allItems[i];
     const sectionChanged = currentSection !== section;
     
-    // Calculate space needed
-    const description = item.proposalDescription && item.proposalDescription.trim() 
+    // Calculate space needed - apply title case unless manually overridden
+    const rawDescription = item.proposalDescription && item.proposalDescription.trim() 
       ? item.proposalDescription 
       : item.name;
+    const description = item.manualOverrides?.name ? rawDescription : toTitleCase(rawDescription);
     const maxDescWidth = DESC_COLUMN_WIDTH - ROW_PADDING * 2;
     const sectionHeaderSpace = sectionChanged ? ROW_HEIGHT_SINGLE : 0;
     const itemHeight = calculateRowHeight(description, font, 10, maxDescWidth);
@@ -653,9 +664,10 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
       }
       
       // Draw item row - ensure we don't go below regular page bottom margin
-      const description = contentItem.item.proposalDescription && contentItem.item.proposalDescription.trim() 
+      const rawDescription = contentItem.item.proposalDescription && contentItem.item.proposalDescription.trim() 
         ? contentItem.item.proposalDescription 
         : contentItem.item.name;
+      const description = contentItem.item.manualOverrides?.name ? rawDescription : toTitleCase(rawDescription);
       const priceText = formatCurrency(contentItem.price);
       const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false);
       
@@ -694,9 +706,10 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
       }
       
       // Draw item row - ensure we don't go below quote page bottom margin
-      const description = contentItem.item.proposalDescription && contentItem.item.proposalDescription.trim() 
+      const rawDescription = contentItem.item.proposalDescription && contentItem.item.proposalDescription.trim() 
         ? contentItem.item.proposalDescription 
         : contentItem.item.name;
+      const description = contentItem.item.manualOverrides?.name ? rawDescription : toTitleCase(rawDescription);
       const priceText = formatCurrency(contentItem.price);
       const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false);
       
@@ -708,8 +721,8 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
       yPos = newYPos;
     }
     
-    // Add Quote Total amount overlay - vertically centered in navy box
-    const totalPrice = Math.round(estimate.sellPrice * 100) / 100;
+    // Add Quote Total amount overlay - vertically centered in navy box (uses finalPrice which includes sales tax)
+    const totalPrice = Math.round(estimate.finalPrice * 100) / 100;
     const priceText = formatCurrency(totalPrice);
     const priceWidth = pageBoldFont.widthOfTextAtSize(priceText, 14);
     const fontSize = 14;

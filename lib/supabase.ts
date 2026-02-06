@@ -31,15 +31,21 @@ export async function saveQuote(estimate: Estimate, quoteName: string, userId: s
     waste_percent: estimate.wastePercent,
     sundries_percent: estimate.sundriesPercent,
     sundries_amount: estimate.sundriesAmount,
+    sales_tax_percent: estimate.salesTaxPercent,
+    sales_tax_amount: estimate.salesTaxAmount,
+    final_price: estimate.finalPrice,
     total_cost: estimate.totalCost,
     sell_price: estimate.sellPrice,
     gross_profit: estimate.grossProfit,
     status: 'draft',
   };
   
-  // Add job_description if provided
+  // Add optional fields
   if (jobDescription !== undefined) {
     quoteData.job_description = jobDescription;
+  }
+  if (estimate.sectionHeaders) {
+    quoteData.section_headers = estimate.sectionHeaders;
   }
 
   // Debug logging - log quoteData before insert
@@ -277,11 +283,19 @@ export async function updateQuote(id: string, estimate: Estimate, quoteName: str
     waste_percent: estimate.wastePercent,
     sundries_percent: estimate.sundriesPercent,
     sundries_amount: estimate.sundriesAmount,
+    sales_tax_percent: estimate.salesTaxPercent,
+    sales_tax_amount: estimate.salesTaxAmount,
+    final_price: estimate.finalPrice,
     total_cost: estimate.totalCost,
     sell_price: estimate.sellPrice,
     gross_profit: estimate.grossProfit,
     updated_at: new Date().toISOString(),
   };
+
+  // Add optional fields
+  if (estimate.sectionHeaders) {
+    quoteData.section_headers = estimate.sectionHeaders;
+  }
 
   const { data, error } = await supabase
     .from('estimates')

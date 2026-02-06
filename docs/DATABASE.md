@@ -48,6 +48,16 @@ Saved estimates
 - `office_percent` (numeric)
 - `office_amount` (numeric)
 - `margin_percent` (numeric)
+- `waste_percent` (numeric) - Material waste percentage
+- `sundries_percent` (numeric) - Materials allowance percentage
+- `sundries_amount` (numeric) - Materials allowance amount
+- `sales_tax_percent` (numeric) - Sales tax percentage (default 10)
+- `sales_tax_amount` (numeric) - Sales tax amount
+- `final_price` (numeric) - Final price including sales tax (sell_price + sales_tax_amount)
+- `section_headers` (jsonb) - Custom section header names
+- `job_description` (text) - Job description text
+- `share_token` (text) - Unique token for sharing estimates
+- `share_enabled` (boolean) - Whether sharing is enabled
 - `total_cost` (numeric)
 - `sell_price` (numeric)
 - `gross_profit` (numeric)

@@ -17,6 +17,7 @@ interface UseSavedQuotesProps {
   onSetOfficeCostPercent: (percent: number) => void;
   onSetSundriesPercent: (percent: number) => void;
   onSetWastePercent: (percent: number) => void;
+  onSetSalesTaxPercent: (percent: number) => void;
   onSetItemQuantities: (quantities: Record<string, number>) => void;
   onSetSelectedItems: (items: string[]) => void;
   onSetCustomItems: (items: CustomItem[]) => void;
@@ -43,6 +44,7 @@ export const useSavedQuotes = ({
   onSetOfficeCostPercent,
   onSetSundriesPercent,
   onSetWastePercent,
+  onSetSalesTaxPercent,
   onSetItemQuantities,
   onSetSelectedItems,
   onSetCustomItems,
@@ -207,6 +209,21 @@ export const useSavedQuotes = ({
         }
       }
       onSetWastePercent(wastePercent);
+
+      // Restore sales tax percent from database (now saved explicitly)
+      const salesTaxPercent = restoredEstimateData.sales_tax_percent !== undefined && restoredEstimateData.sales_tax_percent !== null
+        ? restoredEstimateData.sales_tax_percent
+        : 10; // Default for old quotes
+      onSetSalesTaxPercent(salesTaxPercent);
+
+      // Restore section headers from database (with defaults for old quotes)
+      const sectionHeaders = restoredEstimateData.section_headers || {
+        materials: 'Materials',
+        labor: 'Labor',
+        equipment: 'Equipment & Fees',
+        accessories: 'Accessories',
+        schafer: 'Vendor Quote',
+      };
       
       // Restore line items and quantities
       const allRestoredLineItems = savedQuote.line_items;
@@ -270,6 +287,14 @@ export const useSavedQuotes = ({
         schafer: byCategory.schafer.reduce((sum: number, item: any) => sum + item.total, 0),
       };
       
+      // Calculate sales tax and final price if missing (for old quotes)
+      const salesTaxAmount = restoredEstimateData.sales_tax_amount !== undefined && restoredEstimateData.sales_tax_amount !== null
+        ? restoredEstimateData.sales_tax_amount
+        : savedQuote.sell_price * (salesTaxPercent / 100);
+      const finalPrice = restoredEstimateData.final_price !== undefined && restoredEstimateData.final_price !== null
+        ? restoredEstimateData.final_price
+        : savedQuote.sell_price + salesTaxAmount;
+
       const restoredEstimate: Estimate = {
         lineItems: restoredLineItems,
         optionalItems: restoredOptionalItems,
@@ -284,8 +309,12 @@ export const useSavedQuotes = ({
         sundriesPercent: restoredEstimateData.sundries_percent !== undefined ? restoredEstimateData.sundries_percent : 10,
         sundriesAmount: restoredEstimateData.sundries_amount !== undefined ? restoredEstimateData.sundries_amount : (totals.materials * 0.1),
         sellPrice: savedQuote.sell_price,
+        salesTaxPercent,
+        salesTaxAmount,
+        finalPrice,
         grossProfit: savedQuote.gross_profit,
         profitMargin: savedQuote.sell_price > 0 ? (savedQuote.gross_profit / savedQuote.sell_price) * 100 : 0,
+        sectionHeaders,
         measurements: cleanMeasurements,
         customerInfo: customerInfo,
         generatedAt: new Date(savedQuote.created_at).toLocaleString(),

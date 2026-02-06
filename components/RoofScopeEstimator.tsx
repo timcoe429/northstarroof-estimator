@@ -266,6 +266,7 @@ export default function RoofScopeEstimator() {
     officeCostPercent: financialControls.officeCostPercent,
     wastePercent: financialControls.wastePercent,
     sundriesPercent: financialControls.sundriesPercent,
+    salesTaxPercent: financialControls.salesTaxPercent,
     customerInfo,
     vendorAdjustedPriceMap: vendorQuotes.vendorAdjustedPriceMap,
     isTearOff: smartSelection.isTearOff,
@@ -321,6 +322,7 @@ export default function RoofScopeEstimator() {
     onSetOfficeCostPercent: financialControls.setOfficeCostPercent,
     onSetSundriesPercent: financialControls.setSundriesPercent,
     onSetWastePercent: financialControls.setWastePercent,
+    onSetSalesTaxPercent: financialControls.setSalesTaxPercent,
     onSetItemQuantities: setItemQuantities,
     onSetSelectedItems: setSelectedItems,
     onSetCustomItems: (items) => {
@@ -342,7 +344,7 @@ export default function RoofScopeEstimator() {
       calculateEstimate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [financialControls.wastePercent, financialControls.marginPercent, financialControls.officeCostPercent, financialControls.sundriesPercent]);
+  }, [financialControls.wastePercent, financialControls.marginPercent, financialControls.officeCostPercent, financialControls.sundriesPercent, financialControls.salesTaxPercent]);
 
   // Auto-select rolloffs for tear-off jobs
   useEffect(() => {
@@ -740,6 +742,21 @@ export default function RoofScopeEstimator() {
                       className="w-14 md:w-16 px-2 py-1.5 md:py-2 text-center font-semibold outline-none"
                       min="0"
                       max="50"
+                    />
+                    <span className="px-2 text-gray-400 bg-gray-50 text-sm">%</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">Sales Tax</label>
+                  <div className="flex items-center bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <input
+                      type="number"
+                      value={financialControls.salesTaxPercent}
+                      onChange={(e) => financialControls.setSalesTaxPercent(parseFloat(e.target.value) || 0)}
+                      className="w-14 md:w-16 px-2 py-1.5 md:py-2 text-center font-semibold outline-none"
+                      min="0"
+                      max="20"
                     />
                     <span className="px-2 text-gray-400 bg-gray-50 text-sm">%</span>
                   </div>

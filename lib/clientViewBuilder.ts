@@ -13,9 +13,9 @@ export const buildClientViewSections = ({
   vendorQuoteItems,
   groupedVendorItems,
 }: BuildClientViewSectionsParams) => {
-  // Calculate effective multiplier that makes line items sum to sellPrice
+  // Calculate effective multiplier that makes line items sum to finalPrice (includes sales tax)
   const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
-  const effectiveMultiplier = rawTotal > 0 ? estimate.sellPrice / rawTotal : 1;
+  const effectiveMultiplier = rawTotal > 0 ? estimate.finalPrice / rawTotal : 1;
   const vendorItemIds = new Set(vendorQuoteItems.map(item => item.id));
 
   const nonVendorMaterials = estimate.byCategory.materials.filter(item => !vendorItemIds.has(item.id));
@@ -181,9 +181,9 @@ export const buildEstimateForClientPdf = (
     groupedVendorItems,
   });
   
-  // Calculate effective multiplier for applying to line items
+  // Calculate effective multiplier for applying to line items (uses finalPrice which includes sales tax)
   const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
-  const effectiveMultiplier = rawTotal > 0 ? estimate.sellPrice / rawTotal : 1;
+  const effectiveMultiplier = rawTotal > 0 ? estimate.finalPrice / rawTotal : 1;
 
   const buildLineItems = (items: Array<{ name: string; description: string; total: number }>, category: LineItem['category']) => {
     return items.map((item, idx) => {
@@ -250,9 +250,9 @@ export const copyClientViewToClipboard = async (
     groupedVendorItems,
   });
   
-  // Calculate effective multiplier for applying to line items
+  // Calculate effective multiplier for applying to line items (uses finalPrice which includes sales tax)
   const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
-  const effectiveMultiplier = rawTotal > 0 ? estimate.sellPrice / rawTotal : 1;
+  const effectiveMultiplier = rawTotal > 0 ? estimate.finalPrice / rawTotal : 1;
 
   const sectionConfig = [
     { key: 'materials', label: 'Materials', items: clientSections.materials },
@@ -274,7 +274,7 @@ export const copyClientViewToClipboard = async (
 
   // Totals
   text += `${'─'.repeat(40)}\n`;
-  text += `TOTAL\t${formatCurrency(estimate.sellPrice)}\n`;
+  text += `TOTAL\t${formatCurrency(estimate.finalPrice)}\n`;
 
   try {
     await navigator.clipboard.writeText(text);

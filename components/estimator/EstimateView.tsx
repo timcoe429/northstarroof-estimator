@@ -6,6 +6,7 @@ import type { Estimate, VendorQuote, VendorQuoteItem } from '@/types';
 import type { ValidationWarning } from '@/types/estimator';
 import { CATEGORIES } from '@/lib/constants';
 import { formatCurrency, formatVendorName } from '@/lib/estimatorUtils';
+import { toTitleCase } from '@/lib/formatters';
 import { FinancialSummary } from './FinancialSummary';
 
 interface EstimateViewProps {
@@ -355,7 +356,7 @@ export function EstimateView({
           </div>
           <div className="text-left sm:text-right">
             <p className="text-xs md:text-sm text-gray-500">Quote to Customer</p>
-            <p className="text-2xl md:text-4xl font-bold text-gray-900">{formatCurrency(estimate.sellPrice)}</p>
+            <p className="text-2xl md:text-4xl font-bold text-gray-900">{formatCurrency(estimate.finalPrice)}</p>
           </div>
         </div>
 
@@ -364,6 +365,8 @@ export function EstimateView({
           const items = estimate.byCategory[catKey];
           if (!items || items.length === 0) return null;
           const isExpanded = expandedSections.has(catKey);
+          // Use custom section header if available, otherwise use default
+          const sectionHeader = estimate.sectionHeaders?.[catKey as keyof typeof estimate.sectionHeaders] || label;
 
           return (
             <div key={catKey} className="mb-4 md:mb-6">
@@ -378,7 +381,7 @@ export function EstimateView({
                     <ChevronRight className="w-4 h-4 text-gray-500" />
                   )}
                   <h3 className="text-xs md:text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                    {label} ({items.length} {items.length === 1 ? 'item' : 'items'})
+                    {sectionHeader} ({items.length} {items.length === 1 ? 'item' : 'items'})
                   </h3>
                 </div>
                 <span className="font-bold text-sm">{formatCurrency(estimate.totals[catKey])}</span>
@@ -396,7 +399,9 @@ export function EstimateView({
                       <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm block truncate">{item.name}</span>
+                            <span className="font-medium text-sm block truncate">
+                              {item.manualOverrides?.name ? item.name : toTitleCase(item.name)}
+                            </span>
                             {vendorItem && vendorQuote && (
                               <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
                                 {formatVendorName(vendorQuote.vendor)} Vendor
@@ -445,7 +450,9 @@ export function EstimateView({
                 {estimate.optionalItems.map((item, idx) => (
                   <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg opacity-75">
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm text-gray-600 block truncate">{item.name}</div>
+                      <div className="font-medium text-sm text-gray-600 block truncate">
+                        {item.manualOverrides?.name ? item.name : toTitleCase(item.name)}
+                      </div>
                       <span className="text-gray-400 text-xs">
                         {item.quantity} {item.unit} × {formatCurrency(item.price)}
                       </span>
@@ -502,14 +509,22 @@ export function EstimateView({
             <span>Margin ({estimate.marginPercent}%)</span>
             <span>+{formatCurrency(estimate.grossProfit)}</span>
           </div>
+          <div className="flex justify-between font-medium border-t border-gray-200 pt-2 md:pt-3">
+            <span>Sell Price</span>
+            <span>{formatCurrency(estimate.sellPrice)}</span>
+          </div>
+          <div className="flex justify-between text-gray-600">
+            <span>Sales Tax ({estimate.salesTaxPercent}%)</span>
+            <span>+{formatCurrency(estimate.salesTaxAmount)}</span>
+          </div>
           <div className="flex justify-between items-center border-t-2 border-gray-900 pt-3 md:pt-4">
             <div>
-              <p className="text-lg md:text-xl font-bold">Customer Price</p>
+              <p className="text-lg md:text-xl font-bold">Final Price</p>
               <p className="text-xs md:text-sm text-gray-500">
                 {estimate.measurements.total_squares} sq • {estimate.measurements.predominant_pitch}
               </p>
             </div>
-            <p className="text-2xl md:text-3xl font-bold">{formatCurrency(estimate.sellPrice)}</p>
+            <p className="text-2xl md:text-3xl font-bold">{formatCurrency(estimate.finalPrice)}</p>
           </div>
         </div>
 

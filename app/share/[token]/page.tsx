@@ -70,10 +70,14 @@ export default function SharePage() {
           sundriesPercent: savedQuote.sundries_percent || 0,
           sundriesAmount: savedQuote.sundries_amount || 0,
           sellPrice: savedQuote.sell_price,
+          salesTaxPercent: savedQuote.sales_tax_percent ?? 10,
+          salesTaxAmount: savedQuote.sales_tax_amount ?? (savedQuote.sell_price * 0.1),
+          finalPrice: savedQuote.final_price ?? (savedQuote.sell_price + (savedQuote.sales_tax_amount ?? savedQuote.sell_price * 0.1)),
           grossProfit: savedQuote.gross_profit,
           profitMargin: savedQuote.sell_price > 0 
             ? (savedQuote.gross_profit / savedQuote.sell_price) * 100 
             : 0,
+          sectionHeaders: savedQuote.section_headers,
           measurements: savedQuote.measurements,
           customerInfo: {
             name: '',

@@ -36,6 +36,11 @@ export interface LineItem extends PriceItem {
   wasteAdded: number;
   isCustomItem?: boolean;
   isOptional?: boolean;
+  manualOverrides?: {
+    quantity?: boolean;
+    price?: boolean;
+    name?: boolean;
+  };
 }
 
 export interface CustomerInfo {
@@ -70,8 +75,18 @@ export interface Estimate {
   sundriesPercent: number;
   sundriesAmount: number;
   sellPrice: number;
+  salesTaxPercent: number;
+  salesTaxAmount: number;
+  finalPrice: number;
   grossProfit: number;
   profitMargin: number;
+  sectionHeaders?: {
+    materials: string;
+    labor: string;
+    equipment: string;
+    accessories: string;
+    schafer: string;
+  };
   measurements: Measurements;
   customerInfo: CustomerInfo;
   generatedAt: string;
@@ -91,6 +106,16 @@ export interface SavedQuote {
   waste_percent?: number;
   sundries_percent?: number;
   sundries_amount?: number;
+  sales_tax_percent?: number;
+  sales_tax_amount?: number;
+  final_price?: number;
+  section_headers?: {
+    materials: string;
+    labor: string;
+    equipment: string;
+    accessories: string;
+    schafer: string;
+  };
   job_description?: string;
   total_cost: number;
   sell_price: number;
