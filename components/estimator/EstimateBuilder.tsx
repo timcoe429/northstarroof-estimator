@@ -4,9 +4,12 @@ import React from 'react';
 import { Check, Plus, Calculator, AlertCircle } from 'lucide-react';
 import type { PriceItem } from '@/types';
 import type { SelectableItem, CustomItem } from '@/types/estimator';
+import type { LineItem } from '@/types';
 import { CATEGORIES } from '@/lib/constants';
 import { CollapsibleSection } from './CollapsibleSection';
 import { ItemRow } from './ItemRow';
+import { EditableItemRow } from './EditableItemRow';
+import { toTitleCase } from '@/lib/formatters';
 
 type CustomItemDraft = {
   category: PriceItem['category'];
@@ -57,6 +60,22 @@ interface EstimateBuilderProps {
   onCalculateEstimate: () => void;
   /** Function to get sorted items for a category */
   getEstimateCategoryItems: (category: string) => SelectableItem[];
+  /** Section headers */
+  sectionHeaders?: {
+    materials: string;
+    labor: string;
+    equipment: string;
+    accessories: string;
+    schafer: string;
+  };
+  /** Manual override flags per item */
+  manualOverrides?: Record<string, { quantity?: boolean; price?: boolean; name?: boolean }>;
+  /** Callback to update item (for inline editing) */
+  onUpdateItem?: (itemId: string, field: 'name' | 'quantity' | 'price' | 'unit', value: string | number) => void;
+  /** Callback to reset manual override */
+  onResetOverride?: (itemId: string, field: 'quantity' | 'price' | 'name') => void;
+  /** Callback to update section header */
+  onUpdateSectionHeader?: (category: string, header: string) => void;
 }
 
 /**
@@ -84,6 +103,11 @@ export function EstimateBuilder({
   onToggleSectionSort,
   onCalculateEstimate,
   getEstimateCategoryItems,
+  sectionHeaders,
+  manualOverrides = {},
+  onUpdateItem,
+  onResetOverride,
+  onUpdateSectionHeader,
 }: EstimateBuilderProps) {
   // Helper to check if item is Schafer vendor item
   const isSchaferVendorItem = (itemId: string): boolean => {
@@ -134,29 +158,101 @@ export function EstimateBuilder({
             In This Estimate ({selectedItemsList.length})
           </h3>
           <div className="space-y-4">
-            {selectedByCategory.map(({ catKey, label, icon: Icon, items }) => (
-              <div key={catKey}>
-                <div className="flex items-center gap-2 mb-2">
-                  <Icon className="w-4 h-4 text-[#00293f]" />
-                  <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                    {label}
-                  </h4>
+            {selectedByCategory.map(({ catKey, label, icon: Icon, items }) => {
+              const customHeader = sectionHeaders?.[catKey as keyof typeof sectionHeaders] || label;
+              const [isEditingHeader, setIsEditingHeader] = React.useState(false);
+              const [headerValue, setHeaderValue] = React.useState(customHeader);
+
+              return (
+                <div key={catKey}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Icon className="w-4 h-4 text-[#00293f]" />
+                    {isEditingHeader ? (
+                      <input
+                        type="text"
+                        value={headerValue}
+                        onChange={(e) => setHeaderValue(e.target.value)}
+                        onBlur={() => {
+                          if (onUpdateSectionHeader) {
+                            onUpdateSectionHeader(catKey, headerValue);
+                          }
+                          setIsEditingHeader(false);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            if (onUpdateSectionHeader) {
+                              onUpdateSectionHeader(catKey, headerValue);
+                            }
+                            setIsEditingHeader(false);
+                          } else if (e.key === 'Escape') {
+                            setHeaderValue(customHeader);
+                            setIsEditingHeader(false);
+                          }
+                        }}
+                        className="text-sm font-semibold text-gray-700 uppercase tracking-wide px-2 py-1 border border-gray-300 rounded"
+                        autoFocus
+                      />
+                    ) : (
+                      <h4
+                        className="text-sm font-semibold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900"
+                        onClick={() => setIsEditingHeader(true)}
+                        title="Click to edit section header"
+                      >
+                        {toTitleCase(customHeader)}
+                      </h4>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {items.map(item => {
+                      const quantity = getItemQuantity(item.id);
+                      const total = quantity * item.price;
+                      const itemOverrides = manualOverrides[item.id];
+                      // Apply title case unless manually overridden (nameOverrides already applied in allSelectableItems)
+                      const displayName = itemOverrides?.name ? item.name : toTitleCase(item.name);
+                      // Convert SelectableItem to LineItem format for EditableItemRow
+                      const lineItem: LineItem = {
+                        id: item.id,
+                        name: displayName,
+                        unit: item.unit,
+                        price: item.price,
+                        coverage: item.coverage,
+                        coverageUnit: item.coverageUnit,
+                        category: item.category,
+                        proposalDescription: item.proposalDescription,
+                        baseQuantity: quantity,
+                        quantity: quantity,
+                        total: total,
+                        wasteAdded: 0,
+                        isCustomItem: item.isCustomItem,
+                        isOptional: false,
+                        manualOverrides: itemOverrides,
+                      };
+
+                      return onUpdateItem && onResetOverride ? (
+                        <EditableItemRow
+                          key={item.id}
+                          item={lineItem}
+                          manualOverrides={manualOverrides[item.id]}
+                          isSchaferVendorItem={isSchaferVendorItem(item.id)}
+                          onUpdateItem={onUpdateItem}
+                          onResetOverride={onResetOverride}
+                        />
+                      ) : (
+                        <ItemRow
+                          key={item.id}
+                          item={{ ...item, name: displayName }}
+                          isSelected={true}
+                          quantity={quantity}
+                          isSchaferVendorItem={isSchaferVendorItem(item.id)}
+                          onToggleSelection={onToggleSelection}
+                          onQuantityChange={onQuantityChange}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  {items.map(item => (
-                    <ItemRow
-                      key={item.id}
-                      item={item}
-                      isSelected={true}
-                      quantity={getItemQuantity(item.id)}
-                      isSchaferVendorItem={isSchaferVendorItem(item.id)}
-                      onToggleSelection={onToggleSelection}
-                      onQuantityChange={onQuantityChange}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -175,12 +271,13 @@ export function EstimateBuilder({
               return null;
             }
 
+            const availableSectionHeader = sectionHeaders?.[catKey as keyof typeof sectionHeaders] || label;
             return (
               <div key={catKey}>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                   <CollapsibleSection
                     sectionKey={catKey}
-                    label={label}
+                    label={toTitleCase(availableSectionHeader)}
                     icon={Icon}
                     itemCount={itemCount}
                     isCollapsed={isCollapsed}
@@ -270,17 +367,22 @@ export function EstimateBuilder({
                   </div>
                 ) : !isCollapsed ? (
                   <div className="space-y-2">
-                    {availableItems.map(item => (
-                      <ItemRow
-                        key={item.id}
-                        item={item}
-                        isSelected={false}
-                        quantity={getItemQuantity(item.id)}
-                        isSchaferVendorItem={isSchaferVendorItem(item.id)}
-                        onToggleSelection={onToggleSelection}
-                        onQuantityChange={onQuantityChange}
-                      />
-                    ))}
+                    {availableItems.map(item => {
+                      // Apply title case to item name for display (unless manually overridden)
+                      const displayName = manualOverrides[item.id]?.name ? item.name : toTitleCase(item.name);
+                      const displayItem = { ...item, name: displayName };
+                      return (
+                        <ItemRow
+                          key={item.id}
+                          item={displayItem}
+                          isSelected={false}
+                          quantity={getItemQuantity(item.id)}
+                          isSchaferVendorItem={isSchaferVendorItem(item.id)}
+                          onToggleSelection={onToggleSelection}
+                          onQuantityChange={onQuantityChange}
+                        />
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>

@@ -43,6 +43,16 @@ export default function RoofScopeEstimator() {
   const [savedEstimateId, setSavedEstimateId] = useState<string | undefined>(undefined);
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [shareEnabled, setShareEnabled] = useState(false);
+  const [sectionHeaders, setSectionHeaders] = useState<Estimate['sectionHeaders']>({
+    materials: 'Materials',
+    labor: 'Labor',
+    equipment: 'Equipment & Fees',
+    accessories: 'Accessories',
+    schafer: 'Vendor Quote',
+  });
+  const [manualOverrides, setManualOverrides] = useState<Record<string, { quantity?: boolean; price?: boolean; name?: boolean }>>({});
+  const [priceOverrides, setPriceOverrides] = useState<Record<string, number>>({});
+  const [nameOverrides, setNameOverrides] = useState<Record<string, string>>({});
 
   // Initialize hooks
   const financialControls = useFinancialControls();
@@ -93,10 +103,21 @@ export default function RoofScopeEstimator() {
     // The hook will work with the priceItems from the usePriceItems hook
   }, [priceItems.priceItems]);
 
-  // All selectable items (price list + vendor items + custom items)
+  // All selectable items (price list + vendor items + custom items) with overrides applied
   const allSelectableItems: SelectableItem[] = useMemo(() => {
-    return [...priceItems.priceItems, ...vendorQuotes.vendorSelectableItems, ...customItems.customItems];
-  }, [priceItems.priceItems, vendorQuotes.vendorSelectableItems, customItems.customItems]);
+    const items = [...priceItems.priceItems, ...vendorQuotes.vendorSelectableItems, ...customItems.customItems];
+    // Apply price and name overrides
+    return items.map(item => {
+      const overriddenItem = { ...item };
+      if (priceOverrides[item.id] !== undefined) {
+        overriddenItem.price = priceOverrides[item.id];
+      }
+      if (nameOverrides[item.id] !== undefined) {
+        overriddenItem.name = nameOverrides[item.id];
+      }
+      return overriddenItem;
+    });
+  }, [priceItems.priceItems, vendorQuotes.vendorSelectableItems, customItems.customItems, priceOverrides, nameOverrides]);
 
   // Detect metal roof (Schafer vendor quote present)
   const isMetalRoof = useMemo(() => {
@@ -278,11 +299,24 @@ export default function RoofScopeEstimator() {
   const calculateEstimate = useCallback(() => {
     const result = calculateEstimateHook();
     if (result) {
-      setEstimate(result);
+      // Preserve section headers and manual overrides from line items
+      const updatedEstimate: Estimate = {
+        ...result,
+        sectionHeaders: sectionHeaders,
+        lineItems: result.lineItems.map(item => ({
+          ...item,
+          manualOverrides: manualOverrides[item.id],
+        })),
+        optionalItems: result.optionalItems.map(item => ({
+          ...item,
+          manualOverrides: manualOverrides[item.id],
+        })),
+      };
+      setEstimate(updatedEstimate);
       setValidationWarnings(calcValidationWarnings);
       setStep('estimate');
     }
-  }, [calculateEstimateHook, calcValidationWarnings]);
+  }, [calculateEstimateHook, calcValidationWarnings, sectionHeaders, manualOverrides]);
 
   // Calculate quantities for ALL items when measurements change
   // Skip recalculation when loading a saved quote to prevent overwriting restored quantities
@@ -329,7 +363,32 @@ export default function RoofScopeEstimator() {
       // Restore custom items when loading a saved quote
       customItems.setCustomItems(items);
     },
-    onSetEstimate: setEstimate,
+    onSetEstimate: (est: Estimate | null) => {
+      setEstimate(est);
+      if (est?.sectionHeaders) {
+        setSectionHeaders(est.sectionHeaders);
+      }
+      if (est?.lineItems) {
+        // Extract manual overrides, price overrides, and name overrides from line items
+        const overrides: Record<string, { quantity?: boolean; price?: boolean; name?: boolean }> = {};
+        const prices: Record<string, number> = {};
+        const names: Record<string, string> = {};
+        est.lineItems.forEach(item => {
+          if (item.manualOverrides) {
+            overrides[item.id] = item.manualOverrides;
+            if (item.manualOverrides.price) {
+              prices[item.id] = item.price;
+            }
+            if (item.manualOverrides.name) {
+              names[item.id] = item.name;
+            }
+          }
+        });
+        setManualOverrides(overrides);
+        setPriceOverrides(prices);
+        setNameOverrides(names);
+      }
+    },
     onSetStep: setStep,
     onSetShowVendorBreakdown: vendorQuotes.setShowVendorBreakdown,
     onAnalyzeJobForQuickSelections: smartSelection.analyzeJobForQuickSelections,
@@ -337,6 +396,113 @@ export default function RoofScopeEstimator() {
     onSetIsLoadingQuote: setIsLoadingQuote,
     jobDescription: smartSelection.jobDescription,
   });
+
+  // Handle inline item updates
+  const handleUpdateItem = useCallback((itemId: string, field: 'name' | 'quantity' | 'price' | 'unit', value: string | number) => {
+    if (field === 'quantity') {
+      setItemQuantities(prev => ({ ...prev, [itemId]: value as number }));
+      setManualOverrides(prev => ({
+        ...prev,
+        [itemId]: { ...prev[itemId], quantity: true },
+      }));
+    } else if (field === 'price') {
+      // Update price in priceItems or vendor items
+      const item = allSelectableItems.find(i => i.id === itemId);
+      if (item) {
+        if (item.isVendorItem) {
+          vendorQuotes.setVendorQuoteItems(prev =>
+            prev.map(i => i.id === itemId ? { ...i, price: value as number } : i)
+          );
+        } else {
+          // Store price override for non-vendor items
+          setPriceOverrides(prev => ({ ...prev, [itemId]: value as number }));
+        }
+        setManualOverrides(prev => ({
+          ...prev,
+          [itemId]: { ...prev[itemId], price: true },
+        }));
+        // Trigger recalculation for price changes
+        if (estimate && step === 'estimate') {
+          setTimeout(() => calculateEstimate(), 100);
+        }
+      }
+    } else if (field === 'name') {
+      // Store name override
+      setNameOverrides(prev => ({ ...prev, [itemId]: value as string }));
+      setManualOverrides(prev => ({
+        ...prev,
+        [itemId]: { ...prev[itemId], name: true },
+      }));
+      // Name change doesn't require recalculation, just re-render
+    } else if (field === 'unit') {
+      // Unit change - update itemQuantities might be needed
+      setManualOverrides(prev => ({
+        ...prev,
+        [itemId]: { ...prev[itemId], quantity: true },
+      }));
+      // Trigger recalculation for unit changes
+      if (estimate && step === 'estimate') {
+        setTimeout(() => calculateEstimate(), 100);
+      }
+    }
+    // Trigger recalculation for quantity changes
+    if (field === 'quantity' && estimate && step === 'estimate') {
+      setTimeout(() => calculateEstimate(), 100);
+    }
+  }, [allSelectableItems, vendorQuotes, estimate, step, calculateEstimate]);
+
+  // Handle reset override
+  const handleResetOverride = useCallback((itemId: string, field: 'quantity' | 'price' | 'name') => {
+    setManualOverrides(prev => {
+      const updated = { ...prev };
+      if (updated[itemId]) {
+        updated[itemId] = { ...updated[itemId], [field]: false };
+        if (!updated[itemId].quantity && !updated[itemId].price && !updated[itemId].name) {
+          delete updated[itemId];
+        }
+      }
+      return updated;
+    });
+    // Clear overrides
+    if (field === 'price') {
+      setPriceOverrides(prev => {
+        const updated = { ...prev };
+        delete updated[itemId];
+        return updated;
+      });
+      // Trigger recalculation to restore original price
+      if (estimate && step === 'estimate') {
+        setTimeout(() => calculateEstimate(), 100);
+      }
+    } else if (field === 'name') {
+      setNameOverrides(prev => {
+        const updated = { ...prev };
+        delete updated[itemId];
+        return updated;
+      });
+      // Name change doesn't require recalculation, just re-render
+    } else if (field === 'quantity' && measurements) {
+      // Recalculate quantities if resetting quantity override
+      const calculatedQtys = calculateItemQuantities(measurements);
+      setItemQuantities(prev => ({ ...prev, [itemId]: calculatedQtys[itemId] ?? 0 }));
+      // Trigger recalculation
+      if (estimate && step === 'estimate') {
+        setTimeout(() => calculateEstimate(), 100);
+      }
+    }
+  }, [measurements, calculateItemQuantities, estimate, step, calculateEstimate]);
+
+  // Handle section header update
+  const handleUpdateSectionHeader = useCallback((category: string, header: string) => {
+    setSectionHeaders(prev => ({
+      ...prev,
+      [category]: header,
+    }));
+    // Update estimate if it exists
+    if (estimate) {
+      setEstimate(prev => prev ? { ...prev, sectionHeaders: { ...sectionHeaders, [category]: header } } : null);
+    }
+  }, [estimate, sectionHeaders]);
 
   // Auto-recalculate estimate when financial controls change (if estimate already exists)
   useEffect(() => {
@@ -922,6 +1088,11 @@ export default function RoofScopeEstimator() {
                   vendorItemMap={vendorQuotes.vendorItemMap}
                   vendorQuoteMap={vendorQuotes.vendorQuoteMap}
                   missingAccessoryItems={missingAccessoryItems}
+                  sectionHeaders={sectionHeaders}
+                  manualOverrides={manualOverrides}
+                  onUpdateItem={handleUpdateItem}
+                  onResetOverride={handleResetOverride}
+                  onUpdateSectionHeader={handleUpdateSectionHeader}
                   onToggleSelection={(itemId, selected) => {
                     if (selected) {
                       setSelectedItems(prev => [...prev, itemId]);
