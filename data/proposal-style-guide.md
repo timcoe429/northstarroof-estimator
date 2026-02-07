@@ -17,7 +17,7 @@ The client should see what they're getting for the big stuff. They don't need to
 - Any single item over ~$1,500
 
 ### Group into kits (small items, commodity items):
-- **"Custom Fabricated Metal Flashing"** — groups: eave flashing, rake flashing, ridge cap, valley flashing, headwall, sidewall, any "Fab" items. These are the custom bent pieces Schafer fabricates.
+- **"Custom Fabricated Metal Flashing"** — groups items containing these keywords: eave, rake, ridge, valley, w valley, sidewall, headwall, starter, drip edge, flashing, fab valley, fab ridge, fab eave, fab rake, fab sidewall, fab headwall, fab starter, fab drip edge. Any Schafer item with these keywords that's under $1,500 should be grouped into the Flashing Kit — not left standalone. These are the custom bent pieces Schafer fabricates.
 - **"Panel Clips, Fasteners & Hardware"** — groups: panel clips, woodgrip fasteners, lap tek fasteners, pop rivets, stitch screws. All the small metal hardware that holds things together.
 - **"Sealants, Tapes & Closures"** — groups: butyl tape, foam closures (inside and outside), caulk/sealant tubes, Nova Seal. Small sealing and finishing materials.
 
@@ -25,6 +25,18 @@ The client should see what they're getting for the big stuff. They don't need to
 - Use clean, professional names a homeowner understands
 - Avoid vendor codes and part numbers in kit names
 - The kit name should give a sense of what's included
+- When grouping items into a kit, append a summary of the component types after a dash or in parentheses
+- Example: "Custom Fabricated Metal Flashing — Eave, Rake, Ridge, Valley & Headwall pieces"
+- This helps clients understand what's included in grouped items
+- Component lists should be concise (3-6 types max, use "&" for the last item)
+
+## Critical Rule: Never Rename Items
+
+- **NEVER rename or "clean up" user-entered item names**
+- Items should always appear exactly as the user typed them
+- The AI only controls grouping and kit names — not individual item names
+- If an item name is "Schafer AG Panel 26ga SMP STANDARD COLOR TBD", it must stay exactly that way
+- Only the kit/group displayName can be created by AI — source item names are immutable
 
 ## Labor
 
@@ -62,7 +74,7 @@ Within each category, sort by price highest first. The client sees the big items
 | Snow Fence (ColorGard) | $3,384 |
 | Grace Ice & Water High Temp | $2,512 |
 | Heat Tape | $1,751 |
-| Custom Fabricated Metal Flashing | $1,450 |
+| Custom Fabricated Metal Flashing — Eave, Rake, Ridge, Valley & Headwall pieces | $1,450 |
 | Panel Clips, Fasteners & Hardware | $820 |
 | Sealants, Tapes & Closures | $490 |
 | GAF VersaShield | $120 |
