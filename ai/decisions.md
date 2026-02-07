@@ -87,3 +87,12 @@
   - Snow Fence: $12.00/lf material, $5.00/lf labor
   - Snow Guards: $7.00/ea material, $5.00/ea labor
   - Skylights: $2,400/ea
+
+## 2/7/2026 - Rules → Intelligence
+- Replaced hardcoded grouping rules with AI-powered proposal organization
+- proposalDescription field completely removed, single name field everywhere
+- Style guide (examples, not rules) guides AI behavior at /data/proposal-style-guide.md
+- ID-based matching replaces string-based matching for AI responses
+- Manual organization trigger replaces useEffect to prevent infinite loops
+- $1,500+ items stay standalone on proposals, small items grouped into kits
+- Labor, Equipment, Optional items never grouped
