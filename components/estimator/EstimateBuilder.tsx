@@ -18,6 +18,134 @@ type CustomItemDraft = {
   price: number;
 };
 
+interface CategorySectionProps {
+  catKey: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  items: SelectableItem[];
+  customHeader: string;
+  onUpdateSectionHeader?: (category: string, header: string) => void;
+  getItemQuantity: (itemId: string) => number;
+  isSchaferVendorItem: (itemId: string) => boolean;
+  manualOverrides: Record<string, { quantity?: boolean; price?: boolean; name?: boolean }>;
+  onUpdateItem?: (itemId: string, field: 'name' | 'quantity' | 'price' | 'unit', value: string | number) => void;
+  onResetOverride?: (itemId: string, field: 'quantity' | 'price' | 'name') => void;
+  onToggleSelection: (itemId: string, selected: boolean) => void;
+  onQuantityChange: (itemId: string, quantity: number) => void;
+}
+
+function CategorySection({
+  catKey,
+  label,
+  icon: Icon,
+  items,
+  customHeader,
+  onUpdateSectionHeader,
+  getItemQuantity,
+  isSchaferVendorItem,
+  manualOverrides,
+  onUpdateItem,
+  onResetOverride,
+  onToggleSelection,
+  onQuantityChange,
+}: CategorySectionProps) {
+  const [isEditingHeader, setIsEditingHeader] = React.useState(false);
+  const [headerValue, setHeaderValue] = React.useState(customHeader);
+
+  // Sync headerValue when customHeader prop changes
+  React.useEffect(() => {
+    setHeaderValue(customHeader);
+  }, [customHeader]);
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className="w-4 h-4 text-[#00293f]" />
+        {isEditingHeader ? (
+          <input
+            type="text"
+            value={headerValue}
+            onChange={(e) => setHeaderValue(e.target.value)}
+            onBlur={() => {
+              if (onUpdateSectionHeader) {
+                onUpdateSectionHeader(catKey, headerValue);
+              }
+              setIsEditingHeader(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                if (onUpdateSectionHeader) {
+                  onUpdateSectionHeader(catKey, headerValue);
+                }
+                setIsEditingHeader(false);
+              } else if (e.key === 'Escape') {
+                setHeaderValue(customHeader);
+                setIsEditingHeader(false);
+              }
+            }}
+            className="text-sm font-semibold text-gray-700 uppercase tracking-wide px-2 py-1 border border-gray-300 rounded"
+            autoFocus
+          />
+        ) : (
+          <h4
+            className="text-sm font-semibold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900"
+            onClick={() => setIsEditingHeader(true)}
+            title="Click to edit section header"
+          >
+            {customHeader}
+          </h4>
+        )}
+      </div>
+      <div className="space-y-2">
+        {items.map(item => {
+          const quantity = getItemQuantity(item.id);
+          const total = quantity * item.price;
+          const itemOverrides = manualOverrides[item.id];
+          // Convert SelectableItem to LineItem format for EditableItemRow
+          const lineItem: LineItem = {
+            id: item.id,
+            name: item.name,
+            unit: item.unit,
+            price: item.price,
+            coverage: item.coverage,
+            coverageUnit: item.coverageUnit,
+            category: item.category,
+            baseQuantity: quantity,
+            quantity: quantity,
+            total: total,
+            wasteAdded: 0,
+            isCustomItem: item.isCustomItem,
+            isOptional: false,
+            manualOverrides: itemOverrides,
+          };
+
+          return onUpdateItem && onResetOverride ? (
+            <EditableItemRow
+              key={item.id}
+              item={lineItem}
+              manualOverrides={manualOverrides[item.id]}
+              isSchaferVendorItem={isSchaferVendorItem(item.id)}
+              onUpdateItem={onUpdateItem}
+              onResetOverride={onResetOverride}
+              onDeselect={() => onToggleSelection(item.id, false)}
+            />
+          ) : (
+            <ItemRow
+              key={item.id}
+              item={item}
+              isSelected={true}
+              quantity={quantity}
+              isSchaferVendorItem={isSchaferVendorItem(item.id)}
+              onToggleSelection={onToggleSelection}
+              onQuantityChange={onQuantityChange}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 interface EstimateBuilderProps {
   /** All selectable items (price items + vendor items + custom items) */
   allSelectableItems: SelectableItem[];
@@ -159,95 +287,23 @@ export function EstimateBuilder({
           <div className="space-y-4">
             {selectedByCategory.map(({ catKey, label, icon: Icon, items }) => {
               const customHeader = sectionHeaders?.[catKey as keyof typeof sectionHeaders] || label;
-              const [isEditingHeader, setIsEditingHeader] = React.useState(false);
-              const [headerValue, setHeaderValue] = React.useState(customHeader);
-
               return (
-                <div key={catKey}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Icon className="w-4 h-4 text-[#00293f]" />
-                    {isEditingHeader ? (
-                      <input
-                        type="text"
-                        value={headerValue}
-                        onChange={(e) => setHeaderValue(e.target.value)}
-                        onBlur={() => {
-                          if (onUpdateSectionHeader) {
-                            onUpdateSectionHeader(catKey, headerValue);
-                          }
-                          setIsEditingHeader(false);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            if (onUpdateSectionHeader) {
-                              onUpdateSectionHeader(catKey, headerValue);
-                            }
-                            setIsEditingHeader(false);
-                          } else if (e.key === 'Escape') {
-                            setHeaderValue(customHeader);
-                            setIsEditingHeader(false);
-                          }
-                        }}
-                        className="text-sm font-semibold text-gray-700 uppercase tracking-wide px-2 py-1 border border-gray-300 rounded"
-                        autoFocus
-                      />
-                    ) : (
-                      <h4
-                        className="text-sm font-semibold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900"
-                        onClick={() => setIsEditingHeader(true)}
-                        title="Click to edit section header"
-                      >
-                        {customHeader}
-                      </h4>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    {items.map(item => {
-                      const quantity = getItemQuantity(item.id);
-                      const total = quantity * item.price;
-                      const itemOverrides = manualOverrides[item.id];
-                      // Convert SelectableItem to LineItem format for EditableItemRow
-                      const lineItem: LineItem = {
-                        id: item.id,
-                        name: item.name,
-                        unit: item.unit,
-                        price: item.price,
-                        coverage: item.coverage,
-                        coverageUnit: item.coverageUnit,
-                        category: item.category,
-                        baseQuantity: quantity,
-                        quantity: quantity,
-                        total: total,
-                        wasteAdded: 0,
-                        isCustomItem: item.isCustomItem,
-                        isOptional: false,
-                        manualOverrides: itemOverrides,
-                      };
-
-                      return onUpdateItem && onResetOverride ? (
-                        <EditableItemRow
-                          key={item.id}
-                          item={lineItem}
-                          manualOverrides={manualOverrides[item.id]}
-                          isSchaferVendorItem={isSchaferVendorItem(item.id)}
-                          onUpdateItem={onUpdateItem}
-                          onResetOverride={onResetOverride}
-                          onDeselect={() => onToggleSelection(item.id, false)}
-                        />
-                      ) : (
-                        <ItemRow
-                          key={item.id}
-                          item={item}
-                          isSelected={true}
-                          quantity={quantity}
-                          isSchaferVendorItem={isSchaferVendorItem(item.id)}
-                          onToggleSelection={onToggleSelection}
-                          onQuantityChange={onQuantityChange}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
+                <CategorySection
+                  key={catKey}
+                  catKey={catKey}
+                  label={label}
+                  icon={Icon}
+                  items={items}
+                  customHeader={customHeader}
+                  onUpdateSectionHeader={onUpdateSectionHeader}
+                  getItemQuantity={getItemQuantity}
+                  isSchaferVendorItem={isSchaferVendorItem}
+                  manualOverrides={manualOverrides}
+                  onUpdateItem={onUpdateItem}
+                  onResetOverride={onResetOverride}
+                  onToggleSelection={onToggleSelection}
+                  onQuantityChange={onQuantityChange}
+                />
               );
             })}
           </div>
