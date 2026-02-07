@@ -96,3 +96,9 @@
 - Manual organization trigger replaces useEffect to prevent infinite loops
 - $1,500+ items stay standalone on proposals, small items grouped into kits
 - Labor, Equipment, Optional items never grouped
+
+## 2/7/2026 - Style Guide Improvements
+- Expanded flashing keywords to catch all Schafer fab items (w valley, fab valley, etc.)
+- Kit names now include component summaries for client clarity
+- Critical rule: AI never renames user-entered item names — only controls grouping/kit display names
+- Style guide read dynamically at runtime — no code changes needed for style updates

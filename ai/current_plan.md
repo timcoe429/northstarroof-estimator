@@ -1,44 +1,49 @@
 # Current Plan - Updated 2/7/2026
 
 ## What's Complete
-- Phase 1: Stripped proposalDescription, single name field everywhere
-- Phase 2 Core: AI proposal organizer with ID-based matching
-- Style guide created at /data/proposal-style-guide.md
-- React hooks violation fix (CategorySection extraction)
-- Infinite render loop fix (useVendorQuotes + manual trigger replacing useEffect)
-- Deselect checkboxes restored in EstimateBuilder
 
-## What's In Progress — Phase 2 Bugs
-### Bug 1: Duplicate items sent to AI organizer
-- proposalOrganizer.ts adds vendor items twice (from estimate.byCategory AND vendorQuoteItems)
-- Results in 42 items sent when should be ~24
-- AI treats duplicates as separate items, creating duplicate lines on PDF
-- FIX: Only loop through estimate.byCategory, don't separately add vendorQuoteItems
+- **Phase 1: Rules → Intelligence Refactor** ✅
+  - Replaced hardcoded grouping rules with AI-powered proposal organizer
+  - Removed proposalDescription field entirely — single `name` field everywhere
+  - Created style guide at `/data/proposal-style-guide.md` with examples (not rigid rules)
+  - ID-based matching replaces string-based matching for AI responses
+  - Manual "Organize for Proposal" trigger (not useEffect) to prevent render loops
+  - 15-second timeout with fallback to ungrouped items
 
-### Bug 2: Missing items in AI response
-- Installation labor line missing from AI response entirely
-- Causes PDF total to be wrong
-- FIX: After AI response, check all itemMap IDs are accounted for. Add missing ones as standalone groups.
+- **Phase 2: AI Organizer Bug Fixes** ✅
+  - Fixed duplicate vendor items being sent to AI (was ~42, now ~24)
+  - Added reconciliation step — missing items recovered as standalone after AI response
+  - Debug console logging active in proposalOrganizer.ts
 
-### Bug 3: Renamed items showing original name on PDF
-- User renames "Schafer AG Panel 26ga SMP STANDARD COLOR TBD" → "Schafer AG Panel 26ga SMP"
-- PDF shows BOTH names because of the duplicate items bug above
-- Should resolve once Bug 1 is fixed
+- **Phase 2b: Style Guide Improvements** ✅
+  - Expanded flashing keywords: eave, rake, ridge, valley, w valley, sidewall, headwall, starter, drip edge, flashing, fab valley, fab ridge, fab eave, fab rake, fab sidewall, fab headwall, fab starter, fab drip edge
+  - Kit names now include component summaries (e.g., "Custom Fabricated Metal Flashing — Eave, Rake, Ridge, Valley & Headwall pieces")
+  - Added critical rule: NEVER rename user-entered item names — AI controls grouping/kit names only
+  - Updated example in style guide to show component list format
+  - Style guide is read dynamically by API route at runtime
 
-## Debug Logging Active
-- proposalOrganizer.ts logs items sent and AI response to console
-- Keep this until bugs are resolved
+## What's In Progress
+
+- **Testing Phase 2b** — Style guide improvements applied, needs testing on 39 W Lupine estimate to verify:
+  - W Valley groups into flashing kit
+  - Flashing kit name shows components
+  - All other grouping still works
+  - Numbers unchanged
 
 ## What's Next
-- Fix the three bugs above
-- Test with clean estimate (no silly names)
-- Verify PDF matches estimate view exactly
-- Add valid ID range to AI prompt to prevent hallucinated IDs
-- Deploy to Vercel once stable
 
-## Architecture Decisions
-- AI organizes presentation only (names, grouping) — never touches math
-- ID-based matching (not string matching) for AI response processing
-- Style guide at /data/proposal-style-guide.md guides AI grouping preferences
-- Manual trigger for organization (not useEffect) to prevent render loops
-- 15-second timeout with fallback to ungrouped items
+1. **Verify Phase 2b** — Test PDF output with updated style guide
+2. **Clean up debug logging** — Remove console.logs from proposalOrganizer.ts once stable
+3. **Future: Additional vendors** — TRA Snow & Sun, Rocky Mountain Snow Guards integration
+4. **Future: Business dashboard** — Trello integration, lead tracking, performance metrics
+
+## Known Issues / Blockers
+
+- None currently — awaiting test results
+
+## Notes
+
+- Numbers verified on 39 W Lupine: PDF total ($141,769.07) matches internal view exactly
+- PDF line items sum correctly (off by 1 penny from rounding — acceptable)
+- AI organizer successfully groups small items into kits, keeps $1,500+ items standalone
+- Labor, Equipment, Optional items all showing correctly on PDF
