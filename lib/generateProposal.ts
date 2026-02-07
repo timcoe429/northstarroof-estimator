@@ -1,6 +1,5 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import type { Estimate } from '@/types';
-import { toTitleCase } from '@/lib/formatters';
 
 // Content safe zone constants (72 points = 1 inch)
 const PAGE_WIDTH = 612; // Letter size
@@ -569,11 +568,8 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     const { item, section } = allItems[i];
     const sectionChanged = currentSection !== section;
     
-    // Calculate space needed - apply title case unless manually overridden
-    const rawDescription = item.proposalDescription && item.proposalDescription.trim() 
-      ? item.proposalDescription 
-      : item.name;
-    const description = item.manualOverrides?.name ? rawDescription : toTitleCase(rawDescription);
+    // Calculate space needed - use item name directly
+    const description = item.name;
     const maxDescWidth = DESC_COLUMN_WIDTH - ROW_PADDING * 2;
     const sectionHeaderSpace = sectionChanged ? ROW_HEIGHT_SINGLE : 0;
     const itemHeight = calculateRowHeight(description, font, 10, maxDescWidth);
@@ -664,10 +660,7 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
       }
       
       // Draw item row - ensure we don't go below regular page bottom margin
-      const rawDescription = contentItem.item.proposalDescription && contentItem.item.proposalDescription.trim() 
-        ? contentItem.item.proposalDescription 
-        : contentItem.item.name;
-      const description = contentItem.item.manualOverrides?.name ? rawDescription : toTitleCase(rawDescription);
+      const description = contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
       const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false);
       
@@ -706,10 +699,7 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
       }
       
       // Draw item row - ensure we don't go below quote page bottom margin
-      const rawDescription = contentItem.item.proposalDescription && contentItem.item.proposalDescription.trim() 
-        ? contentItem.item.proposalDescription 
-        : contentItem.item.name;
-      const description = contentItem.item.manualOverrides?.name ? rawDescription : toTitleCase(rawDescription);
+      const description = contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
       const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false);
       

@@ -25,8 +25,6 @@ export const usePriceItems = ({
   const [extractedItems, setExtractedItems] = useState<PriceItem[] | null>(null);
   const [activeCategory, setActiveCategory] = useState('materials');
   const [isLoadingPriceItems, setIsLoadingPriceItems] = useState(false);
-  const [isGeneratingDescriptions, setIsGeneratingDescriptions] = useState(false);
-  const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number } | null>(null);
 
   // Load price items from Supabase when user is available
   useEffect(() => {
@@ -65,7 +63,6 @@ export const usePriceItems = ({
       coverage: item.coverage,
       coverageUnit: item.coverageUnit,
       category: item.category || 'materials',
-      proposalDescription: item.proposalDescription || null,
     }));
 
     // Update local state immediately
@@ -102,7 +99,6 @@ export const usePriceItems = ({
       coverage: null,
       coverageUnit: null,
       category: itemCategory,
-      proposalDescription: null,
     };
     
     // Update local state immediately
@@ -208,83 +204,6 @@ export const usePriceItems = ({
     }
   };
 
-  // Bulk generate proposal descriptions for items with blank descriptions
-  const generateAllDescriptions = async () => {
-    const itemsToGenerate = priceItems.filter(item => !item.proposalDescription || !item.proposalDescription.trim());
-    
-    if (itemsToGenerate.length === 0) {
-      return;
-    }
-
-    setIsGeneratingDescriptions(true);
-    setGenerationProgress({ current: 0, total: itemsToGenerate.length });
-
-    for (let i = 0; i < itemsToGenerate.length; i++) {
-      const item = itemsToGenerate[i];
-      
-      try {
-        const response = await fetch('/api/extract', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: `You are a professional roofing contractor writing proposal descriptions for a client-facing estimate.
-
-Write a SHORT, professional description for this roofing item in this EXACT format:
-
-Format: Product Name - 6-13 word description
-
-The description must:
-- Start with the product name (bold/emphasized conceptually), followed by a dash
-- Be exactly 6-13 words after the dash
-- Be concise and informative, not salesy
-- Focus on key features or purpose
-
-Item name: ${item.name}
-Category: ${item.category}
-Unit: ${item.unit}
-
-Examples of CORRECT format:
-- "Copper Valley - premium copper flashing for lifetime leak protection in roof valleys"
-- "Titanium PSU 30 - high-temperature synthetic underlayment with superior tear strength"
-- "Brava Field Tile - durable lightweight synthetic slate with authentic appearance"
-- "Complete Roof Labor - includes tear-off deck prep underlayment and finish roofing"
-- "Rolloff Dumpster - 30-yard container for roofing debris removal and disposal"
-
-Examples of INCORRECT format (do NOT write like this):
-- "Premium copper valley flashing providing superior water channeling and leak protection with natural antimicrobial properties and lifetime durability." (too long, no product name format)
-- "Install Brava Field Tile per manufacturer specifications." (starts with Install, not in required format)
-- "Roofing labor." (too short, not descriptive enough, missing format)
-
-For LABOR items: Use format "Labor Name - brief description of work included"
-For MATERIALS: Use format "Product Name - key features or specifications"
-For EQUIPMENT/FEES: Use format "Item Name - what is being provided"
-
-CRITICAL: Return ONLY the description in the format "Product Name - 6-13 word description". Do not include any other text.`,
-            max_tokens: 100,
-          }),
-        });
-
-        const data = await response.json();
-        const text = data.content?.[0]?.text || '';
-        const description = text.trim();
-        
-        if (description) {
-          updatePriceItem(item.id, { proposalDescription: description });
-        }
-      } catch (error) {
-        console.error(`Error generating description for ${item.name}:`, error);
-        // Continue to next item even if this one fails
-      }
-
-      // Update progress
-      setGenerationProgress({ current: i + 1, total: itemsToGenerate.length });
-    }
-
-    // Reset state when complete
-    setIsGeneratingDescriptions(false);
-    setGenerationProgress(null);
-  };
-
   return {
     priceItems,
     setPriceItems,
@@ -297,12 +216,9 @@ CRITICAL: Return ONLY the description in the format "Product Name - 6-13 word de
     activeCategory,
     setActiveCategory,
     isLoadingPriceItems,
-    isGeneratingDescriptions,
-    generationProgress,
     applyExtractedPrices,
     addPriceItem,
     updatePriceItem,
     deletePriceItem,
-    generateAllDescriptions,
   };
 };

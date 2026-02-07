@@ -26,7 +26,6 @@ export interface PriceItem {
   coverage: number | null;
   coverageUnit: string | null;
   category: 'materials' | 'labor' | 'equipment' | 'accessories' | 'schafer';
-  proposalDescription: string | null;
 }
 
 export interface LineItem extends PriceItem {

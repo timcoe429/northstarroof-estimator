@@ -78,7 +78,7 @@ ROOFING KNOWLEDGE:
 - Penetrations need pipe boots/flashings
 - Labor is priced per square, varies by pitch difficulty
 
-Extract each item with: name, category, unit, price, coverage information if available, and proposalDescription if available.
+Extract each item with: name, category, unit, price, and coverage information if available.
 
 COVERAGE EXTRACTION:
 Look for coverage information in the item description or notes:
@@ -89,18 +89,13 @@ Look for coverage information in the item description or notes:
 - "14.3 sq ft per bundle" → coverage: 14.3, coverageUnit: "sqft"
 - If no coverage info found, use coverage: null, coverageUnit: null
 
-PROPOSAL DESCRIPTION EXTRACTION:
-- If the price sheet includes detailed descriptions or installation notes for items, extract them as proposalDescription
-- Look for full sentences or detailed descriptions that explain what the item is or how it's installed
-- If no description found, use proposalDescription: null
-
 Return ONLY a JSON array like this:
 [
-  {"name": "Brava Field Tile", "unit": "bundle", "price": 43.25, "coverage": 14.3, "coverageUnit": "sqft", "category": "materials", "proposalDescription": null},
-  {"name": "Copper D-Style Eave", "unit": "each", "price": 25.00, "coverage": 10, "coverageUnit": "lf", "category": "materials", "proposalDescription": null},
-  {"name": "Hugo (standard)", "unit": "sq", "price": 550, "coverage": null, "coverageUnit": null, "category": "labor", "proposalDescription": null},
-  {"name": "Rolloff", "unit": "sq", "price": 48, "coverage": null, "coverageUnit": null, "category": "equipment", "proposalDescription": null},
-  {"name": "4\" Boot Galv", "unit": "each", "price": 20, "coverage": null, "coverageUnit": null, "category": "accessories", "proposalDescription": null}
+  {"name": "Brava Field Tile", "unit": "bundle", "price": 43.25, "coverage": 14.3, "coverageUnit": "sqft", "category": "materials"},
+  {"name": "Copper D-Style Eave", "unit": "each", "price": 25.00, "coverage": 10, "coverageUnit": "lf", "category": "materials"},
+  {"name": "Hugo (standard)", "unit": "sq", "price": 550, "coverage": null, "coverageUnit": null, "category": "labor"},
+  {"name": "Rolloff", "unit": "sq", "price": 48, "coverage": null, "coverageUnit": null, "category": "equipment"},
+  {"name": "4\" Boot Galv", "unit": "each", "price": 20, "coverage": null, "coverageUnit": null, "category": "accessories"}
 ]
 
 Extract EVERY line item you can see. Return only the JSON array, no other text.`;

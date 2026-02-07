@@ -95,18 +95,6 @@ export function PriceItemRow({
               <Check className="w-4 h-4" />
             </button>
           </div>
-          {!isVendorItem && (
-            <div className="hidden md:block w-full mt-2">
-              <label className="text-xs text-gray-600 block mb-1">Proposal Description (optional)</label>
-              <textarea
-                value={item.proposalDescription || ''}
-                onChange={(e) => onUpdate(item.id, { proposalDescription: e.target.value || null })}
-                placeholder="e.g., Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications"
-                className="w-full px-2 py-1 border rounded text-sm"
-                rows={3}
-              />
-            </div>
-          )}
 
           {/* Mobile edit layout */}
           <div className="md:hidden flex-1 flex flex-col gap-2">
@@ -163,16 +151,6 @@ export function PriceItemRow({
                     <option value="sqft">sqft</option>
                     <option value="sq">sq</option>
                   </select>
-                </div>
-                <div className="w-full mt-2">
-                  <label className="text-xs text-gray-600 block mb-1">Proposal Description (optional)</label>
-                  <textarea
-                    value={item.proposalDescription || ''}
-                    onChange={(e) => onUpdate(item.id, { proposalDescription: e.target.value || null })}
-                    placeholder="e.g., Install DaVinci Multi-Width Shake synthetic cedar shake roofing system per manufacturer specifications"
-                    className="w-full px-2 py-1 border rounded text-sm"
-                    rows={3}
-                  />
                 </div>
               </>
             )}

@@ -248,7 +248,6 @@ export const useSavedQuotes = ({
             coverage: null,
             coverageUnit: null,
             category: item.category,
-            proposalDescription: item.proposalDescription ?? null,
             isCustomItem: true,
           });
         }

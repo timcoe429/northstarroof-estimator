@@ -2,7 +2,6 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import type { VendorQuote, VendorQuoteItem, PriceItem } from '@/types';
 import type { GroupedVendorItem, SelectableItem } from '@/types/estimator';
 import { generateId, normalizeVendor, formatVendorName, toNumber, fileToBase64 } from '@/lib/estimatorUtils';
-import { matchSchaferDescription } from '@/lib/schaferMatching';
 
 interface UseVendorQuotesProps {
   selectedItems: string[];
@@ -75,15 +74,6 @@ export const useVendorQuotes = ({
 
   const vendorSelectableItems: SelectableItem[] = useMemo(() => {
     return vendorQuoteItems.map(item => {
-      // Get vendor quote to check if it's Schafer
-      const vendorQuote = vendorQuoteMap.get(item.vendor_quote_id);
-      const isSchaferQuote = vendorQuote?.vendor === 'schafer';
-      
-      // Use matched description for Schafer items, otherwise use quote name
-      const proposalDescription = isSchaferQuote 
-        ? matchSchaferDescription(item.name)
-        : null;
-      
       return {
         id: item.id,
         name: item.name,
@@ -92,7 +82,6 @@ export const useVendorQuotes = ({
         coverage: null,
         coverageUnit: null,
         category: item.category,
-        proposalDescription,
         isVendorItem: true,
         vendorQuoteId: item.vendor_quote_id,
         vendorCategory: item.vendor_category,

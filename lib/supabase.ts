@@ -336,7 +336,6 @@ export async function loadPriceItems(userId: string): Promise<PriceItem[]> {
     coverage: item.coverage,
     coverageUnit: item.coverage_unit || null,
     category: item.category as PriceItem['category'],
-    proposalDescription: item.proposal_description || null,
   }));
 }
 
@@ -356,7 +355,6 @@ export async function savePriceItem(item: PriceItem, userId: string): Promise<Pr
     price: item.price,
     coverage: item.coverage,
     coverage_unit: item.coverageUnit || null,
-    proposal_description: item.proposalDescription || null,
   };
 
   const { data, error } = await supabase
@@ -378,7 +376,6 @@ export async function savePriceItem(item: PriceItem, userId: string): Promise<Pr
     coverage: data.coverage,
     coverageUnit: data.coverage_unit || null,
     category: data.category as PriceItem['category'],
-    proposalDescription: data.proposal_description || null,
   };
 }
 
@@ -398,7 +395,6 @@ export async function savePriceItemsBulk(items: PriceItem[], userId: string): Pr
     price: item.price,
     coverage: item.coverage,
     coverage_unit: item.coverageUnit || null,
-    proposal_description: item.proposalDescription || null,
   }));
 
   const { data, error } = await supabase
@@ -419,7 +415,6 @@ export async function savePriceItemsBulk(items: PriceItem[], userId: string): Pr
     coverage: item.coverage,
     coverageUnit: item.coverage_unit || null,
     category: item.category as PriceItem['category'],
-    proposalDescription: item.proposal_description || null,
   }));
 }
 

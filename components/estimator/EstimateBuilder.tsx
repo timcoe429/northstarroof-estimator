@@ -9,7 +9,6 @@ import { CATEGORIES } from '@/lib/constants';
 import { CollapsibleSection } from './CollapsibleSection';
 import { ItemRow } from './ItemRow';
 import { EditableItemRow } from './EditableItemRow';
-import { toTitleCase } from '@/lib/formatters';
 
 type CustomItemDraft = {
   category: PriceItem['category'];
@@ -198,7 +197,7 @@ export function EstimateBuilder({
                         onClick={() => setIsEditingHeader(true)}
                         title="Click to edit section header"
                       >
-                        {toTitleCase(customHeader)}
+                        {customHeader}
                       </h4>
                     )}
                   </div>
@@ -207,18 +206,15 @@ export function EstimateBuilder({
                       const quantity = getItemQuantity(item.id);
                       const total = quantity * item.price;
                       const itemOverrides = manualOverrides[item.id];
-                      // Apply title case unless manually overridden (nameOverrides already applied in allSelectableItems)
-                      const displayName = itemOverrides?.name ? item.name : toTitleCase(item.name);
                       // Convert SelectableItem to LineItem format for EditableItemRow
                       const lineItem: LineItem = {
                         id: item.id,
-                        name: displayName,
+                        name: item.name,
                         unit: item.unit,
                         price: item.price,
                         coverage: item.coverage,
                         coverageUnit: item.coverageUnit,
                         category: item.category,
-                        proposalDescription: item.proposalDescription,
                         baseQuantity: quantity,
                         quantity: quantity,
                         total: total,
@@ -240,7 +236,7 @@ export function EstimateBuilder({
                       ) : (
                         <ItemRow
                           key={item.id}
-                          item={{ ...item, name: displayName }}
+                          item={item}
                           isSelected={true}
                           quantity={quantity}
                           isSchaferVendorItem={isSchaferVendorItem(item.id)}
@@ -277,7 +273,7 @@ export function EstimateBuilder({
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                   <CollapsibleSection
                     sectionKey={catKey}
-                    label={toTitleCase(availableSectionHeader)}
+                    label={availableSectionHeader}
                     icon={Icon}
                     itemCount={itemCount}
                     isCollapsed={isCollapsed}
@@ -367,22 +363,17 @@ export function EstimateBuilder({
                   </div>
                 ) : !isCollapsed ? (
                   <div className="space-y-2">
-                    {availableItems.map(item => {
-                      // Apply title case to item name for display (unless manually overridden)
-                      const displayName = manualOverrides[item.id]?.name ? item.name : toTitleCase(item.name);
-                      const displayItem = { ...item, name: displayName };
-                      return (
-                        <ItemRow
-                          key={item.id}
-                          item={displayItem}
-                          isSelected={false}
-                          quantity={getItemQuantity(item.id)}
-                          isSchaferVendorItem={isSchaferVendorItem(item.id)}
-                          onToggleSelection={onToggleSelection}
-                          onQuantityChange={onQuantityChange}
-                        />
-                      );
-                    })}
+                    {availableItems.map(item => (
+                      <ItemRow
+                        key={item.id}
+                        item={item}
+                        isSelected={false}
+                        quantity={getItemQuantity(item.id)}
+                        isSchaferVendorItem={isSchaferVendorItem(item.id)}
+                        onToggleSelection={onToggleSelection}
+                        onQuantityChange={onQuantityChange}
+                      />
+                    ))}
                   </div>
                 ) : null}
               </div>

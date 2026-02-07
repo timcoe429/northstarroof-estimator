@@ -989,8 +989,6 @@ export default function RoofScopeEstimator() {
           activeCategory={uiState.activeCategory}
           editingItem={uiState.editingItem}
           priceSheetProcessing={priceItems.priceSheetProcessing}
-          isGeneratingDescriptions={priceItems.isGeneratingDescriptions}
-          generationProgress={priceItems.generationProgress}
           onCategoryChange={uiState.setActiveCategory}
           onEditItem={uiState.setEditingItem}
           onSaveItem={() => uiState.setEditingItem(null)}
@@ -998,7 +996,6 @@ export default function RoofScopeEstimator() {
           onDeleteItem={priceItems.deletePriceItem}
           onUpdateItem={priceItems.updatePriceItem}
           onPriceSheetUpload={imageExtraction.handlePriceSheetUpload}
-          onGenerateDescriptions={priceItems.generateAllDescriptions}
           getPriceListItems={getPriceListItems}
         />
       )}
@@ -1215,6 +1212,22 @@ export default function RoofScopeEstimator() {
               }
             }}
             onReset={resetEstimator}
+            onToggleItemSelection={(itemId, selected) => {
+              if (!selected) {
+                // Remove item from selectedItems
+                setSelectedItems(prev => prev.filter(id => id !== itemId));
+                // Clear quantity for this item
+                setItemQuantities(prev => {
+                  const updated = { ...prev };
+                  delete updated[itemId];
+                  return updated;
+                });
+                // Trigger recalculation
+                if (estimate && step === 'estimate') {
+                  setTimeout(() => calculateEstimate(), 100);
+                }
+              }
+            }}
           />
         )}
       </div>

@@ -44,7 +44,6 @@ export const useCustomItems = ({ onItemAdded }: UseCustomItemsProps = {}) => {
       coverage: null,
       coverageUnit: null,
       category: customItemDraft.category,
-      proposalDescription: null,
       isCustomItem: true,
     };
 

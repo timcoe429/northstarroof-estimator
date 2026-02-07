@@ -6,7 +6,6 @@ import type { Estimate, VendorQuote, VendorQuoteItem } from '@/types';
 import type { ValidationWarning } from '@/types/estimator';
 import { CATEGORIES } from '@/lib/constants';
 import { formatCurrency, formatVendorName } from '@/lib/estimatorUtils';
-import { toTitleCase } from '@/lib/formatters';
 import { FinancialSummary } from './FinancialSummary';
 
 interface EstimateViewProps {
@@ -56,6 +55,8 @@ interface EstimateViewProps {
   onReset: () => void;
   /** Callback to update share settings */
   onUpdateShareSettings?: (enabled: boolean, token: string | null) => void;
+  /** Callback to toggle item selection (deselect from estimate) */
+  onToggleItemSelection?: (itemId: string, selected: boolean) => void;
 }
 
 /**
@@ -86,6 +87,7 @@ export function EstimateView({
   onSaveQuote,
   onReset,
   onUpdateShareSettings,
+  onToggleItemSelection,
 }: EstimateViewProps) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [localShareEnabled, setLocalShareEnabled] = useState(shareEnabled);
@@ -399,8 +401,16 @@ export function EstimateView({
                       <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
+                            {onToggleItemSelection && (
+                              <input
+                                type="checkbox"
+                                checked={true}
+                                onChange={() => onToggleItemSelection(item.id, false)}
+                                className="mr-1"
+                              />
+                            )}
                             <span className="font-medium text-sm block truncate">
-                              {item.manualOverrides?.name ? item.name : toTitleCase(item.name)}
+                              {item.name}
                             </span>
                             {vendorItem && vendorQuote && (
                               <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
@@ -450,8 +460,18 @@ export function EstimateView({
                 {estimate.optionalItems.map((item, idx) => (
                   <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg opacity-75">
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm text-gray-600 block truncate">
-                        {item.manualOverrides?.name ? item.name : toTitleCase(item.name)}
+                      <div className="flex items-center gap-2">
+                        {onToggleItemSelection && (
+                          <input
+                            type="checkbox"
+                            checked={true}
+                            onChange={() => onToggleItemSelection(item.id, false)}
+                            className="mr-1"
+                          />
+                        )}
+                        <div className="font-medium text-sm text-gray-600 block truncate">
+                          {item.name}
+                        </div>
                       </div>
                       <span className="text-gray-400 text-xs">
                         {item.quantity} {item.unit} × {formatCurrency(item.price)}

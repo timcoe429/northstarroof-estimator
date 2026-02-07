@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react';
-import { Plus, Upload, Bot } from 'lucide-react';
+import { Plus, Upload } from 'lucide-react';
 import type { PriceItem } from '@/types';
 import { CATEGORIES } from '@/lib/constants';
 import { PriceItemRow } from './PriceItemRow';
@@ -13,10 +13,6 @@ interface PriceListPanelProps {
   editingItem: string | null;
   /** Whether price sheet is currently processing */
   priceSheetProcessing: boolean;
-  /** Whether descriptions are being generated */
-  isGeneratingDescriptions: boolean;
-  /** Generation progress for descriptions */
-  generationProgress: { current: number; total: number } | null;
   /** Callback to set active category */
   onCategoryChange: (category: string) => void;
   /** Callback when edit button clicked */
@@ -31,22 +27,18 @@ interface PriceListPanelProps {
   onUpdateItem: (itemId: string, updates: Partial<PriceItem>) => void;
   /** Callback for price sheet upload */
   onPriceSheetUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  /** Callback to generate all descriptions */
-  onGenerateDescriptions: () => void;
   /** Function to get items for a category */
   getPriceListItems: (category: string) => PriceItem[];
 }
 
 /**
  * Price list management panel with category tabs and item list.
- * Supports adding items manually, uploading price sheets, and generating descriptions with AI.
+ * Supports adding items manually and uploading price sheets.
  */
 export function PriceListPanel({
   activeCategory,
   editingItem,
   priceSheetProcessing,
-  isGeneratingDescriptions,
-  generationProgress,
   onCategoryChange,
   onEditItem,
   onSaveItem,
@@ -54,11 +46,9 @@ export function PriceListPanel({
   onDeleteItem,
   onUpdateItem,
   onPriceSheetUpload,
-  onGenerateDescriptions,
   getPriceListItems,
 }: PriceListPanelProps) {
   const currentCategoryItems = getPriceListItems(activeCategory);
-  const itemsWithoutDescriptions = currentCategoryItems.filter(item => !item.proposalDescription?.trim());
 
   return (
     <div className="border-b border-gray-200 bg-white">
@@ -167,18 +157,6 @@ export function PriceListPanel({
               </>
             )}
           </label>
-
-          <button
-            onClick={onGenerateDescriptions}
-            disabled={isGeneratingDescriptions || itemsWithoutDescriptions.length === 0}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors text-sm"
-          >
-            <Bot className="w-4 h-4" />
-            {isGeneratingDescriptions
-              ? `Generating ${generationProgress?.current || 0} of ${generationProgress?.total || 0}...`
-              : 'Generate Descriptions'
-            }
-          </button>
         </div>
 
         <p className="text-xs text-gray-400 mt-3 hidden sm:block">
