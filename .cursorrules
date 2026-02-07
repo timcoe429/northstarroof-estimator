@@ -47,6 +47,12 @@ TESTING:
 - Run npm run build to check for errors before pushing
 - Test locally with npm run dev
 
+AFTER EVERY CHANGE:
+1. Run `npm run build` to check for errors
+2. Run `npx kill-port 3000` to stop any running dev server
+3. Run `npm run dev` to start fresh on localhost:3000
+4. Always use port 3000 — never let it increment to 3001, 3002, etc.
+
 DEPLOYMENT:
 - Push to GitHub → Vercel auto-deploys
 - Environment variables are in Vercel dashboard
