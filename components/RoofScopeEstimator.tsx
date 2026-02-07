@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, ChevronRight, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText, Copy, Bot } from 'lucide-react';
 import Image from 'next/image';
 import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQuote, VendorQuote, VendorQuoteItem } from '@/types';
@@ -13,6 +13,7 @@ import { fileToBase64, generateId, normalizeVendor, formatVendorName, toNumber, 
 import { matchSchaferDescription } from '@/lib/schaferMatching';
 import { useEstimateCalculation } from '@/hooks/useEstimateCalculation';
 import { buildClientViewSections, buildEstimateForClientPdf, copyClientViewToClipboard as copyClientViewToClipboardUtil } from '@/lib/clientViewBuilder';
+import { organizeProposal, type OrganizedProposal } from '@/lib/proposalOrganizer';
 import { applyAutoSelectionRules } from '@/lib/autoSelectionRules';
 import { usePriceItems } from '@/hooks/usePriceItems';
 import { useVendorQuotes } from '@/hooks/useVendorQuotes';
@@ -53,6 +54,8 @@ export default function RoofScopeEstimator() {
   const [manualOverrides, setManualOverrides] = useState<Record<string, { quantity?: boolean; price?: boolean; name?: boolean }>>({});
   const [priceOverrides, setPriceOverrides] = useState<Record<string, number>>({});
   const [nameOverrides, setNameOverrides] = useState<Record<string, string>>({});
+  const [organizedProposal, setOrganizedProposal] = useState<OrganizedProposal | null>(null);
+  const [isOrganizing, setIsOrganizing] = useState(false);
 
   // Initialize hooks
   const financialControls = useFinancialControls();
@@ -295,6 +298,30 @@ export default function RoofScopeEstimator() {
 
   const calculateItemQuantities = calculateItemQuantitiesHook;
 
+  // Manual organization trigger with guard against concurrent calls
+  const organizingRef = useRef(false);
+
+  const triggerOrganization = useCallback(async (est: Estimate) => {
+    if (organizingRef.current) return;
+    organizingRef.current = true;
+    setIsOrganizing(true);
+    
+    try {
+      const result = await organizeProposal(
+        est,
+        manualOverrides,
+        vendorQuotes.vendorQuoteItems,
+        vendorQuotes.groupedVendorItems
+      );
+      setOrganizedProposal(result);
+    } catch (error) {
+      console.error('Error organizing proposal:', error);
+    } finally {
+      setIsOrganizing(false);
+      organizingRef.current = false;
+    }
+  }, [manualOverrides, vendorQuotes.vendorQuoteItems, vendorQuotes.groupedVendorItems]);
+
   // Wrapper for calculateEstimate that updates local state
   const calculateEstimate = useCallback(() => {
     const result = calculateEstimateHook();
@@ -315,8 +342,12 @@ export default function RoofScopeEstimator() {
       setEstimate(updatedEstimate);
       setValidationWarnings(calcValidationWarnings);
       setStep('estimate');
+      // Trigger organization after estimate is calculated
+      if (updatedEstimate) {
+        triggerOrganization(updatedEstimate);
+      }
     }
-  }, [calculateEstimateHook, calcValidationWarnings, sectionHeaders, manualOverrides]);
+  }, [calculateEstimateHook, calcValidationWarnings, sectionHeaders, manualOverrides, triggerOrganization]);
 
   // Calculate quantities for ALL items when measurements change
   // Skip recalculation when loading a saved quote to prevent overwriting restored quantities
@@ -405,6 +436,7 @@ export default function RoofScopeEstimator() {
         ...prev,
         [itemId]: { ...prev[itemId], quantity: true },
       }));
+      setOrganizedProposal(null); // Invalidate organization when items change
     } else if (field === 'price') {
       // Update price in priceItems or vendor items
       const item = allSelectableItems.find(i => i.id === itemId);
@@ -421,6 +453,7 @@ export default function RoofScopeEstimator() {
           ...prev,
           [itemId]: { ...prev[itemId], price: true },
         }));
+        setOrganizedProposal(null); // Invalidate organization when items change
         // Trigger recalculation for price changes
         if (estimate && step === 'estimate') {
           setTimeout(() => calculateEstimate(), 100);
@@ -433,6 +466,7 @@ export default function RoofScopeEstimator() {
         ...prev,
         [itemId]: { ...prev[itemId], name: true },
       }));
+      setOrganizedProposal(null); // Invalidate organization when items change
       // Name change doesn't require recalculation, just re-render
     } else if (field === 'unit') {
       // Unit change - update itemQuantities might be needed
@@ -440,6 +474,7 @@ export default function RoofScopeEstimator() {
         ...prev,
         [itemId]: { ...prev[itemId], quantity: true },
       }));
+      setOrganizedProposal(null); // Invalidate organization when items change
       // Trigger recalculation for unit changes
       if (estimate && step === 'estimate') {
         setTimeout(() => calculateEstimate(), 100);
@@ -463,6 +498,7 @@ export default function RoofScopeEstimator() {
       }
       return updated;
     });
+    setOrganizedProposal(null); // Invalidate organization when items change
     // Clear overrides
     if (field === 'price') {
       setPriceOverrides(prev => {
@@ -575,6 +611,7 @@ export default function RoofScopeEstimator() {
       estimate,
       vendorQuoteItems: vendorQuotes.vendorQuoteItems,
       groupedVendorItems: vendorQuotes.groupedVendorItems,
+      organizedProposal: organizedProposal || undefined,
     });
   };
 
@@ -582,7 +619,8 @@ export default function RoofScopeEstimator() {
     return buildEstimateForClientPdf(
       estimate,
       vendorQuotes.vendorQuoteItems,
-      vendorQuotes.groupedVendorItems
+      vendorQuotes.groupedVendorItems,
+      organizedProposal || undefined
     );
   };
 
@@ -591,7 +629,8 @@ export default function RoofScopeEstimator() {
     await copyClientViewToClipboardUtil(
       estimate,
       vendorQuotes.vendorQuoteItems,
-      vendorQuotes.groupedVendorItems
+      vendorQuotes.groupedVendorItems,
+      organizedProposal || undefined
     );
   };
 
@@ -686,7 +725,14 @@ export default function RoofScopeEstimator() {
 
     setIsGeneratingPDF(true);
     try {
-      const pdfEstimate = vendorQuotes.groupedVendorItems.length > 0 ? buildEstimateForClientPdfWrapper(estimate) : estimate;
+      // If organized proposal doesn't exist, organize first
+      if (!organizedProposal) {
+        await triggerOrganization(estimate);
+      }
+
+      const pdfEstimate = vendorQuotes.groupedVendorItems.length > 0 || organizedProposal 
+        ? buildEstimateForClientPdfWrapper(estimate) 
+        : estimate;
       const blob = await generateProposalPDF(pdfEstimate);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1175,6 +1221,7 @@ export default function RoofScopeEstimator() {
             validationWarnings={validationWarnings}
             isGeneratingPDF={isGeneratingPDF}
             isSavingQuote={savedQuotes.isSavingQuote}
+            isOrganizing={isOrganizing}
             expandedSections={uiState.expandedSections}
             showVendorBreakdown={vendorQuotes.showVendorBreakdown}
             vendorQuotes={vendorQuotes.vendorQuotes}

@@ -25,6 +25,8 @@ interface EstimateViewProps {
   isGeneratingPDF: boolean;
   /** Whether quote is being saved */
   isSavingQuote: boolean;
+  /** Whether proposal is being organized by AI */
+  isOrganizing?: boolean;
   /** Expanded sections */
   expandedSections: Set<string>;
   /** Whether to show vendor breakdown */
@@ -72,6 +74,7 @@ export function EstimateView({
   validationWarnings,
   isGeneratingPDF,
   isSavingQuote,
+  isOrganizing = false,
   expandedSections,
   showVendorBreakdown,
   vendorQuotes,
@@ -361,6 +364,14 @@ export function EstimateView({
             <p className="text-2xl md:text-4xl font-bold text-gray-900">{formatCurrency(estimate.finalPrice)}</p>
           </div>
         </div>
+
+        {/* Organizing indicator */}
+        {isOrganizing && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-blue-700 font-medium">Organizing proposal...</span>
+          </div>
+        )}
 
         {/* Line Items by Category - Collapsible Sections */}
         {Object.entries(CATEGORIES).map(([catKey, { label }]) => {

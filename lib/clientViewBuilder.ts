@@ -1,21 +1,47 @@
 import type { Estimate, LineItem, VendorQuoteItem } from '@/types';
 import type { GroupedVendorItem } from '@/types/estimator';
+import type { OrganizedProposal } from '@/lib/proposalOrganizer';
 import { formatCurrency } from '@/lib/estimatorUtils';
 
 interface BuildClientViewSectionsParams {
   estimate: Estimate;
   vendorQuoteItems: VendorQuoteItem[];
   groupedVendorItems: GroupedVendorItem[];
+  organizedProposal?: OrganizedProposal;
 }
 
 export const buildClientViewSections = ({
   estimate,
   vendorQuoteItems,
   groupedVendorItems,
+  organizedProposal,
 }: BuildClientViewSectionsParams) => {
   // Calculate effective multiplier that makes line items sum to finalPrice (includes sales tax)
   const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
   const effectiveMultiplier = rawTotal > 0 ? estimate.finalPrice / rawTotal : 1;
+
+  // If organized proposal is provided, use it instead of raw estimate items
+  if (organizedProposal) {
+    return {
+      materials: organizedProposal.materials.map(item => ({
+        name: item.displayName,
+        description: item.displayName,
+        total: item.total, // Already from calculator, will apply multiplier later
+      })),
+      labor: organizedProposal.labor.map(item => ({
+        name: item.displayName,
+        description: item.displayName,
+        total: item.total,
+      })),
+      equipment: organizedProposal.equipment.map(item => ({
+        name: item.displayName,
+        description: item.displayName,
+        total: item.total,
+      })),
+    };
+  }
+
+  // Fallback to original behavior (ungrouped items)
   const vendorItemIds = new Set(vendorQuoteItems.map(item => item.id));
 
   const nonVendorMaterials = estimate.byCategory.materials.filter(item => !vendorItemIds.has(item.id));
@@ -82,12 +108,14 @@ export const buildClientViewSections = ({
 export const buildEstimateForClientPdf = (
   estimate: Estimate,
   vendorQuoteItems: VendorQuoteItem[],
-  groupedVendorItems: GroupedVendorItem[]
+  groupedVendorItems: GroupedVendorItem[],
+  organizedProposal?: OrganizedProposal
 ): Estimate => {
   const clientSections = buildClientViewSections({
     estimate,
     vendorQuoteItems,
     groupedVendorItems,
+    organizedProposal,
   });
   
   // Calculate effective multiplier for applying to line items (uses finalPrice which includes sales tax)
@@ -145,7 +173,8 @@ export const buildEstimateForClientPdf = (
 export const copyClientViewToClipboard = async (
   estimate: Estimate,
   vendorQuoteItems: VendorQuoteItem[],
-  groupedVendorItems: GroupedVendorItem[]
+  groupedVendorItems: GroupedVendorItem[],
+  organizedProposal?: OrganizedProposal
 ) => {
   let text = `ROOFING ESTIMATE\n`;
   text += `${estimate.customerInfo.name || 'Customer'}\n`;
@@ -156,6 +185,7 @@ export const copyClientViewToClipboard = async (
     estimate,
     vendorQuoteItems,
     groupedVendorItems,
+    organizedProposal,
   });
   
   // Calculate effective multiplier for applying to line items (uses finalPrice which includes sales tax)

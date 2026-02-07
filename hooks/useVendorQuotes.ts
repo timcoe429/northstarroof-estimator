@@ -357,17 +357,16 @@ export const useVendorQuotes = ({
   }, [groupedVendorItems, groupedVendorItemsTotal, selectedVendorItemsTotal]);
 
   useEffect(() => {
-    const missing = groupedVendorItemsForDescription.filter(group => !groupedVendorDescriptions[group.id]);
-    if (missing.length === 0) return;
-
-    const templateDescriptions: Record<string, string> = {
-      Panels: 'Standing seam metal panels with clips and fasteners',
-      Flashing: 'Custom fabricated metal flashing including eave, rake, ridge, and trim pieces',
-      Delivery: 'Delivery and travel charges',
-    };
-
     setGroupedVendorDescriptions(prev => {
+      const missing = groupedVendorItemsForDescription.filter(group => !prev[group.id]);
+      if (missing.length === 0) return prev; // Return same reference — no update, no re-render
+      
       const updated = { ...prev };
+      const templateDescriptions: Record<string, string> = {
+        Panels: 'Standing seam metal panels with clips and fasteners',
+        Flashing: 'Custom fabricated metal flashing including eave, rake, ridge, and trim pieces',
+        Delivery: 'Delivery and travel charges',
+      };
       missing.forEach(group => {
         const template = templateDescriptions[group.name];
         if (template) {
@@ -376,7 +375,7 @@ export const useVendorQuotes = ({
       });
       return updated;
     });
-  }, [groupedVendorItemsForDescription, groupedVendorDescriptions]);
+  }, [groupedVendorItemsForDescription]); // ONLY depend on groupedVendorItemsForDescription
 
   const generateGroupedVendorDescriptions = async (_groups: GroupedVendorItem[]) => {
     return;
