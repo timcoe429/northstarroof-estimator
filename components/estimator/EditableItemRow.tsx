@@ -21,6 +21,8 @@ interface EditableItemRowProps {
   onUpdateItem: (itemId: string, field: 'name' | 'quantity' | 'price' | 'unit', value: string | number) => void;
   /** Callback to reset manual override */
   onResetOverride: (itemId: string, field: 'quantity' | 'price' | 'name') => void;
+  /** Callback to deselect this item from estimate */
+  onDeselect?: () => void;
 }
 
 /**
@@ -33,6 +35,7 @@ export function EditableItemRow({
   isSchaferVendorItem = false,
   onUpdateItem,
   onResetOverride,
+  onDeselect,
 }: EditableItemRowProps) {
   const [editingField, setEditingField] = useState<'name' | 'quantity' | 'price' | 'unit' | null>(null);
   const [editValue, setEditValue] = useState<string>('');
@@ -117,6 +120,15 @@ export function EditableItemRow({
   return (
     <div className={`p-3 rounded-lg border-2 transition-colors ${getOverrideClass('name')} border-green-300 bg-green-50`}>
       <div className="flex flex-wrap items-center gap-2 md:gap-3">
+        {/* Deselect Checkbox */}
+        {onDeselect && (
+          <input
+            type="checkbox"
+            checked={true}
+            onChange={() => onDeselect()}
+            className="w-5 h-5 rounded flex-shrink-0"
+          />
+        )}
         {/* Item Name */}
         <div className={`flex-1 min-w-[120px] ${getOverrideClass('name')} rounded px-2 py-1`}>
           {editingField === 'name' ? (

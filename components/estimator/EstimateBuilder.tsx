@@ -232,6 +232,7 @@ export function EstimateBuilder({
                           isSchaferVendorItem={isSchaferVendorItem(item.id)}
                           onUpdateItem={onUpdateItem}
                           onResetOverride={onResetOverride}
+                          onDeselect={() => onToggleSelection(item.id, false)}
                         />
                       ) : (
                         <ItemRow
