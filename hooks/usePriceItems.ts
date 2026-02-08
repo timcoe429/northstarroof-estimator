@@ -19,6 +19,8 @@ export const usePriceItems = ({
   onDeleteVendorItem,
   onSetEditingItem,
 }: UsePriceItemsProps) => {
+  console.log('[usePriceItems] usePriceItems called with companyId:', companyId, 'type:', typeof companyId);
+  
   const [priceItems, setPriceItems] = useState<PriceItem[]>([]);
   const [showPrices, setShowPrices] = useState(false);
   const [priceSheetProcessing, setPriceSheetProcessing] = useState(false);
@@ -28,15 +30,21 @@ export const usePriceItems = ({
 
   // Load price items from Supabase when company is available
   useEffect(() => {
-    if (!companyId) return;
+    console.log('[usePriceItems] useEffect triggered, companyId:', companyId);
+    if (!companyId) {
+      console.log('[usePriceItems] No companyId, skipping load');
+      return;
+    }
 
     const loadItems = async () => {
+      console.log('[usePriceItems] loadItems called with companyId:', companyId);
       setIsLoadingPriceItems(true);
       try {
         const items = await loadPriceItems(companyId);
+        console.log('[usePriceItems] loadPriceItems returned', items.length, 'items');
         setPriceItems(items);
       } catch (error) {
-        console.error('Failed to load price items:', error);
+        console.error('[usePriceItems] Failed to load price items:', error);
         alert('Failed to load price items. Please refresh the page.');
       } finally {
         setIsLoadingPriceItems(false);

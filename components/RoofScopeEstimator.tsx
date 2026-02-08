@@ -27,6 +27,11 @@ import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewSt
 
 export default function RoofScopeEstimator() {
   const { user, companyId, signOut } = useAuth();
+  
+  // Debug: Log when companyId changes
+  useEffect(() => {
+    console.log('[RoofScopeEstimator] companyId from useAuth:', companyId, 'type:', typeof companyId);
+  }, [companyId]);
 
   // Core state that must remain in main component
   const [step, setStep] = useState('upload');

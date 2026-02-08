@@ -39,7 +39,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       console.log('[AuthContext] Profile fetch successful, company_id:', profile?.company_id);
-      setCompanyId(profile?.company_id ?? null);
+      const fetchedCompanyId = profile?.company_id ?? null;
+      setCompanyId(fetchedCompanyId);
+      console.log('[AuthContext] companyId from profile:', fetchedCompanyId);
     } catch (error) {
       console.error('[AuthContext] Error fetching company_id:', error);
       console.log('[AuthContext] Setting companyId to null due to exception');

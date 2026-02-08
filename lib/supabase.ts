@@ -325,9 +325,15 @@ export async function updateQuote(id: string, estimate: Estimate, quoteName: str
 
 // Load all price items for a company
 export async function loadPriceItems(companyId: string): Promise<PriceItem[]> {
+  console.log('[loadPriceItems] loadPriceItems called with:', companyId, 'type:', typeof companyId);
+  
   if (!companyId) {
     throw new Error('Company ID is required to load price items');
   }
+  
+  console.log('[loadPriceItems] Querying price_items with company_id =', companyId, '(type:', typeof companyId, ')');
+  console.log('[loadPriceItems] Expected company_id value:', '00000000-0000-0000-0000-000000000001');
+  console.log('[loadPriceItems] Values match?', companyId === '00000000-0000-0000-0000-000000000001');
   
   const { data, error } = await supabase
     .from('price_items')
@@ -335,7 +341,14 @@ export async function loadPriceItems(companyId: string): Promise<PriceItem[]> {
     .eq('company_id', companyId)
     .order('created_at', { ascending: false });
 
+  console.log('[loadPriceItems] Query result - data:', data?.length || 0, 'items');
+  if (data && data.length > 0) {
+    console.log('[loadPriceItems] First item company_id:', data[0]?.company_id);
+  }
+  console.log('[loadPriceItems] Query error:', error);
+  
   if (error) {
+    console.error('[loadPriceItems] Query error details:', JSON.stringify(error, null, 2));
     throw new Error(`Failed to load price items: ${error.message}`);
   }
 
