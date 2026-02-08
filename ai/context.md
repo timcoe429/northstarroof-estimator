@@ -12,6 +12,10 @@ A roofing estimate calculator that extracts measurements from RoofScope/EagleVie
 - **Hosting**: Vercel (auto-deploy from GitHub)
 - **PDF Generation**: pdf-lib
 
+## Data Architecture
+
+**Company-Based Ownership**: All business data (price_items, estimates, customers) is owned by companies, not individual users. This prevents data loss when users are deleted or recreated. Users belong to companies and can access all data within their company. The `company_id` field is used for access control via Row Level Security (RLS) policies.
+
 ## Documentation
 
 For detailed information, see:

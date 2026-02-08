@@ -26,7 +26,7 @@ import { useCustomItems } from '@/hooks/useCustomItems';
 import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView, CalculatedAccessories } from '@/components/estimator';
 
 export default function RoofScopeEstimator() {
-  const { user, signOut } = useAuth();
+  const { user, companyId, signOut } = useAuth();
 
   // Core state that must remain in main component
   const [step, setStep] = useState('upload');
@@ -78,7 +78,7 @@ export default function RoofScopeEstimator() {
 
   // Initialize price items hook
   const priceItems = usePriceItems({
-    userId: user?.id,
+    companyId: companyId ?? undefined,
     vendorQuoteItems: vendorQuotes.vendorQuoteItems,
     vendorQuoteMap: vendorQuotes.vendorQuoteMap,
     onSetEditingItem: uiState.setEditingItem,
@@ -375,6 +375,7 @@ export default function RoofScopeEstimator() {
   // Initialize saved quotes hook
   const savedQuotes = useSavedQuotes({
     userId: user?.id,
+    companyId: companyId ?? undefined,
     estimate,
     vendorQuotes: vendorQuotes.vendorQuotes,
     vendorQuoteItems: vendorQuotes.vendorQuoteItems,

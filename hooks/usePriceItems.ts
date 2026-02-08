@@ -3,7 +3,7 @@ import type { PriceItem } from '@/types';
 import { loadPriceItems, savePriceItem, savePriceItemsBulk, deletePriceItemFromDB } from '@/lib/supabase';
 
 interface UsePriceItemsProps {
-  userId: string | undefined;
+  companyId: string | undefined;
   vendorQuoteItems: any[]; // Will be properly typed when useVendorQuotes is created
   vendorQuoteMap: Map<string, any>;
   onUpdateVendorItem?: (id: string, updates: Partial<PriceItem>) => void;
@@ -12,7 +12,7 @@ interface UsePriceItemsProps {
 }
 
 export const usePriceItems = ({
-  userId,
+  companyId,
   vendorQuoteItems,
   vendorQuoteMap,
   onUpdateVendorItem,
@@ -26,14 +26,14 @@ export const usePriceItems = ({
   const [activeCategory, setActiveCategory] = useState('materials');
   const [isLoadingPriceItems, setIsLoadingPriceItems] = useState(false);
 
-  // Load price items from Supabase when user is available
+  // Load price items from Supabase when company is available
   useEffect(() => {
-    if (!userId) return;
+    if (!companyId) return;
 
     const loadItems = async () => {
       setIsLoadingPriceItems(true);
       try {
-        const items = await loadPriceItems(userId);
+        const items = await loadPriceItems(companyId);
         setPriceItems(items);
       } catch (error) {
         console.error('Failed to load price items:', error);
@@ -44,13 +44,13 @@ export const usePriceItems = ({
     };
 
     loadItems();
-  }, [userId]);
+  }, [companyId]);
 
   // Apply extracted prices to price list
   const applyExtractedPrices = async () => {
     if (!extractedItems) return;
     
-    if (!userId) {
+    if (!companyId) {
       alert('You must be logged in to add price items');
       return;
     }
@@ -71,7 +71,7 @@ export const usePriceItems = ({
 
     // Bulk save to Supabase
     try {
-      await savePriceItemsBulk(newItems, userId);
+      await savePriceItemsBulk(newItems, companyId);
     } catch (error) {
       console.error('Failed to save extracted price items:', error);
       alert('Failed to save extracted price items. Please try again.');
@@ -83,7 +83,7 @@ export const usePriceItems = ({
 
   // Price item management
   const addPriceItem = async (category?: string) => {
-    if (!userId) {
+    if (!companyId) {
       alert('You must be logged in to add price items');
       return;
     }
@@ -114,7 +114,7 @@ export const usePriceItems = ({
   };
 
   const updatePriceItem = async (id: string, updates: Partial<PriceItem>) => {
-    if (!userId) {
+    if (!companyId) {
       alert('You must be logged in to update price items');
       return;
     }
@@ -149,7 +149,7 @@ export const usePriceItems = ({
 
     // Save to Supabase
     try {
-      await savePriceItem(updatedItem, userId);
+      await savePriceItem(updatedItem, companyId);
     } catch (error) {
       console.error('Failed to update price item:', error);
       alert('Failed to update price item. Please try again.');
@@ -161,7 +161,7 @@ export const usePriceItems = ({
   };
 
   const deletePriceItem = async (id: string) => {
-    if (!userId) {
+    if (!companyId) {
       alert('You must be logged in to delete price items');
       return;
     }
@@ -189,7 +189,7 @@ export const usePriceItems = ({
 
     // Try to delete from Supabase (may fail if item was never saved)
     try {
-      await deletePriceItemFromDB(id, userId);
+      await deletePriceItemFromDB(id, companyId);
     } catch (error) {
       // If item doesn't exist in database (e.g., new item that wasn't saved yet),
       // that's fine - we already removed it from local state

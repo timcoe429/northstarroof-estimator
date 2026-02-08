@@ -5,6 +5,7 @@ import { loadQuotes, saveQuote, loadQuote, deleteQuote, saveVendorQuotes, loadVe
 
 interface UseSavedQuotesProps {
   userId: string | undefined;
+  companyId: string | undefined;
   estimate: Estimate | null;
   vendorQuotes: VendorQuote[];
   vendorQuoteItems: VendorQuoteItem[];
@@ -32,6 +33,7 @@ interface UseSavedQuotesProps {
 
 export const useSavedQuotes = ({
   userId,
+  companyId,
   estimate,
   vendorQuotes,
   vendorQuoteItems,
@@ -64,7 +66,7 @@ export const useSavedQuotes = ({
   const fetchSavedQuotes = async () => {
     setIsLoadingQuotes(true);
     try {
-      const quotes = await loadQuotes(userId);
+      const quotes = await loadQuotes(companyId);
       setSavedQuotes(quotes);
     } catch (error) {
       console.error('Failed to load quotes:', error);
@@ -100,11 +102,16 @@ export const useSavedQuotes = ({
       
       // Debug logging
       console.log('Saving quote with user ID:', userId);
+      console.log('Saving quote with company ID:', companyId);
       console.log('User ID type:', typeof userId);
       
       // Validate user ID format
       if (!userId) {
         throw new Error('User is not authenticated. Please log in to save quotes.');
+      }
+      
+      if (!companyId) {
+        throw new Error('Company ID is not available. Please refresh the page.');
       }
       
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -116,7 +123,7 @@ export const useSavedQuotes = ({
         throw new Error('Invalid user ID format. Please log out and log back in.');
       }
       
-      const savedQuote = await saveQuote(estimateWithCustomerInfo, quoteName.trim(), userId, jobDescription);
+      const savedQuote = await saveQuote(estimateWithCustomerInfo, quoteName.trim(), userId, companyId, jobDescription);
 
       if (vendorQuotes.length > 0) {
         await saveVendorQuotes(savedQuote.id, vendorQuotes, vendorQuoteItems);

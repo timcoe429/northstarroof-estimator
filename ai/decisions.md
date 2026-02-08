@@ -4,6 +4,18 @@
 
 - **Next.js 14 App Router**: Chosen for modern React patterns, server components, and built-in API routes. Simplifies routing and enables efficient data fetching.
 - **Supabase for Backend**: Provides database, authentication, and storage in one platform. Row-level security ensures users only access their own data.
+- **Company-Based Data Ownership** (February 2026): Migrated from user-based to company-based data ownership to prevent data loss when users are deleted or recreated.
+  - **Why**: Experienced data loss incident where deleting and recreating auth users caused cascade deletion of all business data (price_items, estimates, customers) because they were tied to `user_id` foreign keys.
+  - **Implementation**: 
+    - Created `companies` table with fixed UUID for Northstar Roofing
+    - Added `company_id` column to all business data tables (price_items, estimates, customers)
+    - Added `company_id` to profiles table (users belong to companies)
+    - Migrated existing data: All existing price_items and profiles assigned to Northstar Roofing company
+    - Updated RLS policies to use `company_id` for access control instead of `user_id`
+    - Kept `user_id` on estimates for audit tracking (who created it), but access control uses `company_id`
+    - Removed cascade delete from `user_id` foreign keys - business data survives user deletion
+    - Updated all application code to use `companyId` from auth context for data access
+  - **Result**: Users within the same company can share data. Deleting a user no longer affects any business data. Data is owned by the company, not individual users.
 - **Custom Hooks Pattern**: Extracted complex state logic into reusable hooks (`useMeasurements`, `useEstimateBuilder`, `usePriceList`, etc.) to keep main component manageable and improve testability.
 - **TypeScript (strict: false)**: Using TypeScript for type safety but keeping strict mode disabled for faster development. Can enable strict mode later if needed.
 

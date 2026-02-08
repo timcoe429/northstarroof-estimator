@@ -93,7 +93,8 @@ export interface Estimate {
 
 export interface SavedQuote {
   id: string;
-  user_id: string;
+  user_id: string; // For audit tracking (who created it)
+  company_id: string; // For access control
   customer_id: string | null;
   name: string;
   measurements: Measurements;

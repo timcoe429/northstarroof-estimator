@@ -8,9 +8,10 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholde
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Save quote to Supabase
-export async function saveQuote(estimate: Estimate, quoteName: string, userId: string | undefined, jobDescription?: string): Promise<SavedQuote> {
+export async function saveQuote(estimate: Estimate, quoteName: string, userId: string | undefined, companyId: string | undefined, jobDescription?: string): Promise<SavedQuote> {
   // Debug logging
   console.log('saveQuote received userId:', userId);
+  console.log('saveQuote received companyId:', companyId);
   console.log('saveQuote userId type:', typeof userId);
   console.log('saveQuote userId format check:', userId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId) : 'undefined');
   
@@ -18,8 +19,13 @@ export async function saveQuote(estimate: Estimate, quoteName: string, userId: s
     throw new Error('User ID is required to save quote');
   }
   
+  if (!companyId) {
+    throw new Error('Company ID is required to save quote');
+  }
+  
   const quoteData: any = {
-    user_id: userId,
+    user_id: userId, // Keep for audit tracking (who created it)
+    company_id: companyId, // Used for access control
     customer_id: null, // Will link customers later
     name: quoteName,
     measurements: estimate.measurements,
@@ -69,15 +75,17 @@ export async function saveQuote(estimate: Estimate, quoteName: string, userId: s
   return data as SavedQuote;
 }
 
-// Load all quotes (all users can see all quotes)
-export async function loadQuotes(userId: string | undefined): Promise<SavedQuote[]> {
-  if (!userId) {
-    throw new Error('User ID is required to load quotes');
+// Load all quotes for a company (RLS handles access control)
+export async function loadQuotes(companyId: string | undefined): Promise<SavedQuote[]> {
+  if (!companyId) {
+    throw new Error('Company ID is required to load quotes');
   }
   
+  // RLS policies handle company-level access, but we can add explicit filter for clarity
   const { data, error } = await supabase
     .from('estimates')
     .select('*')
+    .eq('company_id', companyId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -87,12 +95,13 @@ export async function loadQuotes(userId: string | undefined): Promise<SavedQuote
   return (data || []) as SavedQuote[];
 }
 
-// Load single quote by ID
+// Load single quote by ID (RLS handles company-level access)
 export async function loadQuote(id: string, userId: string | undefined): Promise<SavedQuote> {
   if (!userId) {
     throw new Error('User ID is required to load quote');
   }
   
+  // RLS policies handle company-level access control
   const { data, error } = await supabase
     .from('estimates')
     .select('*')
@@ -106,12 +115,13 @@ export async function loadQuote(id: string, userId: string | undefined): Promise
   return data as SavedQuote;
 }
 
-// Delete quote by ID
+// Delete quote by ID (RLS handles company-level access)
 export async function deleteQuote(id: string, userId: string | undefined): Promise<void> {
   if (!userId) {
     throw new Error('User ID is required to delete quote');
   }
   
+  // RLS policies handle company-level access control
   const { error } = await supabase
     .from('estimates')
     .delete()
@@ -266,11 +276,13 @@ export async function deleteVendorQuote(quoteId: string): Promise<void> {
   }
 }
 
-// Update existing quote
+// Update existing quote (RLS handles company-level access)
 export async function updateQuote(id: string, estimate: Estimate, quoteName: string, userId: string | undefined): Promise<SavedQuote> {
   if (!userId) {
     throw new Error('User ID is required to update quote');
   }
+  
+  // RLS policies handle company-level access control
   
   const quoteData: any = {
     name: quoteName,
@@ -311,16 +323,16 @@ export async function updateQuote(id: string, estimate: Estimate, quoteName: str
   return data as SavedQuote;
 }
 
-// Load all price items for a user
-export async function loadPriceItems(userId: string): Promise<PriceItem[]> {
-  if (!userId) {
-    throw new Error('User ID is required to load price items');
+// Load all price items for a company
+export async function loadPriceItems(companyId: string): Promise<PriceItem[]> {
+  if (!companyId) {
+    throw new Error('Company ID is required to load price items');
   }
   
   const { data, error } = await supabase
     .from('price_items')
     .select('*')
-    .eq('user_id', userId)
+    .eq('company_id', companyId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -340,15 +352,15 @@ export async function loadPriceItems(userId: string): Promise<PriceItem[]> {
 }
 
 // Save (upsert) a single price item
-export async function savePriceItem(item: PriceItem, userId: string): Promise<PriceItem> {
-  if (!userId) {
-    throw new Error('User ID is required to save price item');
+export async function savePriceItem(item: PriceItem, companyId: string): Promise<PriceItem> {
+  if (!companyId) {
+    throw new Error('Company ID is required to save price item');
   }
   
   // Transform from app format (camelCase) to database format (snake_case)
   const dbItem = {
     id: item.id,
-    user_id: userId,
+    company_id: companyId,
     name: item.name,
     category: item.category,
     unit: item.unit,
@@ -380,15 +392,15 @@ export async function savePriceItem(item: PriceItem, userId: string): Promise<Pr
 }
 
 // Bulk save (upsert) multiple price items
-export async function savePriceItemsBulk(items: PriceItem[], userId: string): Promise<PriceItem[]> {
-  if (!userId) {
-    throw new Error('User ID is required to save price items');
+export async function savePriceItemsBulk(items: PriceItem[], companyId: string): Promise<PriceItem[]> {
+  if (!companyId) {
+    throw new Error('Company ID is required to save price items');
   }
   
   // Transform all items from app format to database format
   const dbItems = items.map(item => ({
     id: item.id,
-    user_id: userId,
+    company_id: companyId,
     name: item.name,
     category: item.category,
     unit: item.unit,
@@ -419,16 +431,17 @@ export async function savePriceItemsBulk(items: PriceItem[], userId: string): Pr
 }
 
 // Delete a price item from database
-export async function deletePriceItemFromDB(itemId: string, userId: string): Promise<void> {
-  if (!userId) {
-    throw new Error('User ID is required to delete price item');
+export async function deletePriceItemFromDB(itemId: string, companyId: string): Promise<void> {
+  if (!companyId) {
+    throw new Error('Company ID is required to delete price item');
   }
   
+  // RLS policies handle company-level access, but we add explicit filter for safety
   const { error } = await supabase
     .from('price_items')
     .delete()
     .eq('id', itemId)
-    .eq('user_id', userId);
+    .eq('company_id', companyId);
 
   if (error) {
     throw new Error(`Failed to delete price item: ${error.message}`);
@@ -436,6 +449,7 @@ export async function deletePriceItemFromDB(itemId: string, userId: string): Pro
 }
 
 // Update share settings for an estimate
+// RLS policies handle company-level access control
 export async function updateShareSettings(
   estimateId: string,
   shareEnabled: boolean,
@@ -446,14 +460,14 @@ export async function updateShareSettings(
     throw new Error('User ID is required to update share settings');
   }
 
+  // RLS policies handle company-level access - removed .eq('user_id', userId) filter
   const { error } = await supabase
     .from('estimates')
     .update({
       share_enabled: shareEnabled,
       share_token: shareToken,
     })
-    .eq('id', estimateId)
-    .eq('user_id', userId);
+    .eq('id', estimateId);
 
   if (error) {
     throw new Error(`Failed to update share settings: ${error.message}`);
