@@ -116,3 +116,39 @@ export default function RoofScopeEstimator() {
   );
 }
 ```
+
+---
+
+## Architectural Principles
+
+When proposing solutions, always consider maintainability and scalability alongside immediate functionality.
+
+### Before Proposing a Solution, Ask:
+- Is there a systemic way to solve this, or is it truly one-off?
+- If this needs to happen in multiple places, can it be centralized?
+- Will this decision make the codebase easier or harder to maintain?
+- Does this create a clear pattern others can follow?
+- How does this scale when we add more features?
+
+### Watch Out For:
+- Solutions that require manual repetition for each new feature
+- Patterns that are easy to forget or get wrong
+- Quick fixes that work now but don't scale
+- Scattered logic that should be centralized
+
+### Prioritize:
+- Clear, obvious patterns that guide developers toward correct usage
+- Centralized logic when it makes sense (but not when it doesn't)
+- Flexibility when requirements vary by context
+- Code organization that makes the right thing easy and the wrong thing hard
+
+### Think in Layers
+- Consider both client-side and server-side solutions
+- Defense in depth is often better than a single point of control
+- Layouts, middleware, and hooks each have their place
+
+### Question the Obvious
+The most direct solution isn't always the best solution. Take a moment to consider:
+- Is there a structural approach that solves this more elegantly?
+- What patterns does the framework provide for this use case?
+- How would this look if we had 10x more of these?
