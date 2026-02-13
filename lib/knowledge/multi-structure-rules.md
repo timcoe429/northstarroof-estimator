@@ -53,6 +53,52 @@ How to identify roof type from RoofScope data:
 
 ---
 
+## RoofScope Document Format
+
+### Summary Page (Page 1)
+**What it contains:**
+- "Structures - N" indicates total number of buildings
+- "Structure 1 - XX.XX SQ" provides main building measurements
+- "Auxiliary Structure(s) - XX.XX SQ" shows combined total for remaining buildings (does NOT break down individually)
+- Aerial photograph of property
+- Project totals and waste factors
+
+**Limitation:** Auxiliary structures are lumped together - no individual breakdown on this page
+
+### Analysis Pages (Pages 2+)
+**What they contain:**
+- Header: "Roof Area Analysis - Structure N"
+- Detailed measurement table (planes, areas, pitches)
+- Pitch breakdown (steep, standard, flat, low)
+- Total SQ for this specific structure
+- Architectural drawing with labeled planes
+
+**Page mapping:**
+- Page 2 = Structure 1 analysis
+- Page 3 = Structure 2 analysis
+- Page 4 = Structure 3 analysis
+- Page 5 = Structure 4 analysis
+
+### Detection Rules
+
+**When you see "Structures - 4":**
+- Expect 4 analysis pages total (pages 2-5)
+- Page 1 gives you Structure 1 basic info + auxiliary combined total
+- Pages 2-5 give you detailed measurements for each structure
+- Match page numbers to structures (page 2 to structure 1, page 3 to structure 2, etc.)
+
+**Measurement priority:**
+1. Use analysis page measurements (most accurate)
+2. Fall back to summary page for Structure 1 if no analysis
+3. Estimate auxiliary structures by dividing total if no analysis pages
+
+**Completeness validation:**
+- Sum of all structure SQ should equal "Total Roof Area" from page 1
+- If pages missing: flag as incomplete, note which structures lack detail
+- If all pages present: high confidence
+
+---
+
 ## Measurement Completeness Validation
 
 ### REQUIRED Data for Accurate Estimate:

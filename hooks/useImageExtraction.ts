@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Measurements, CustomerInfo, PriceItem } from '@/types';
 import { fileToBase64, mergeMeasurements } from '@/lib/estimatorUtils';
+import { convertPdfToImages } from '@/lib/utils/pdfToImages';
 
 interface UseImageExtractionProps {
   measurements: Measurements | null;
@@ -19,7 +20,8 @@ interface UseImageExtractionProps {
   onSetIsExtractingVendorQuote: (extracting: boolean) => void;
   onSetSelectedItems: (items: string[] | ((prev: string[]) => string[])) => void;
   onSetItemQuantities: (quantities: Record<string, number> | ((prev: Record<string, number>) => Record<string, number>)) => void;
-  onRoofScopeImageExtracted?: (dataUrl: string) => void;
+  onRoofScopeImageExtracted?: (dataUrl: string | string[]) => void;
+  onPdfProcessing?: (processing: boolean) => void;
 }
 
 export const useImageExtraction = ({
@@ -40,8 +42,107 @@ export const useImageExtraction = ({
   onSetSelectedItems,
   onSetItemQuantities,
   onRoofScopeImageExtracted,
+  onPdfProcessing,
 }: UseImageExtractionProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Shared extraction API call - used by both extractSummaryImage and PDF flow
+  const SUMMARY_PROMPT = `You are extracting roof measurements from a RoofScope or EagleView SUMMARY page.
+
+This is the main summary page that shows overall measurements. Extract:
+
+MEASUREMENTS TO EXTRACT:
+- total_squares: Total roof area in squares
+- predominant_pitch: Main roof pitch (e.g., '10/12')
+- ridge_length: Total ridge in linear feet
+- hip_length: Total hips in linear feet
+- valley_length: Total valleys in linear feet
+- eave_length: Total eaves in linear feet
+- rake_length: Total rakes in linear feet
+- penetrations: Number of pipe penetrations
+- skylights: Number of skylights
+- chimneys: Number of chimneys
+- complexity: Simple, Moderate, or Complex
+
+PROJECT INFORMATION (found at top of RoofScope report):
+- project_address: The FULL project address including street, city, state, zip (e.g., "39 W Lupine Dr, Aspen, CO 81611") - DO NOT include "USA"
+- street_name: Just the street number and name for the customer name field (e.g., "39 W Lupine Dr")
+
+ROOFING KNOWLEDGE:
+- 1 square = 100 sq ft of roof area
+- Starter is used along eaves and rakes
+- H&R (Hip & Ridge) covers the hips and ridges
+- Valleys need valley metal or ice & water shield
+- Penetrations need pipe boots/flashings
+- Labor is priced per square, varies by pitch difficulty
+
+Return ONLY a JSON object:
+{
+  "project_address": "<full address - street, city, state zip>",
+  "street_name": "<just street number and name>",
+  "total_squares": <number>,
+  "predominant_pitch": "<string like 6/12>",
+  "ridge_length": <number in feet>,
+  "hip_length": <number in feet>,
+  "valley_length": <number in feet>,
+  "eave_length": <number in feet>,
+  "rake_length": <number in feet>,
+  "penetrations": <count of vents/pipes>,
+  "skylights": <count>,
+  "chimneys": <count>,
+  "complexity": "<Simple|Moderate|Complex>"
+}
+
+Use 0 for any values not visible. Use empty string for address fields if not visible. Return only JSON.`;
+
+  const extractSummaryFromDataUrl = async (
+    dataUrl: string,
+    fileName: string
+  ): Promise<boolean> => {
+    const response = await fetch('/api/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image: dataUrl,
+        prompt: SUMMARY_PROMPT,
+        max_tokens: 1500,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to extract measurements');
+    }
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Could not parse measurements');
+    }
+
+    const extracted = JSON.parse(jsonMatch[0]);
+    if (extracted.street_name || extracted.project_address) {
+      onSetCustomerInfo(prev => ({
+        ...prev,
+        name: extracted.street_name || prev.name || '',
+        address: extracted.project_address || prev.address || '',
+      }));
+    }
+    const newMeasurements = { ...extracted, fileName };
+
+    if (measurements) {
+      const merged = mergeMeasurements(measurements, newMeasurements);
+      onSetMeasurements(merged);
+      onAnalyzeJobForQuickSelections(merged);
+      onApplyAutoSelection(merged);
+    } else {
+      onSetMeasurements(newMeasurements);
+      onAnalyzeJobForQuickSelections(newMeasurements);
+      onApplyAutoSelection(newMeasurements);
+      onSetStep('extracted');
+    }
+    return true;
+  };
 
   // Extract prices from screenshot using Claude vision
   const extractPricesFromImage = async (file: File) => {
@@ -142,105 +243,13 @@ Extract EVERY line item you can see. Return only the JSON array, no other text.`
       const base64 = await fileToBase64(file);
       const dataUrl = `data:${file.type || 'image/png'};base64,${base64}`;
 
-      const prompt = `You are extracting roof measurements from a RoofScope or EagleView SUMMARY page.
+      await extractSummaryFromDataUrl(dataUrl, file.name || 'Pasted image');
 
-This is the main summary page that shows overall measurements. Extract:
-
-MEASUREMENTS TO EXTRACT:
-- total_squares: Total roof area in squares
-- predominant_pitch: Main roof pitch (e.g., '10/12')
-- ridge_length: Total ridge in linear feet
-- hip_length: Total hips in linear feet
-- valley_length: Total valleys in linear feet
-- eave_length: Total eaves in linear feet
-- rake_length: Total rakes in linear feet
-- penetrations: Number of pipe penetrations
-- skylights: Number of skylights
-- chimneys: Number of chimneys
-- complexity: Simple, Moderate, or Complex
-
-PROJECT INFORMATION (found at top of RoofScope report):
-- project_address: The FULL project address including street, city, state, zip (e.g., "39 W Lupine Dr, Aspen, CO 81611") - DO NOT include "USA"
-- street_name: Just the street number and name for the customer name field (e.g., "39 W Lupine Dr")
-
-ROOFING KNOWLEDGE:
-- 1 square = 100 sq ft of roof area
-- Starter is used along eaves and rakes
-- H&R (Hip & Ridge) covers the hips and ridges
-- Valleys need valley metal or ice & water shield
-- Penetrations need pipe boots/flashings
-- Labor is priced per square, varies by pitch difficulty
-
-Return ONLY a JSON object:
-{
-  "project_address": "<full address - street, city, state zip>",
-  "street_name": "<just street number and name>",
-  "total_squares": <number>,
-  "predominant_pitch": "<string like 6/12>",
-  "ridge_length": <number in feet>,
-  "hip_length": <number in feet>,
-  "valley_length": <number in feet>,
-  "eave_length": <number in feet>,
-  "rake_length": <number in feet>,
-  "penetrations": <count of vents/pipes>,
-  "skylights": <count>,
-  "chimneys": <count>,
-  "complexity": "<Simple|Moderate|Complex>"
-}
-
-Use 0 for any values not visible. Use empty string for address fields if not visible. Return only JSON.`;
-
-      const response = await fetch('/api/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: dataUrl,
-          prompt,
-          max_tokens: 1500,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to extract measurements');
-      }
-
-      const data = await response.json();
-      const text = data.content?.[0]?.text || '';
-
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const extracted = JSON.parse(jsonMatch[0]);
-        if (extracted.street_name || extracted.project_address) {
-          onSetCustomerInfo(prev => ({
-            ...prev,
-            name: extracted.street_name || prev.name || '',
-            address: extracted.project_address || prev.address || '',
-          }));
-        }
-        const newMeasurements = { ...extracted, fileName: file.name || 'Pasted image' };
-
-        if (measurements) {
-          // Merge with existing measurements
-          const merged = mergeMeasurements(measurements, newMeasurements);
-          onSetMeasurements(merged);
-          onAnalyzeJobForQuickSelections(merged);
-          onApplyAutoSelection(merged);
-        } else {
-          // Set initial measurements
-          onSetMeasurements(newMeasurements);
-          onAnalyzeJobForQuickSelections(newMeasurements);
-          onApplyAutoSelection(newMeasurements);
-          onSetStep('extracted');
-        }
-
-        onSetUploadedImages(prev => new Set(Array.from(prev).concat('summary')));
-        try {
-          onRoofScopeImageExtracted?.(dataUrl);
-        } catch (aiError) {
-          console.error('AI structure detection callback error:', aiError);
-        }
-      } else {
-        throw new Error('Could not parse measurements');
+      onSetUploadedImages(prev => new Set(Array.from(prev).concat('summary')));
+      try {
+        onRoofScopeImageExtracted?.(dataUrl);
+      } catch (aiError) {
+        console.error('AI structure detection callback error:', aiError);
       }
     } catch (error) {
       console.error('Extraction error:', error);
@@ -354,32 +363,33 @@ Use null for any values not visible. Return only JSON.`;
 
   // Extract roof measurements from image (routes to appropriate extractor based on context)
   const extractFromImage = async (file: File) => {
+    // RoofScope PDFs: convert to images, extract from summary page, pass all pages to AI detection
     if (file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf')) {
-      onSetIsExtractingVendorQuote(true);
+      onPdfProcessing?.(true);
+      setIsProcessing(true);
       try {
-        const { quote, items } = await onExtractVendorQuoteFromPdf(file);
-        if (quote) {
-          onSetVendorQuotes(prev => [...prev, quote]);
+        const images = await convertPdfToImages(file);
+        if (images.length === 0) {
+          alert('Could not read PDF. Try uploading screenshots instead.');
+          return;
         }
-        if (items.length > 0) {
-          // Add all quote items directly - no matching logic
-          // Schafer quotes are the source of truth, all items are included
-          const newItemIds = items.map(item => item.id);
-          onSetVendorQuoteItems(prev => [...prev, ...items]);
-          onSetSelectedItems(prev => Array.from(new Set([...prev, ...newItemIds])));
-          onSetItemQuantities(prev => {
-            const updated = { ...prev };
-            items.forEach(item => {
-              updated[item.id] = item.quantity || 0;
-            });
-            return updated;
-          });
+
+        await extractSummaryFromDataUrl(images[0], file.name || 'RoofScope PDF');
+
+        onSetUploadedImages(prev =>
+          new Set(Array.from(prev).concat('summary', images.length > 1 ? 'analysis' : []))
+        );
+        try {
+          onRoofScopeImageExtracted?.(images);
+        } catch (aiError) {
+          console.error('AI structure detection callback error:', aiError);
         }
       } catch (error) {
-        console.error('Vendor quote extraction error:', error);
-        alert('Error extracting vendor quote. Please try again.');
+        console.error('PDF processing error:', error);
+        alert('Could not read PDF. Try uploading screenshots instead.');
       } finally {
-        onSetIsExtractingVendorQuote(false);
+        onPdfProcessing?.(false);
+        setIsProcessing(false);
       }
       return;
     }

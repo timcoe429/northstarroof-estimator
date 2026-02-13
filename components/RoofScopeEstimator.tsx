@@ -64,6 +64,7 @@ export default function RoofScopeEstimator() {
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [roofScopeImages, setRoofScopeImages] = useState<string[]>([]);
   const [lastDetection, setLastDetection] = useState<{ structures: AIDetectedStructure[]; summary: string; confidence: string } | null>(null);
+  const [isPdfProcessing, setIsPdfProcessing] = useState(false);
 
   // Initialize AI Project Manager
   const projectManager = useProjectManager(savedEstimateId ?? null);
@@ -242,8 +243,9 @@ export default function RoofScopeEstimator() {
 
   // Callback when RoofScope image is extracted - run AI structure detection
   const handleRoofScopeImageExtracted = useCallback(
-    (dataUrl: string) => {
-      const updatedImages = [...roofScopeImages, dataUrl];
+    (dataUrls: string | string[]) => {
+      const newImages = Array.isArray(dataUrls) ? dataUrls : [dataUrls];
+      const updatedImages = [...roofScopeImages, ...newImages];
       setRoofScopeImages(updatedImages);
       projectManager
         .detectStructures(updatedImages)
@@ -279,6 +281,7 @@ export default function RoofScopeEstimator() {
     onSetSelectedItems: setSelectedItems,
     onSetItemQuantities: setItemQuantities,
     onRoofScopeImageExtracted: handleRoofScopeImageExtracted,
+    onPdfProcessing: setIsPdfProcessing,
   });
 
   // Auto-select Overnights when Sergio or Hugo labor is selected
@@ -1165,6 +1168,7 @@ export default function RoofScopeEstimator() {
             vendorQuoteItems={vendorQuotes.vendorQuoteItems}
             isExtractingVendorQuote={vendorQuotes.isExtractingVendorQuote}
             isProcessing={imageExtraction.isProcessing}
+            isPdfProcessing={isPdfProcessing}
             onFileUpload={imageExtraction.handleFileUpload}
             onDrop={imageExtraction.handleDrop}
             onVendorQuoteUpload={vendorQuotes.handleVendorQuoteUpload}

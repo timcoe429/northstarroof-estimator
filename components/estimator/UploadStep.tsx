@@ -14,6 +14,8 @@ interface UploadStepProps {
   isExtractingVendorQuote: boolean;
   /** Whether roofscope is being processed */
   isProcessing: boolean;
+  /** Whether PDF is being converted to images (RoofScope PDF upload) */
+  isPdfProcessing?: boolean;
   /** Callback for file upload (RoofScope) */
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   /** Callback for drag and drop */
@@ -33,6 +35,7 @@ export function UploadStep({
   vendorQuoteItems,
   isExtractingVendorQuote,
   isProcessing,
+  isPdfProcessing = false,
   onFileUpload,
   onDrop,
   onVendorQuoteUpload,
@@ -42,8 +45,12 @@ export function UploadStep({
     return (
       <div className="bg-white rounded-2xl p-12 text-center">
         <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Reading Measurements...</h2>
-        <p className="text-gray-500">Extracting roof data from your image</p>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">
+          {isPdfProcessing ? 'Processing PDF... Converting pages to images' : 'Reading Measurements...'}
+        </h2>
+        <p className="text-gray-500">
+          {isPdfProcessing ? 'Converting PDF pages for extraction' : 'Extracting roof data from your image'}
+        </p>
       </div>
     );
   }
