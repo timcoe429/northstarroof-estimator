@@ -19,6 +19,7 @@ interface UseImageExtractionProps {
   onSetIsExtractingVendorQuote: (extracting: boolean) => void;
   onSetSelectedItems: (items: string[] | ((prev: string[]) => string[])) => void;
   onSetItemQuantities: (quantities: Record<string, number> | ((prev: Record<string, number>) => Record<string, number>)) => void;
+  onRoofScopeImageExtracted?: (dataUrl: string) => void;
 }
 
 export const useImageExtraction = ({
@@ -38,6 +39,7 @@ export const useImageExtraction = ({
   onSetIsExtractingVendorQuote,
   onSetSelectedItems,
   onSetItemQuantities,
+  onRoofScopeImageExtracted,
 }: UseImageExtractionProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -232,6 +234,11 @@ Use 0 for any values not visible. Use empty string for address fields if not vis
         }
 
         onSetUploadedImages(prev => new Set(Array.from(prev).concat('summary')));
+        try {
+          onRoofScopeImageExtracted?.(dataUrl);
+        } catch (aiError) {
+          console.error('AI structure detection callback error:', aiError);
+        }
       } else {
         throw new Error('Could not parse measurements');
       }
@@ -329,6 +336,11 @@ Use null for any values not visible. Return only JSON.`;
         }
         
         onSetUploadedImages(prev => new Set(Array.from(prev).concat('analysis')));
+        try {
+          onRoofScopeImageExtracted?.(dataUrl);
+        } catch (aiError) {
+          console.error('AI structure detection callback error:', aiError);
+        }
       } else {
         throw new Error('Could not parse slope breakdown');
       }

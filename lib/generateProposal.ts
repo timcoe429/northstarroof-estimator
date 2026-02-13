@@ -161,7 +161,12 @@ function parseStructuredIntro(text: string, customerName: string): StructuredInt
 }
 
 // Generate introduction letter using AI
-async function generateIntroductionLetter(customerName: string, customerAddress: string, projectItems: string[]): Promise<StructuredIntro> {
+async function generateIntroductionLetter(
+  customerName: string,
+  customerAddress: string,
+  projectItems: string[],
+  aiSuggestions?: string
+): Promise<StructuredIntro> {
   const prompt = `You are Omiah Travis, owner of Northstar Roofing in Aspen, Colorado. Write a sincere, professional introduction letter for a roofing proposal.
 
 CUSTOMER NAME: ${customerName}
@@ -169,6 +174,7 @@ PROJECT ADDRESS: ${customerAddress}
 
 PROJECT ITEMS:
 ${projectItems.length > 0 ? projectItems.map(item => `- ${item}`).join('\n') : '- Standard roofing materials'}
+${aiSuggestions ? `\nSTRUCTURE INFORMATION (mention in opening/body to personalize for multi-structure properties):\n${aiSuggestions}\n` : ''}
 
 Write a warm, personalized thank you letter that:
 - Addresses the customer by name
@@ -223,13 +229,19 @@ Return ONLY the structured content with section labels, no other text.`;
 
     const data = await response.json();
     const text = data.content?.[0]?.text || '';
-    return parseStructuredIntro(text.trim(), customerName);
+    const intro = parseStructuredIntro(text.trim(), customerName);
+    if (aiSuggestions && intro.opening) {
+      intro.opening = `Thank you for the opportunity to provide an estimate for your property. ${aiSuggestions}`;
+    }
+    return intro;
   } catch (error) {
     console.error('Error generating introduction:', error);
     // Fallback
-    return {
+    const fallback: StructuredIntro = {
       greeting: `Dear ${customerName},`,
-      opening: 'Thank you for giving Northstar Roofing the opportunity to provide an estimate for your roofing project.',
+      opening: aiSuggestions
+        ? `Thank you for the opportunity to provide an estimate for your property. ${aiSuggestions}`
+        : 'Thank you for giving Northstar Roofing the opportunity to provide an estimate for your roofing project.',
       bodyPara1: 'This proposal includes a detailed breakdown of materials, labor, and equipment for your project. We\'ve carefully selected quality materials and components to ensure a durable, professional installation.',
       bodyPara2: 'We take pride in our workmanship and attention to detail.',
       bullet1: 'Detailed line item estimate breaking down all materials and labor',
@@ -237,6 +249,7 @@ Return ONLY the structured content with section labels, no other text.`;
       bullet3: 'References from past clients',
       closingPara: 'If you have any questions, please don\'t hesitate to reach out.',
     };
+    return fallback;
   }
 }
 
@@ -914,7 +927,7 @@ function drawSectionHeader(page: any, y: number, sectionName: string, boldFont: 
 }
 
 // Main function to generate proposal PDF
-export async function generateProposalPDF(estimate: Estimate): Promise<Blob> {
+export async function generateProposalPDF(estimate: Estimate, aiSuggestions?: string): Promise<Blob> {
   // Load static templates
   const coverPDF = await loadPDFTemplate('/templates/cover.pdf');
   const importantLinksPDF = await loadPDFTemplate('/templates/important-links.pdf');
@@ -924,7 +937,7 @@ export async function generateProposalPDF(estimate: Estimate): Promise<Blob> {
   const customerName = estimate.customerInfo.name || 'Valued Customer';
   const customerAddress = estimate.customerInfo.address || '';
   const projectItems = extractNotableItems(estimate);
-  const intro = await generateIntroductionLetter(customerName, customerAddress, projectItems);
+  const intro = await generateIntroductionLetter(customerName, customerAddress, projectItems, aiSuggestions);
   const introPDF = await generateIntroductionPage(intro);
   
   // Generate line item pages (effective multiplier calculated inside)

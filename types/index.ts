@@ -149,3 +149,73 @@ export interface VendorQuoteItem {
   category: 'materials' | 'equipment' | 'accessories';
   vendor_category: 'panels' | 'flashing' | 'fasteners' | 'snow-retention' | 'delivery';
 }
+
+// =============================================================================
+// AI Project Manager Types (Phase B)
+// =============================================================================
+
+/**
+ * AI's understanding of a structure in a multi-building estimate.
+ * Each structure has its own measurements and detection confidence.
+ */
+export interface AIDetectedStructure {
+  id: string;
+  name: string;
+  type: 'metal' | 'tile' | 'shingle' | 'flat' | 'unknown';
+  measurements: Measurements;
+  hasAnalysisPage: boolean;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+/**
+ * AI project context linked to an estimate. Matches ai_project_context database schema.
+ * Stores AI's understanding, conversation history, and validation state.
+ */
+export interface AIProjectContext {
+  id: string;
+  estimateId: string;
+  companyId: string;
+  projectSummary: string;
+  structureCount: number;
+  structures: AIDetectedStructure[];
+  conversationLog: AIMessage[];
+  warnings: AIWarning[];
+  validationStatus: 'incomplete' | 'warnings' | 'ready';
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * A single message in the AI conversation log for debugging and context.
+ */
+export interface AIMessage {
+  id: string;
+  timestamp: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  stage: 'detection' | 'selection' | 'building' | 'validation';
+}
+
+/**
+ * Validation warning or error from AI checks.
+ * Severity determines if PDF generation is blocked.
+ */
+export interface AIWarning {
+  id: string;
+  severity: 'error' | 'warning' | 'info';
+  category: 'compatibility' | 'missing_item' | 'pricing' | 'measurement' | 'completeness';
+  message: string;
+  suggestion?: string;
+  affectedItems?: string[];
+  dismissed: boolean;
+}
+
+/**
+ * Result of AI validation run. Returned by validation functions.
+ */
+export interface AIValidationResult {
+  valid: boolean;
+  warnings: AIWarning[];
+  suggestions: string[];
+  completeness: number;
+}

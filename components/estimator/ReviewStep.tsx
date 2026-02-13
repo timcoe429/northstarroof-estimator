@@ -31,6 +31,8 @@ interface ReviewStepProps {
   isGeneratingSelection: boolean;
   /** Number of selectable items */
   allSelectableItemsLength: number;
+  /** Number of structures detected (for multi-structure display) */
+  structureCount?: number;
   /** Callback to update customer info */
   onCustomerInfoChange: (field: keyof CustomerInfo, value: string) => void;
   /** Callback to reset estimator */
@@ -64,6 +66,7 @@ export function ReviewStep({
   smartSelectionWarnings,
   isGeneratingSelection,
   allSelectableItemsLength,
+  structureCount,
   onCustomerInfoChange,
   onReset,
   onVendorQuoteUpload,
@@ -217,10 +220,19 @@ export function ReviewStep({
         </div>
       )}
 
+      {/* Combined measurements notice for multi-structure */}
+      {structureCount !== undefined && structureCount > 1 && (
+        <div className="mb-2 p-2 bg-blue-50 rounded">
+          <p className="text-sm text-blue-900">
+            Showing combined measurements for {structureCount} structures
+          </p>
+        </div>
+      )}
+
       {/* Measurements Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-4">
         {[
-          { key: 'total_squares', label: 'Squares', unit: 'sq' },
+          { key: 'total_squares', label: structureCount && structureCount > 1 ? 'Squares (All Structures)' : 'Squares', unit: 'sq' },
           { key: 'predominant_pitch', label: 'Pitch', unit: '' },
           { key: 'ridge_length', label: 'Ridge', unit: 'ft' },
           { key: 'hip_length', label: 'Hips', unit: 'ft' },

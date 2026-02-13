@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, ChevronRight, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText, Copy, Bot } from 'lucide-react';
 import Image from 'next/image';
-import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQuote, VendorQuote, VendorQuoteItem } from '@/types';
+import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQuote, VendorQuote, VendorQuoteItem, AIDetectedStructure } from '@/types';
 import { saveQuote, loadQuotes, loadQuote, deleteQuote, loadPriceItems, savePriceItem, savePriceItemsBulk, deletePriceItemFromDB, saveVendorQuotes, loadVendorQuotes, updateShareSettings } from '@/lib/supabase';
 import { generateProposalPDF } from '@/lib/generateProposal';
 import { useAuth } from '@/lib/AuthContext';
@@ -23,6 +23,7 @@ import { useSavedQuotes } from '@/hooks/useSavedQuotes';
 import { useFinancialControls } from '@/hooks/useFinancialControls';
 import { useUIState } from '@/hooks/useUIState';
 import { useCustomItems } from '@/hooks/useCustomItems';
+import { useProjectManager } from '@/hooks/useProjectManager';
 import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView, CalculatedAccessories } from '@/components/estimator';
 
 export default function RoofScopeEstimator() {
@@ -61,6 +62,12 @@ export default function RoofScopeEstimator() {
   const [nameOverrides, setNameOverrides] = useState<Record<string, string>>({});
   const [organizedProposal, setOrganizedProposal] = useState<OrganizedProposal | null>(null);
   const [isOrganizing, setIsOrganizing] = useState(false);
+  const [roofScopeImages, setRoofScopeImages] = useState<string[]>([]);
+  const [lastDetection, setLastDetection] = useState<{ structures: AIDetectedStructure[]; summary: string; confidence: string } | null>(null);
+
+  // Initialize AI Project Manager
+  const projectManager = useProjectManager(savedEstimateId ?? null);
+  const structuresForValidation = projectManager.aiContext?.structures ?? lastDetection?.structures ?? [];
 
   // Initialize hooks
   const financialControls = useFinancialControls();
@@ -233,6 +240,26 @@ export default function RoofScopeEstimator() {
     }
   }, [allSelectableItems, smartSelection.jobDescription, vendorQuotes.vendorQuotes, vendorQuotes.vendorQuoteItems, selectedItems]);
 
+  // Callback when RoofScope image is extracted - run AI structure detection
+  const handleRoofScopeImageExtracted = useCallback(
+    (dataUrl: string) => {
+      const updatedImages = [...roofScopeImages, dataUrl];
+      setRoofScopeImages(updatedImages);
+      projectManager
+        .detectStructures(updatedImages)
+        .then((result) => {
+          if (result.structures.length !== (lastDetection?.structures.length ?? 0)) {
+            console.log(
+              `Structure count changed: ${lastDetection?.structures.length ?? 0} → ${result.structures.length}`
+            );
+          }
+          if (!savedEstimateId) setLastDetection(result);
+        })
+        .catch((err) => console.error('AI structure detection failed:', err));
+    },
+    [roofScopeImages, savedEstimateId, projectManager, lastDetection?.structures.length]
+  );
+
   // Initialize image extraction hook
   const imageExtraction = useImageExtraction({
     measurements,
@@ -251,6 +278,7 @@ export default function RoofScopeEstimator() {
     onSetIsExtractingVendorQuote: (extracting) => {}, // Managed by vendorQuotes hook
     onSetSelectedItems: setSelectedItems,
     onSetItemQuantities: setItemQuantities,
+    onRoofScopeImageExtracted: handleRoofScopeImageExtracted,
   });
 
   // Auto-select Overnights when Sergio or Hugo labor is selected
@@ -554,6 +582,22 @@ export default function RoofScopeEstimator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [financialControls.wastePercent, financialControls.marginPercent, financialControls.officeCostPercent, financialControls.sundriesPercent, financialControls.salesTaxPercent]);
 
+  // Debounced material validation when structures and line items change
+  useEffect(() => {
+    if (!savedEstimateId || structuresForValidation.length === 0 || !estimate) return;
+
+    const lineItems = [...estimate.lineItems, ...(estimate.optionalItems ?? [])];
+    if (lineItems.length === 0) return;
+
+    const timeoutId = setTimeout(() => {
+      projectManager
+        .validateMaterials(structuresForValidation, lineItems)
+        .catch((err) => console.error('Material validation failed:', err));
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
+  }, [savedEstimateId, structuresForValidation, estimate, selectedItems, itemQuantities, projectManager]);
+
   // Auto-select rolloffs for tear-off jobs
   useEffect(() => {
     if (!measurements || !smartSelection.isTearOff) return;
@@ -649,6 +693,11 @@ export default function RoofScopeEstimator() {
     setSelectedItems([]);
     setItemQuantities({});
     setUploadedImages(new Set());
+    setRoofScopeImages([]);
+    setLastDetection(null);
+    setSavedEstimateId(undefined);
+    setShareToken(null);
+    setShareEnabled(false);
     vendorQuotes.setVendorQuotes([]);
     vendorQuotes.setVendorQuoteItems([]);
     smartSelection.setJobDescription('');
@@ -731,6 +780,23 @@ export default function RoofScopeEstimator() {
 
     setIsGeneratingPDF(true);
     try {
+      let aiSuggestions: string | undefined;
+
+      // Run preflight check if we have saved estimate (don't block PDF on failure)
+      if (savedEstimateId) {
+        try {
+          const preflight = await projectManager.runPreflightCheck(estimate);
+          if (!preflight.ready) {
+            console.warn('Preflight check warnings:', preflight.warnings);
+          }
+          if (preflight.introLetterSuggestions) {
+            aiSuggestions = preflight.introLetterSuggestions;
+          }
+        } catch (err) {
+          console.error('Preflight check failed:', err);
+        }
+      }
+
       // If organized proposal doesn't exist, organize first
       if (!organizedProposal) {
         await triggerOrganization(estimate);
@@ -739,7 +805,7 @@ export default function RoofScopeEstimator() {
       const pdfEstimate = vendorQuotes.groupedVendorItems.length > 0 || organizedProposal 
         ? buildEstimateForClientPdfWrapper(estimate) 
         : estimate;
-      const blob = await generateProposalPDF(pdfEstimate);
+      const blob = await generateProposalPDF(pdfEstimate, aiSuggestions);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -862,6 +928,8 @@ export default function RoofScopeEstimator() {
                                   onClick={async () => {
                                     const shareData = await savedQuotes.loadSavedQuote(quote.id);
                                     if (shareData) {
+                                      setRoofScopeImages([]);
+                                      setLastDetection(null);
                                       setSavedEstimateId(shareData.estimateId);
                                       setShareToken(shareData.shareToken);
                                       setShareEnabled(shareData.shareEnabled);
@@ -1054,6 +1122,42 @@ export default function RoofScopeEstimator() {
 
       {/* Main Content */}
       <div className="max-w-5xl mx-auto px-4 py-6 md:py-8">
+        {/* AI Validation Warnings */}
+        {(step === 'extracted' || step === 'estimate') && projectManager.aiContext && projectManager.aiContext.warnings.filter((w) => !w.dismissed).length > 0 && (
+          <div className="mb-4 space-y-2">
+            <h3 className="text-sm font-semibold text-gray-700">AI Validation Warnings</h3>
+            {projectManager.aiContext.warnings
+              .filter((w) => !w.dismissed)
+              .map((warning) => (
+                <div
+                  key={warning.id}
+                  className={`p-3 rounded-lg border ${
+                    warning.severity === 'error'
+                      ? 'bg-red-50 border-red-200'
+                      : warning.severity === 'warning'
+                        ? 'bg-yellow-50 border-yellow-200'
+                        : 'bg-blue-50 border-blue-200'
+                  }`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900">{warning.message}</p>
+                      {warning.suggestion && (
+                        <p className="text-sm text-gray-600 mt-1">💡 {warning.suggestion}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => projectManager.dismissWarning(warning.id)}
+                      className="ml-2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+
         {/* Upload Step */}
         {(step === 'upload' || imageExtraction.isProcessing) && (
           <UploadStep
@@ -1071,10 +1175,88 @@ export default function RoofScopeEstimator() {
         {/* Review & Build Estimate */}
         {step === 'extracted' && measurements && (
           <div className="space-y-4 md:space-y-6">
+            {/* Multi-Structure Overview Panel */}
+            {structuresForValidation.length > 1 && (
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                  Multi-Structure Property Detected
+                </h3>
+                <p className="text-sm text-gray-700 mb-4">
+                  AI detected {structuresForValidation.length} structures. Review each building below.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {structuresForValidation.map((structure) => (
+                    <div
+                      key={structure.id}
+                      className="p-3 bg-white border border-gray-200 rounded-lg"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">{structure.name}</h4>
+                          <p className="text-sm text-gray-600">
+                            Type: {structure.type} • {structure.measurements.total_squares.toFixed(1)} SQ
+                          </p>
+                        </div>
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded ${
+                            structure.hasAnalysisPage ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                          }`}
+                        >
+                          {structure.hasAnalysisPage ? 'Detailed' : 'Estimated'}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 space-y-1">
+                        <div>Pitch: {structure.measurements.predominant_pitch || 'N/A'}</div>
+                        <div>Eave: {structure.measurements.eave_length} LF</div>
+                        <div>Valley: {structure.measurements.valley_length} LF</div>
+                        {!structure.hasAnalysisPage && (
+                          <p className="text-yellow-700 mt-2">
+                            No analysis page - measurements estimated
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 p-3 bg-white border border-gray-300 rounded">
+                  <p className="text-sm text-gray-700">
+                    <strong>Total Combined:</strong>{' '}
+                    {structuresForValidation
+                      .reduce((sum, s) => sum + s.measurements.total_squares, 0)
+                      .toFixed(1)}{' '}
+                    SQ across {structuresForValidation.length} buildings
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* AI Detection Confidence */}
+            {lastDetection && (
+              <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded">
+                <p className="text-sm text-gray-700">
+                  <strong>AI Detection Summary:</strong> {lastDetection.summary}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Confidence:{' '}
+                  {lastDetection.confidence === 'high'
+                    ? 'High'
+                    : lastDetection.confidence === 'medium'
+                      ? 'Medium'
+                      : 'Low'}
+                </p>
+                {lastDetection.confidence === 'low' && (
+                  <p className="text-xs text-yellow-700 mt-1">
+                    Low confidence - recommend uploading analysis pages for accurate measurements
+                  </p>
+                )}
+              </div>
+            )}
+
             <ReviewStep
               measurements={measurements}
               customerInfo={customerInfo}
               uploadedImages={uploadedImages}
+              structureCount={structuresForValidation.length}
               vendorQuotes={vendorQuotes.vendorQuotes}
               vendorQuoteItems={vendorQuotes.vendorQuoteItems}
               isExtractingVendorQuote={vendorQuotes.isExtractingVendorQuote}
@@ -1244,6 +1426,16 @@ export default function RoofScopeEstimator() {
               setValidationWarnings([]);
             }}
             onSaveQuote={async () => {
+              if (savedEstimateId && estimate) {
+                try {
+                  const validation = await projectManager.validateCompleteness(estimate);
+                  if (!validation.valid) {
+                    console.warn('Estimate has validation issues:', validation.warnings);
+                  }
+                } catch (err) {
+                  console.error('Completeness validation failed:', err);
+                }
+              }
               const savedId = await savedQuotes.saveCurrentQuote();
               if (savedId) {
                 setSavedEstimateId(savedId);

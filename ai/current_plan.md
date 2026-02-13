@@ -1,4 +1,4 @@
-# Current Plan - Updated 2/7/2026
+# Current Plan - Updated 2/14/2026
 
 ## What's Complete
 
@@ -22,20 +22,34 @@
   - Updated example in style guide to show component list format
   - Style guide is read dynamically by API route at runtime
 
+- **Phase A: Knowledge Base Foundation** ✅ (Feb 14, 2026)
+  - Created /lib/knowledge/roofing-rules.md
+  - Created /lib/knowledge/multi-structure-rules.md
+  - Created /lib/knowledge/validation-rules.md
+  - Domain knowledge ready for AI consumption
+
+- **Phase B: Database Schema + TypeScript Types** ✅ (Feb 14, 2026)
+  - Migration: supabase/migrations/20260214_add_ai_project_context.sql
+  - New table: ai_project_context with company-based RLS
+  - TypeScript interfaces: AIDetectedStructure, AIProjectContext, AIMessage, AIWarning, AIValidationResult
+  - Build passing, migration applied to Supabase
+
 ## What's In Progress
 
-- **Testing Phase 2b** — Style guide improvements applied, needs testing on 39 W Lupine estimate to verify:
-  - W Valley groups into flashing kit
-  - Flashing kit name shows components
-  - All other grouping still works
-  - Numbers unchanged
+- **Phase C: Core AI Agent Logic** (Next)
+  - Build /lib/ai/project-manager.ts with AI functions
+  - Create API route /app/api/project-manager/route.ts
+  - Create React hook useProjectManager
 
 ## What's Next
 
-1. **Verify Phase 2b** — Test PDF output with updated style guide
-2. **Clean up debug logging** — Remove console.logs from proposalOrganizer.ts once stable
-3. **Future: Additional vendors** — TRA Snow & Sun, Rocky Mountain Snow Guards integration
-4. **Future: Business dashboard** — Trello integration, lead tracking, performance metrics
+1. Complete Phase C (AI agent core)
+2. Phase D (Integration into existing workflow)
+3. Phase E (UI components)
+4. Verify Phase 2b — Test PDF output with updated style guide
+5. Clean up debug logging — Remove console.logs from proposalOrganizer.ts once stable
+6. Future: Additional vendors — TRA Snow & Sun, Rocky Mountain Snow Guards integration
+7. Future: Business dashboard — Trello integration, lead tracking, performance metrics
 
 ## Known Issues / Blockers
 

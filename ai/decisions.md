@@ -19,6 +19,17 @@
 - **Custom Hooks Pattern**: Extracted complex state logic into reusable hooks (`useMeasurements`, `useEstimateBuilder`, `usePriceList`, etc.) to keep main component manageable and improve testability.
 - **TypeScript (strict: false)**: Using TypeScript for type safety but keeping strict mode disabled for faster development. Can enable strict mode later if needed.
 
+## AI Project Manager Architecture (February 2026)
+
+- **Decision**: Scrap rules-based multi-structure detection, build Full AI Project Manager instead
+- **Why**: Rules-based approach (Phase 1) was too brittle with cascading edge cases. AI agent with knowledge base provides flexibility and intelligence.
+- **Implementation**:
+  - Knowledge base in markdown files (easy to update without code changes)
+  - AI reads rules and makes contextual decisions
+  - Company-based ownership prevents data loss (lesson from previous incident)
+  - Structure detection, material validation, completeness checking all AI-driven
+- **Git backup**: Tagged `pre-multi-structure-v1` before starting AI approach
+
 ## Integrations
 
 - **Claude API for Image Extraction**: Using Anthropic Claude's vision capabilities to extract measurements from RoofScope screenshots and parse price sheets. More accurate than OCR for complex roofing documents.
