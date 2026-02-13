@@ -64,6 +64,7 @@ export default function RoofScopeEstimator() {
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [roofScopeImages, setRoofScopeImages] = useState<string[]>([]);
   const [lastDetection, setLastDetection] = useState<{ structures: AIDetectedStructure[]; summary: string; confidence: string } | null>(null);
+  const [aiStatus, setAiStatus] = useState<string | null>(null);
 
   // Initialize AI Project Manager
   const projectManager = useProjectManager(savedEstimateId ?? null);
@@ -246,6 +247,7 @@ export default function RoofScopeEstimator() {
       const newImages = Array.isArray(dataUrls) ? dataUrls : [dataUrls];
       const updatedImages = [...roofScopeImages, ...newImages];
       setRoofScopeImages(updatedImages);
+      setAiStatus('Analyzing document structure...');
       projectManager
         .detectStructures(updatedImages)
         .then((result) => {
@@ -256,7 +258,11 @@ export default function RoofScopeEstimator() {
           }
           if (!savedEstimateId) setLastDetection(result);
         })
-        .catch((err) => console.error('AI structure detection failed:', err));
+        .catch((err) => {
+          console.error('AI structure detection failed:', err);
+          setAiStatus('AI detection failed');
+        })
+        .finally(() => setAiStatus(null));
     },
     [roofScopeImages, savedEstimateId, projectManager, lastDetection?.structures.length]
   );
@@ -591,9 +597,11 @@ export default function RoofScopeEstimator() {
     if (lineItems.length === 0) return;
 
     const timeoutId = setTimeout(() => {
+      setAiStatus('Validating material compatibility...');
       projectManager
         .validateMaterials(structuresForValidation, lineItems)
-        .catch((err) => console.error('Material validation failed:', err));
+        .catch((err) => console.error('Material validation failed:', err))
+        .finally(() => setAiStatus(null));
     }, 1000);
 
     return () => clearTimeout(timeoutId);
@@ -786,6 +794,7 @@ export default function RoofScopeEstimator() {
       // Run preflight check if we have saved estimate (don't block PDF on failure)
       if (savedEstimateId) {
         try {
+          setAiStatus('Running final validation...');
           const preflight = await projectManager.runPreflightCheck(estimate);
           if (!preflight.ready) {
             console.warn('Preflight check warnings:', preflight.warnings);
@@ -795,6 +804,8 @@ export default function RoofScopeEstimator() {
           }
         } catch (err) {
           console.error('Preflight check failed:', err);
+        } finally {
+          setAiStatus(null);
         }
       }
 
@@ -1053,6 +1064,29 @@ export default function RoofScopeEstimator() {
           </div>
         )}
 
+      {/* AI Status Banner */}
+      {aiStatus && (
+        <div className="fixed top-20 right-4 z-50 max-w-sm">
+          <div
+            className={`px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 ${
+              aiStatus.toLowerCase().includes('failed')
+                ? 'bg-red-600 text-white'
+                : 'bg-blue-600 text-white'
+            }`}
+          >
+            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent flex-shrink-0" />
+            <div>
+              <p className="font-medium">
+                {aiStatus.toLowerCase().includes('failed') ? 'AI Error' : 'AI Working'}
+              </p>
+              <p className={`text-sm ${aiStatus.toLowerCase().includes('failed') ? 'text-red-100' : 'text-blue-100'}`}>
+                {aiStatus}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Extracted Items Modal */}
       {priceItems.extractedItems && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1176,6 +1210,32 @@ export default function RoofScopeEstimator() {
         {/* Review & Build Estimate */}
         {step === 'extracted' && measurements && (
           <div className="space-y-4 md:space-y-6">
+            {/* Structure Detection Loading */}
+            {projectManager.isLoading && structuresForValidation.length === 0 && (
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-blue-900">AI analyzing RoofScope...</p>
+                    <p className="text-xs text-blue-700">Detecting structures and extracting measurements</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Material Validation Loading */}
+            {projectManager.isLoading &&
+              structuresForValidation.length > 0 &&
+              estimate &&
+              [...(estimate.lineItems ?? []), ...(estimate.optionalItems ?? [])].length > 0 && (
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-600 flex-shrink-0" />
+                    <p className="text-sm text-yellow-900">Validating material compatibility...</p>
+                  </div>
+                </div>
+              )}
+
             {/* Multi-Structure Overview Panel */}
             {structuresForValidation.length > 1 && (
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -1429,12 +1489,15 @@ export default function RoofScopeEstimator() {
             onSaveQuote={async () => {
               if (savedEstimateId && estimate) {
                 try {
+                  setAiStatus('Checking estimate completeness...');
                   const validation = await projectManager.validateCompleteness(estimate);
                   if (!validation.valid) {
                     console.warn('Estimate has validation issues:', validation.warnings);
                   }
                 } catch (err) {
                   console.error('Completeness validation failed:', err);
+                } finally {
+                  setAiStatus(null);
                 }
               }
               const savedId = await savedQuotes.saveCurrentQuote();
