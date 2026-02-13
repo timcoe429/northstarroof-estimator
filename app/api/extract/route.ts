@@ -24,21 +24,15 @@ export async function POST(request: NextRequest) {
     const content: any[] = [];
     
     if (image) {
-      // Determine media type from base64 or default to png
-      const mediaType = image.includes('data:image/') 
-        ? image.split(';')[0].split(':')[1] 
+      const mediaType = image.includes('data:')
+        ? image.split(';')[0].split(':')[1]
         : 'image/png';
-
-      // Extract base64 data (remove data URL prefix if present)
       const base64Data = image.includes(',') ? image.split(',')[1] : image;
+      const contentType = mediaType === 'application/pdf' ? 'document' : 'image';
 
       content.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: mediaType,
-          data: base64Data
-        }
+        type: contentType,
+        source: { type: 'base64', media_type: mediaType, data: base64Data },
       });
     }
 

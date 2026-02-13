@@ -152,22 +152,29 @@ export async function detectStructures(
   try {
     const content: unknown[] = [];
 
-    for (const img of roofScopeImages.slice(0, 5)) {
-      const mediaType = img.includes('data:image/')
-        ? img.split(';')[0].split(':')[1]
-        : 'image/png';
-      const base64Data = img.includes(',') ? img.split(',')[1] : img;
-      content.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: mediaType,
-          data: base64Data,
-        },
-      });
+    for (const item of roofScopeImages.slice(0, 5)) {
+      const base64Data = item.includes(',') ? item.split(',')[1] : item;
+      if (item.startsWith('data:application/pdf')) {
+        content.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: base64Data,
+          },
+        });
+      } else {
+        const mediaType = item.includes('data:image/')
+          ? item.split(';')[0].split(':')[1]
+          : 'image/png';
+        content.push({
+          type: 'image',
+          source: { type: 'base64', media_type: mediaType, data: base64Data },
+        });
+      }
     }
 
-    const prompt = `Analyze these RoofScope images. Apply the multi-structure detection rules above.
+    const prompt = `Analyze this RoofScope document or these images. Apply the multi-structure detection rules above.
 
 Return ONLY valid JSON in this exact format (no markdown, no commentary):
 {

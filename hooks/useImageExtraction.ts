@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { Measurements, CustomerInfo, PriceItem } from '@/types';
 import { fileToBase64, mergeMeasurements } from '@/lib/estimatorUtils';
-import { convertPdfToImages } from '@/lib/utils/pdfToImages';
 
 interface UseImageExtractionProps {
   measurements: Measurements | null;
@@ -21,7 +20,6 @@ interface UseImageExtractionProps {
   onSetSelectedItems: (items: string[] | ((prev: string[]) => string[])) => void;
   onSetItemQuantities: (quantities: Record<string, number> | ((prev: Record<string, number>) => Record<string, number>)) => void;
   onRoofScopeImageExtracted?: (dataUrl: string | string[]) => void;
-  onPdfProcessing?: (processing: boolean) => void;
 }
 
 export const useImageExtraction = ({
@@ -42,7 +40,6 @@ export const useImageExtraction = ({
   onSetSelectedItems,
   onSetItemQuantities,
   onRoofScopeImageExtracted,
-  onPdfProcessing,
 }: UseImageExtractionProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -363,32 +360,27 @@ Use null for any values not visible. Return only JSON.`;
 
   // Extract roof measurements from image (routes to appropriate extractor based on context)
   const extractFromImage = async (file: File) => {
-    // RoofScope PDFs: convert to images, extract from summary page, pass all pages to AI detection
+    // RoofScope PDFs: send directly to Claude (no pdf.js conversion)
     if (file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf')) {
-      onPdfProcessing?.(true);
       setIsProcessing(true);
       try {
-        const images = await convertPdfToImages(file);
-        if (images.length === 0) {
-          alert('Could not read PDF. Try uploading screenshots instead.');
-          return;
-        }
+        const base64 = await fileToBase64(file);
+        const pdfDataUrl = `data:application/pdf;base64,${base64}`;
 
-        await extractSummaryFromDataUrl(images[0], file.name || 'RoofScope PDF');
+        await extractSummaryFromDataUrl(pdfDataUrl, file.name || 'RoofScope PDF');
 
         onSetUploadedImages(prev =>
-          new Set(Array.from(prev).concat('summary', images.length > 1 ? 'analysis' : []))
+          new Set(Array.from(prev).concat('summary', 'analysis'))
         );
         try {
-          onRoofScopeImageExtracted?.(images);
+          onRoofScopeImageExtracted?.(pdfDataUrl);
         } catch (aiError) {
           console.error('AI structure detection callback error:', aiError);
         }
       } catch (error) {
         console.error('PDF processing error:', error);
-        alert('Could not read PDF. Try uploading screenshots instead.');
+        alert('Could not read PDF. Please try again.');
       } finally {
-        onPdfProcessing?.(false);
         setIsProcessing(false);
       }
       return;
