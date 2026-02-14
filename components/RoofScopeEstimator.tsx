@@ -24,7 +24,7 @@ import { useFinancialControls } from '@/hooks/useFinancialControls';
 import { useUIState } from '@/hooks/useUIState';
 import { useCustomItems } from '@/hooks/useCustomItems';
 import { useProjectManager } from '@/hooks/useProjectManager';
-import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView, CalculatedAccessories } from '@/components/estimator';
+import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView, CalculatedAccessories, StructureTabs } from '@/components/estimator';
 
 export default function RoofScopeEstimator() {
   const { user, companyId, signOut } = useAuth();
@@ -67,6 +67,7 @@ export default function RoofScopeEstimator() {
   const [aiStatus, setAiStatus] = useState<string | null>(null);
   const [estimateStructures, setEstimateStructures] = useState<EstimateStructure[]>([]);
   const [editingStructureId, setEditingStructureId] = useState<string | null>(null);
+  const [activeStructureTab, setActiveStructureTab] = useState<string>('combined');
 
   // Initialize AI Project Manager
   const projectManager = useProjectManager(savedEstimateId ?? null);
@@ -746,6 +747,7 @@ export default function RoofScopeEstimator() {
     setMeasurements(null);
     setEstimate(null);
     setEstimateStructures([]);
+    setActiveStructureTab('combined');
     setEditingStructureId(null);
     setCustomerInfo({ name: '', address: '', phone: '' });
     setSelectedItems([]);
@@ -1183,6 +1185,17 @@ export default function RoofScopeEstimator() {
 
       {/* Main Content */}
       <div className="max-w-5xl mx-auto px-4 py-6 md:py-8">
+        {/* Structure Tabs - only when multi-structure */}
+        {(step === 'extracted' || step === 'estimate') && estimateStructures.length > 1 && (
+          <div className="mb-4">
+            <StructureTabs
+              structures={estimateStructures}
+              activeTab={activeStructureTab}
+              onTabChange={setActiveStructureTab}
+            />
+          </div>
+        )}
+
         {/* AI Validation Warnings */}
         {(step === 'extracted' || step === 'estimate') && projectManager.aiContext && projectManager.aiContext.warnings.filter((w) => !w.dismissed).length > 0 && (
           <div className="mb-4 space-y-2">
@@ -1408,6 +1421,8 @@ export default function RoofScopeEstimator() {
               customerInfo={customerInfo}
               uploadedImages={uploadedImages}
               structureCount={structuresForValidation.length}
+              activeStructureTab={activeStructureTab}
+              estimateStructures={estimateStructures}
               vendorQuotes={vendorQuotes.vendorQuotes}
               vendorQuoteItems={vendorQuotes.vendorQuoteItems}
               isExtractingVendorQuote={vendorQuotes.isExtractingVendorQuote}
@@ -1557,6 +1572,11 @@ export default function RoofScopeEstimator() {
         {step === 'estimate' && estimate && (
           <EstimateView
             estimate={estimate}
+            displayMeasurements={
+              activeStructureTab !== 'combined' && estimateStructures.length > 1
+                ? estimateStructures.find((s) => s.id === activeStructureTab)?.measurements ?? estimate.measurements
+                : undefined
+            }
             validationWarnings={validationWarnings}
             isGeneratingPDF={isGeneratingPDF}
             isSavingQuote={savedQuotes.isSavingQuote}

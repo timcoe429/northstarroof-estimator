@@ -9,3 +9,4 @@ export { UploadStep } from './UploadStep';
 export { ReviewStep } from './ReviewStep';
 export { EstimateView } from './EstimateView';
 export { CalculatedAccessories } from './CalculatedAccessories';
+export { StructureTabs } from './StructureTabs';

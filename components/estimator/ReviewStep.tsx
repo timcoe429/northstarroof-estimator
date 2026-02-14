@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Check, Upload, FileText, X, Calculator } from 'lucide-react';
-import type { Measurements, CustomerInfo, VendorQuote, VendorQuoteItem } from '@/types';
+import type { Measurements, CustomerInfo, VendorQuote, VendorQuoteItem, EstimateStructure } from '@/types';
 import type { QuickSelectOption } from '@/types/estimator';
 import { formatCurrency, formatVendorName, removeKeywordFromDescription } from '@/lib/estimatorUtils';
 
@@ -33,6 +33,10 @@ interface ReviewStepProps {
   allSelectableItemsLength: number;
   /** Number of structures detected (for multi-structure display) */
   structureCount?: number;
+  /** Active structure tab ('combined' or structure id) */
+  activeStructureTab?: string;
+  /** Structures for per-building measurements */
+  estimateStructures?: EstimateStructure[];
   /** Callback to update customer info */
   onCustomerInfoChange: (field: keyof CustomerInfo, value: string) => void;
   /** Callback to reset estimator */
@@ -67,6 +71,8 @@ export function ReviewStep({
   isGeneratingSelection,
   allSelectableItemsLength,
   structureCount,
+  activeStructureTab = 'combined',
+  estimateStructures = [],
   onCustomerInfoChange,
   onReset,
   onVendorQuoteUpload,
@@ -75,6 +81,18 @@ export function ReviewStep({
   onToggleQuickSelection,
   onGenerateSmartSelection,
 }: ReviewStepProps) {
+  const activeStructure = activeStructureTab !== 'combined' && estimateStructures.length > 0
+    ? estimateStructures.find((s) => s.id === activeStructureTab)
+    : null;
+  const displayMeasurements: Measurements = activeStructure?.measurements ?? measurements;
+  const measurementsBanner =
+    activeStructure
+      ? `Showing measurements for ${activeStructure.name}`
+      : structureCount !== undefined && structureCount > 1
+        ? `Showing combined measurements for ${structureCount} structures`
+        : null;
+  const isShowingCombined = activeStructure == null && structureCount !== undefined && structureCount > 1;
+
   return (
     <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
       <div className="flex items-center justify-between mb-4">
@@ -220,11 +238,11 @@ export function ReviewStep({
         </div>
       )}
 
-      {/* Combined measurements notice for multi-structure */}
-      {structureCount !== undefined && structureCount > 1 && (
+      {/* Measurements notice for multi-structure or single building */}
+      {measurementsBanner && (
         <div className="mb-2 p-2 bg-blue-50 rounded">
           <p className="text-sm text-blue-900">
-            Showing combined measurements for {structureCount} structures
+            {measurementsBanner}
           </p>
         </div>
       )}
@@ -232,7 +250,7 @@ export function ReviewStep({
       {/* Measurements Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-4">
         {[
-          { key: 'total_squares', label: structureCount && structureCount > 1 ? 'Squares (All Structures)' : 'Squares', unit: 'sq' },
+          { key: 'total_squares', label: isShowingCombined ? 'Squares (All Structures)' : 'Squares', unit: 'sq' },
           { key: 'predominant_pitch', label: 'Pitch', unit: '' },
           { key: 'ridge_length', label: 'Ridge', unit: 'ft' },
           { key: 'hip_length', label: 'Hips', unit: 'ft' },
@@ -244,7 +262,7 @@ export function ReviewStep({
           <div key={key} className="bg-gray-50 rounded-lg p-2 md:p-3">
             <div className="text-xs text-gray-500">{label}</div>
             <div className="text-lg md:text-xl font-bold">
-              {typeof measurements[key] === 'number' ? Math.round(measurements[key] * 10) / 10 : measurements[key]} <span className="text-xs md:text-sm font-normal text-gray-400">{unit}</span>
+              {typeof displayMeasurements[key] === 'number' ? Math.round(displayMeasurements[key] * 10) / 10 : displayMeasurements[key]} <span className="text-xs md:text-sm font-normal text-gray-400">{unit}</span>
             </div>
           </div>
         ))}

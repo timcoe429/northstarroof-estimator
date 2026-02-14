@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, ChevronRight, FileText, Upload, Share2, X, Copy, Check } from 'lucide-react';
-import type { Estimate, VendorQuote, VendorQuoteItem } from '@/types';
+import type { Estimate, Measurements, VendorQuote, VendorQuoteItem } from '@/types';
 import type { ValidationWarning } from '@/types/estimator';
 import { CATEGORIES } from '@/lib/constants';
 import { formatCurrency, formatVendorName } from '@/lib/estimatorUtils';
@@ -59,6 +59,8 @@ interface EstimateViewProps {
   onUpdateShareSettings?: (enabled: boolean, token: string | null) => void;
   /** Callback to toggle item selection (deselect from estimate) */
   onToggleItemSelection?: (itemId: string, selected: boolean) => void;
+  /** Override measurements for footer display (e.g., per-structure when tab is active) */
+  displayMeasurements?: Measurements | null;
 }
 
 /**
@@ -91,7 +93,9 @@ export function EstimateView({
   onReset,
   onUpdateShareSettings,
   onToggleItemSelection,
+  displayMeasurements,
 }: EstimateViewProps) {
+  const footerMeasurements = displayMeasurements ?? estimate.measurements;
   const [showShareModal, setShowShareModal] = useState(false);
   const [localShareEnabled, setLocalShareEnabled] = useState(shareEnabled);
   const [localShareToken, setLocalShareToken] = useState<string | null>(shareToken || null);
@@ -552,7 +556,7 @@ export function EstimateView({
             <div>
               <p className="text-lg md:text-xl font-bold">Final Price</p>
               <p className="text-xs md:text-sm text-gray-500">
-                {estimate.measurements.total_squares} sq • {estimate.measurements.predominant_pitch}
+                {footerMeasurements.total_squares} sq • {footerMeasurements.predominant_pitch}
               </p>
             </div>
             <p className="text-2xl md:text-3xl font-bold">{formatCurrency(estimate.finalPrice)}</p>
