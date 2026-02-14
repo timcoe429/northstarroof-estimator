@@ -324,6 +324,7 @@ export const useSavedQuotes = ({
         measurements: cleanMeasurements,
         customerInfo: customerInfo,
         generatedAt: new Date(savedQuote.created_at).toLocaleString(),
+        structures: (savedQuote as any).structures ?? undefined,
       };
       
       onSetEstimate(restoredEstimate);

@@ -53,6 +53,7 @@ export async function saveQuote(estimate: Estimate, quoteName: string, userId: s
   if (estimate.sectionHeaders) {
     quoteData.section_headers = estimate.sectionHeaders;
   }
+  quoteData.structures = estimate.structures ?? [];
 
   // Debug logging - log quoteData before insert
   console.log('saveQuote quoteData:', quoteData);
@@ -308,6 +309,7 @@ export async function updateQuote(id: string, estimate: Estimate, quoteName: str
   if (estimate.sectionHeaders) {
     quoteData.section_headers = estimate.sectionHeaders;
   }
+  quoteData.structures = estimate.structures ?? [];
 
   const { data, error } = await supabase
     .from('estimates')

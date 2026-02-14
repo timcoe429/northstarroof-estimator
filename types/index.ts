@@ -18,6 +18,15 @@ export interface Measurements {
   fileName?: string;
 }
 
+export interface EstimateStructure {
+  id: string;
+  name: string;
+  type: 'metal' | 'tile' | 'shingle' | 'flat' | 'unknown';
+  measurements: Measurements;
+  roofScopeFileName?: string;
+  sourceRoofScopeIndex?: number;
+}
+
 export interface PriceItem {
   id: string;
   name: string;
@@ -40,6 +49,7 @@ export interface LineItem extends PriceItem {
     price?: boolean;
     name?: boolean;
   };
+  structureId?: string; // links to EstimateStructure.id, undefined = project-wide
 }
 
 export interface CustomerInfo {
@@ -89,6 +99,7 @@ export interface Estimate {
   measurements: Measurements;
   customerInfo: CustomerInfo;
   generatedAt: string;
+  structures?: EstimateStructure[];
 }
 
 export interface SavedQuote {
@@ -123,6 +134,7 @@ export interface SavedQuote {
   status: string;
   created_at: string;
   updated_at: string;
+  structures?: EstimateStructure[];
 }
 
 export interface VendorQuote {

@@ -69,23 +69,62 @@ export const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
 
+const COMPLEXITY_RANK: Record<string, number> = {
+  Simple: 1,
+  Moderate: 2,
+  Complex: 3,
+};
+
+const higherComplexity = (a: string, b: string): string => {
+  const rankA = COMPLEXITY_RANK[a] ?? 0;
+  const rankB = COMPLEXITY_RANK[b] ?? 0;
+  return rankA >= rankB ? a || b : b || a;
+};
+
 export const mergeMeasurements = (existing: Measurements, newData: Partial<Measurements>): Measurements => {
+  const sum = (a: number | null | undefined, b: number | null | undefined) =>
+    (a ?? 0) + (b ?? 0);
+
   return {
-    ...existing,
-    ...newData,
-    // Update predominant_pitch if new data provides it
-    predominant_pitch: newData.predominant_pitch !== undefined && newData.predominant_pitch !== null && newData.predominant_pitch !== ''
-      ? newData.predominant_pitch
-      : existing.predominant_pitch,
-    // Preserve existing values unless new ones are provided (handle undefined/null)
-    steep_squares: newData.steep_squares !== undefined && newData.steep_squares !== null 
-      ? newData.steep_squares 
-      : (existing.steep_squares ?? undefined),
-    standard_squares: newData.standard_squares !== undefined && newData.standard_squares !== null 
-      ? newData.standard_squares 
-      : (existing.standard_squares ?? undefined),
-    flat_squares: newData.flat_squares !== undefined && newData.flat_squares !== null 
-      ? newData.flat_squares 
-      : (existing.flat_squares ?? undefined),
+    total_squares: sum(existing.total_squares, newData.total_squares),
+    ridge_length: sum(existing.ridge_length, newData.ridge_length),
+    hip_length: sum(existing.hip_length, newData.hip_length),
+    valley_length: sum(existing.valley_length, newData.valley_length),
+    eave_length: sum(existing.eave_length, newData.eave_length),
+    rake_length: sum(existing.rake_length, newData.rake_length),
+    penetrations: sum(existing.penetrations, newData.penetrations),
+    skylights: sum(existing.skylights, newData.skylights),
+    chimneys: sum(existing.chimneys, newData.chimneys),
+    predominant_pitch:
+      newData.predominant_pitch !== undefined &&
+      newData.predominant_pitch !== null &&
+      newData.predominant_pitch !== ''
+        ? newData.predominant_pitch
+        : existing.predominant_pitch,
+    complexity: higherComplexity(existing.complexity ?? '', newData.complexity ?? ''),
+    steep_squares: sum(existing.steep_squares, newData.steep_squares),
+    standard_squares: sum(existing.standard_squares, newData.standard_squares),
+    flat_squares: sum(existing.flat_squares, newData.flat_squares),
+    fileName:
+      existing.fileName && newData.fileName
+        ? `${existing.fileName} + ${newData.fileName}`
+        : (newData.fileName ?? existing.fileName),
   };
 };
+
+export const resetMeasurements = (): Measurements => ({
+  total_squares: 0,
+  predominant_pitch: '',
+  ridge_length: 0,
+  hip_length: 0,
+  valley_length: 0,
+  eave_length: 0,
+  rake_length: 0,
+  penetrations: 0,
+  skylights: 0,
+  chimneys: 0,
+  complexity: '',
+  steep_squares: 0,
+  standard_squares: 0,
+  flat_squares: 0,
+});

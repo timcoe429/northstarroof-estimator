@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, ChevronRight, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText, Copy, Bot } from 'lucide-react';
 import Image from 'next/image';
-import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, SavedQuote, VendorQuote, VendorQuoteItem, AIDetectedStructure } from '@/types';
+import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, EstimateStructure, SavedQuote, VendorQuote, VendorQuoteItem, AIDetectedStructure } from '@/types';
 import { saveQuote, loadQuotes, loadQuote, deleteQuote, loadPriceItems, savePriceItem, savePriceItemsBulk, deletePriceItemFromDB, saveVendorQuotes, loadVendorQuotes, updateShareSettings } from '@/lib/supabase';
 import { generateProposalPDF } from '@/lib/generateProposal';
 import { useAuth } from '@/lib/AuthContext';
@@ -65,6 +65,7 @@ export default function RoofScopeEstimator() {
   const [roofScopeImages, setRoofScopeImages] = useState<string[]>([]);
   const [lastDetection, setLastDetection] = useState<{ structures: AIDetectedStructure[]; summary: string; confidence: string } | null>(null);
   const [aiStatus, setAiStatus] = useState<string | null>(null);
+  const [estimateStructures, setEstimateStructures] = useState<EstimateStructure[]>([]);
 
   // Initialize AI Project Manager
   const projectManager = useProjectManager(savedEstimateId ?? null);
@@ -257,6 +258,15 @@ export default function RoofScopeEstimator() {
             );
           }
           if (!savedEstimateId) setLastDetection(result);
+          const mapped: EstimateStructure[] = result.structures.map(s => ({
+            id: s.id,
+            name: s.name,
+            type: s.type,
+            measurements: s.measurements,
+            roofScopeFileName: undefined,
+            sourceRoofScopeIndex: undefined,
+          }));
+          setEstimateStructures(mapped);
         })
         .catch((err) => {
           console.error('AI structure detection failed:', err);
@@ -370,6 +380,7 @@ export default function RoofScopeEstimator() {
       const updatedEstimate: Estimate = {
         ...result,
         sectionHeaders: sectionHeaders,
+        structures: estimateStructures.length > 0 ? estimateStructures : undefined,
         lineItems: result.lineItems.map(item => ({
           ...item,
           manualOverrides: manualOverrides[item.id],
@@ -387,7 +398,7 @@ export default function RoofScopeEstimator() {
         triggerOrganization(updatedEstimate);
       }
     }
-  }, [calculateEstimateHook, calcValidationWarnings, sectionHeaders, manualOverrides, triggerOrganization]);
+  }, [calculateEstimateHook, calcValidationWarnings, sectionHeaders, manualOverrides, triggerOrganization, estimateStructures]);
 
   // Calculate quantities for ALL items when measurements change
   // Skip recalculation when loading a saved quote to prevent overwriting restored quantities
@@ -437,6 +448,7 @@ export default function RoofScopeEstimator() {
     },
     onSetEstimate: (est: Estimate | null) => {
       setEstimate(est);
+      setEstimateStructures(est?.structures ?? []);
       if (est?.sectionHeaders) {
         setSectionHeaders(est.sectionHeaders);
       }
@@ -698,6 +710,7 @@ export default function RoofScopeEstimator() {
     setStep('upload');
     setMeasurements(null);
     setEstimate(null);
+    setEstimateStructures([]);
     setCustomerInfo({ name: '', address: '', phone: '' });
     setSelectedItems([]);
     setItemQuantities({});
