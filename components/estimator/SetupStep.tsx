@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, FileText, X, Check, Edit2, ChevronRight, Plus } from 'lucide-react';
 import type { Measurements, CustomerInfo, VendorQuote, VendorQuoteItem, EstimateStructure } from '@/types';
 import { formatCurrency, formatVendorName } from '@/lib/estimatorUtils';
@@ -64,7 +64,7 @@ interface SetupStepProps {
 
 /**
  * Setup step: RoofScope upload, structure configuration, vendor quotes, customer info.
- * Restores previous extracted-step UI: structure cards with measurements, AI indicators, Add Another RoofScope.
+ * Compact layout with side-by-side upload areas and collapsible job description.
  */
 export function SetupStep({
   measurements,
@@ -98,11 +98,16 @@ export function SetupStep({
   const allStructuresHaveRoofSystem = structures.length > 0 && structures.every((s) => structureRoofSystems[s.id]);
   const totalSquares = displayStructures.reduce((sum, s) => sum + (s.measurements?.total_squares ?? 0), 0);
 
+  const [jobDescriptionExpanded, setJobDescriptionExpanded] = useState(false);
+  useEffect(() => {
+    if (jobDescription.trim()) setJobDescriptionExpanded(true);
+  }, [jobDescription]);
+
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-3">
       {/* AI Processing Indicators - inline banners */}
       {isProcessing && (
-        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <div className="flex items-center space-x-3">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 flex-shrink-0" />
             <div>
@@ -114,7 +119,7 @@ export function SetupStep({
       )}
 
       {isStructureDetectionLoading && measurements && (
-        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <div className="flex items-center space-x-3">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 flex-shrink-0" />
             <div>
@@ -127,55 +132,140 @@ export function SetupStep({
         </div>
       )}
 
-      {/* RoofScope Upload Area */}
-      <div
-        onDrop={onDrop}
-        onDragOver={(e) => e.preventDefault()}
-        onClick={() => document.getElementById('setup-file-upload')?.click()}
-        className="border-2 border-dashed border-gray-300 rounded-2xl p-6 md:p-8 text-center bg-white hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer"
-      >
-        <input
-          type="file"
-          accept=".pdf,.png,.jpg,.jpeg"
-          onChange={onFileUpload}
-          className="hidden"
-          id="setup-file-upload"
-        />
-        <div className="w-14 h-14 md:w-16 md:h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Upload className="w-7 h-7 md:w-8 md:h-8 text-blue-600" />
-        </div>
-        <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-2">Upload RoofScope</h2>
-        <p className="text-gray-500 mb-2 text-sm md:text-base">For measurements</p>
-        {measurements && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg inline-block">
-            <p className="text-sm font-medium text-green-800">
-              <Check className="w-4 h-4 inline mr-1" />
-              {totalSquares.toFixed(1)} SQ total • {displayStructures.length} structure{displayStructures.length !== 1 ? 's' : ''} detected
+      {/* Upload grid: RoofScope (or status bar) | Vendor Quote */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {measurements ? (
+          /* RoofScope status bar when measurements exist */
+          <div className="flex items-center justify-between gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center gap-2 min-w-0">
+              <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+              <span className="text-sm font-medium text-green-800 truncate">
+                RoofScope: {totalSquares.toFixed(1)} SQ total • {displayStructures.length} structure{displayStructures.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={onReset}
+                className="text-xs text-gray-600 hover:text-gray-900"
+              >
+                Upload Different
+              </button>
+              {onFileUpload && (
+                <>
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    onChange={onFileUpload}
+                    className="hidden"
+                    id="setup-add-another-roofscope"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('setup-add-another-roofscope')?.click()}
+                    disabled={isProcessing}
+                    className="text-xs text-[#00293f] font-medium hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline"
+                  >
+                    Add Another
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* RoofScope upload area when no measurements */
+          <div
+            onDrop={onDrop}
+            onDragOver={(e) => e.preventDefault()}
+            onClick={() => document.getElementById('setup-file-upload')?.click()}
+            className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center bg-white hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer"
+          >
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg"
+              onChange={onFileUpload}
+              className="hidden"
+              id="setup-file-upload"
+            />
+            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+              <Upload className="w-4 h-4 text-blue-600" />
+            </div>
+            <h2 className="text-sm font-semibold text-gray-900">Upload RoofScope</h2>
+            <p className="text-xs text-gray-400 mt-1">
+              <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-xs font-mono">Ctrl+V</kbd> to paste
             </p>
           </div>
         )}
-        <p className="text-xs md:text-sm text-gray-400 mt-2">
-          <kbd className="px-2 py-1 bg-gray-100 rounded text-xs md:text-sm font-mono">Ctrl+V</kbd> to paste, or tap to upload
-        </p>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onReset();
-          }}
-          className="mt-3 text-xs md:text-sm text-gray-500 hover:text-gray-700"
+
+        {/* Vendor Quote Upload - compact dashed box */}
+        <div
+          onClick={() => document.getElementById('setup-vendor-quote-upload')?.click()}
+          className="border-2 border-dashed border-gray-200 rounded-lg p-4 bg-white hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer"
         >
-          Upload Different
-        </button>
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            multiple
+            onChange={onVendorQuoteUpload}
+            className="hidden"
+            id="setup-vendor-quote-upload"
+          />
+          <div className="text-center">
+            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+              <FileText className="w-4 h-4 text-blue-600" />
+            </div>
+            <h3 className="text-sm font-semibold text-gray-900">Upload Vendor Quotes</h3>
+            <p className="text-xs text-gray-500">Schafer, TRA, Rocky Mountain</p>
+            {isExtractingVendorQuote && (
+              <div className="flex items-center justify-center gap-2 text-xs text-blue-600 mt-2">
+                <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                Extracting...
+              </div>
+            )}
+          </div>
+          {vendorQuotes.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {vendorQuotes.map((quote) => {
+                const itemCount = vendorQuoteItems.filter((item) => item.vendor_quote_id === quote.id).length;
+                return (
+                  <div
+                    key={quote.id}
+                    className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm text-gray-900 truncate">
+                        {formatVendorName(quote.vendor)} {quote.quote_number ? `• ${quote.quote_number}` : ''}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {itemCount} items • {formatCurrency(quote.total > 0 ? quote.total : quote.subtotal > 0 ? quote.subtotal : 0)}
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveVendorQuote(quote.id);
+                      }}
+                      className="p-1 text-red-500 hover:bg-red-50 rounded"
+                      title="Remove quote"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Multi-Structure Overview Panel / Detected Structures */}
       {displayStructures.length > 0 && (
-        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <h3 className="text-sm font-semibold text-gray-900 mb-2">
             {displayStructures.length > 1 ? 'Multi-Structure Property Detected' : 'Detected Structure'}
           </h3>
           {displayStructures.length > 1 && (
-            <p className="text-sm text-gray-700 mb-4">
+            <p className="text-xs text-gray-700 mb-3">
               AI detected {displayStructures.length} structures. Review each building below.
             </p>
           )}
@@ -264,50 +354,18 @@ export function SetupStep({
             })}
           </div>
           {displayStructures.length > 1 && (
-            <div className="mt-4 p-3 bg-white border border-gray-300 rounded">
-              <p className="text-sm text-gray-700">
-                <strong>Total Combined:</strong>{' '}
-                {totalSquares.toFixed(1)} SQ across {displayStructures.length} buildings
+            <div className="mt-3 p-2 bg-white border border-gray-300 rounded">
+              <p className="text-xs text-gray-700">
+                <strong>Total Combined:</strong> {totalSquares.toFixed(1)} SQ across {displayStructures.length} buildings
               </p>
             </div>
           )}
         </div>
       )}
 
-      {/* Add Another RoofScope - standalone button */}
-      {measurements && onFileUpload && (
-        <div className="mb-4">
-          <input
-            type="file"
-            accept=".pdf,.png,.jpg,.jpeg"
-            onChange={onFileUpload}
-            className="hidden"
-            id="setup-add-another-roofscope"
-          />
-          <button
-            type="button"
-            onClick={() => document.getElementById('setup-add-another-roofscope')?.click()}
-            disabled={isProcessing}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-[#00293f] text-[#00293f] rounded-lg hover:bg-[#00293f]/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          >
-            {isProcessing ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#00293f]" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <Plus className="w-4 h-4" />
-                Add Another RoofScope
-              </>
-            )}
-          </button>
-        </div>
-      )}
-
       {/* AI Detection Confidence */}
       {lastDetection && (
-        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded">
+        <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
           <p className="text-sm text-gray-700">
             <strong>AI Detection Summary:</strong> {lastDetection.summary}
           </p>
@@ -325,75 +383,15 @@ export function SetupStep({
       {/* Hint for additional image */}
       {uploadedImages.has('summary') && !uploadedImages.has('analysis') && (
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-700 flex items-center gap-2">
-            <Upload className="w-4 h-4" />
+          <p className="text-xs text-blue-700 flex items-center gap-2">
+            <Upload className="w-4 h-4 flex-shrink-0" />
             <span>Paste your <strong>Roof Area Analysis</strong> image to extract slope breakdown (steep vs standard squares)</span>
           </p>
         </div>
       )}
 
-      {/* Vendor Quote Upload */}
-      <div
-        onClick={() => document.getElementById('setup-vendor-quote-upload')?.click()}
-        className="border-2 border-dashed border-gray-200 rounded-2xl p-4 md:p-6 bg-white hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer"
-      >
-        <input
-          type="file"
-          accept="application/pdf,.pdf"
-          multiple
-          onChange={onVendorQuoteUpload}
-          className="hidden"
-          id="setup-vendor-quote-upload"
-        />
-        <div className="text-center">
-          <div className="w-12 h-12 md:w-14 md:h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
-            <FileText className="w-6 h-6 md:w-7 md:h-7 text-blue-600" />
-          </div>
-          <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-1">Upload Vendor Quotes</h3>
-          <p className="text-gray-500 mb-2 text-sm">Optional - Schafer, TRA, Rocky Mountain</p>
-          {isExtractingVendorQuote && (
-            <div className="flex items-center justify-center gap-2 text-sm text-blue-600">
-              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-              Extracting quote...
-            </div>
-          )}
-        </div>
-        {vendorQuotes.length > 0 && (
-          <div className="mt-3 space-y-2">
-            {vendorQuotes.map((quote) => {
-              const itemCount = vendorQuoteItems.filter((item) => item.vendor_quote_id === quote.id).length;
-              return (
-                <div
-                  key={quote.id}
-                  className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium text-sm text-gray-900 truncate">
-                      {formatVendorName(quote.vendor)} {quote.quote_number ? `• ${quote.quote_number}` : ''}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {itemCount} items • {formatCurrency(quote.total > 0 ? quote.total : quote.subtotal > 0 ? quote.subtotal : 0)}
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveVendorQuote(quote.id);
-                    }}
-                    className="p-1 text-red-500 hover:bg-red-50 rounded"
-                    title="Remove quote"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
       {/* Customer Info - compact */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 p-3 md:p-4 bg-gray-50 rounded-xl">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-gray-50 rounded-lg">
         <input
           type="text"
           value={customerInfo.name}
@@ -417,29 +415,48 @@ export function SetupStep({
         />
       </div>
 
-      {/* Job Description */}
-      <div className="space-y-2">
-        <h3 className="font-semibold text-gray-900">Job Description</h3>
-        <input
-          type="text"
-          value={jobDescription}
-          onChange={(e) => onJobDescriptionChange(e.target.value)}
-          placeholder="Describe this job (e.g., 'Brava tile, tear-off, Hugo's crew, copper valleys')"
-          className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm"
-        />
-      </div>
+      {/* Job Description - collapsible, default closed */}
+      {!jobDescriptionExpanded ? (
+        <button
+          type="button"
+          onClick={() => setJobDescriptionExpanded(true)}
+          className="text-sm text-gray-500 hover:text-gray-700"
+        >
+          + Add job description (optional)
+        </button>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">Job Description</span>
+            <button
+              type="button"
+              onClick={() => setJobDescriptionExpanded(false)}
+              className="text-xs text-gray-500 hover:text-gray-700"
+            >
+              − Hide
+            </button>
+          </div>
+          <input
+            type="text"
+            value={jobDescription}
+            onChange={(e) => onJobDescriptionChange(e.target.value)}
+            placeholder="Describe this job (e.g., 'Brava tile, tear-off, Hugo's crew, copper valleys')"
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+          />
+        </div>
+      )}
 
       {/* Build Estimate Button */}
       <button
         onClick={onBuildEstimate}
         disabled={!allStructuresHaveRoofSystem}
-        className="w-full py-3 bg-[#00293f] hover:bg-[#00293f]/90 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors"
+        className="w-full py-2.5 bg-[#00293f] hover:bg-[#00293f]/90 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors"
       >
         Build Estimate
         <ChevronRight className="w-5 h-5" />
       </button>
       {!allStructuresHaveRoofSystem && structures.length > 0 && (
-        <p className="text-sm text-gray-500 text-center">Select a roof system for each structure to continue</p>
+        <p className="text-xs text-gray-500 text-center">Select a roof system for each structure to continue</p>
       )}
     </div>
   );
