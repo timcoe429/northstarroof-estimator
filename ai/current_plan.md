@@ -1,56 +1,73 @@
-# Current Plan — Updated Feb 14, 2026
+# Current Plan
 
-## Completed Today
-- Supabase Storage for large PDF uploads (roofscope-temp bucket) — bypasses Vercel 4.5MB body limit
-- Multi-RoofScope upload with "Add Another RoofScope" button
-- Measurements merge correctly across multiple PDFs (sum, not overwrite)
-- 6-structure detection across 2 PDFs (prompt updated for multi-document awareness)
-- Race condition fix for structure detection (latestDetectionRef)
-- Floating point display rounding in ReviewStep
-- Editable building names in multi-structure panel
-- AI naming guidance for multi-document structures
-- Duplicate AI loading indicator removed (kept inline only)
-- Snow guard price lookup category fix (accessories not materials)
-- Phase 3B-1: Building tabs UI + per-structure measurements display
-- StructureTabs component created
+## Last Updated
+February 14, 2026
 
-## In Progress
-- Phase 3B-2: Per-building material selection with tabs — ON HOLD pending redesign
+## What's Complete
 
-## Next: Major Redesign — Roof System Architecture
-Vision shift: instead of one long form, split into Setup + Build steps with roof system knowledge.
+- Image extraction from RoofScope/EagleView screenshots using Claude API
+- Price sheet parsing and auto-population from pasted images
+- Multi-step estimate builder (upload → measurements → items → review)
+- Financial controls (waste %, office overhead %, profit margin %, sundries %)
+- PDF proposal generation with custom templates
+- Vendor quote parsing (Schafer, TRA, Rocky Mountain)
+- Schafer quote system — vendor items read-only, description library for client-facing names
+- Saved quotes functionality (save, load, delete)
+- Custom items creation
+- Price list management (98 items across materials, labor, equipment, accessories, schafer)
+- Authentication with Supabase (company-based data ownership)
+- Mobile responsive UI
+- Custom hooks architecture for state management
+- Phase 1: Rules → Intelligence refactor (AI-powered proposal organizer) ✅
+- Phase 2: AI Organizer bug fixes ✅
+- Phase 2b: Style guide improvements ✅
+- Multi-structure AI detection from RoofScope ✅
+- Multi-RoofScope PDF merge (measurements sum across PDFs) ✅
+- PDF upload to Supabase Storage (bypasses Vercel 4.5MB limit) ✅
+- Component refactor (4,300+ lines → modular hooks/components) ✅
+- Auto-selection rules (underlayment, nails, equipment based on roof type) ✅
+- Calculated accessories (heat tape, snow guards, snow fence, skylights) ✅
+- **Phase A: Roof System Knowledge Files** ✅
+  - Created 7 knowledge files: universal-rules.md, standing-seam-metal.md, brava-tile.md, davinci-shake.md, asphalt-shingle.md, cedar.md, flat-low-slope.md
+  - Located in `/data/knowledge/`
+  - Roof system selector dropdown (stored in state + saved to DB)
+  - New `/api/smart-selection` route loads knowledge files server-side, builds dynamic prompt
+  - Smart Selection no longer uses hardcoded rules — uses knowledge file contents
+  - Auto-selection rules accept explicit roof system as override
+  - Job description made optional for Smart Selection
+  - Zero-quantity vendor items deselected by default
+  - `roof_system` TEXT column added to estimates table
+- **Phase B: Setup/Build/Review Flow with Per-Building Tabs** ✅
+  - New 3-step flow: setup → build → review (replaces upload → extracted → estimate)
+  - `BuildingEstimate` type created (structureId, structureName, roofSystem, measurements, selectedItems, itemQuantities, vendorQuoteItemIds)
+  - `buildings` state array + `activeBuildingIndex` in RoofScopeEstimator
+  - Tab switching uses ref pattern (currentBuildingRef) + single setBuildState call to prevent race conditions
+  - `SetupStep.tsx` created — RoofScope upload, detected structures with roof system dropdowns, vendor quotes, customer info
+  - `BuildStep.tsx` created — per-building line items with building tabs
+  - `BuildingTabs.tsx` created — All Combined + per-building tabs
+  - `buildings` JSONB column added to estimates table
+  - Backward compatibility: old saved quotes (no buildings array) load as single-building
+- **SetupStep UI restoration** ✅
+  - Structure cards with full measurements (Pitch, Eave, Valley, Ridge), Detailed/Estimated badge, roof system dropdown
+  - AI processing indicators (extraction + structure detection inline banners)
+  - Standalone "Add Another RoofScope" button with Plus icon
+  - AI Detection Confidence banner when present
+  - Compact layout (space-y-4, compact customer info grid)
 
-### New Step Flow
-1. **Setup Step** (new)
-   - Upload RoofScope PDFs
-   - See structures detected, rename them
-   - Assign a roof system to each structure (Brava, asphalt, metal, etc.)
-2. **Build Estimate Step** (existing, cleaned up)
-   - Tabs per building
-   - Smart Selection uses building's assigned roof system
-   - Each tab shows only relevant materials for that system
-   - AI references roof system knowledge file for correct product selection
+## What's Partially Done
 
-### Roof System Knowledge Files Needed
-Each system gets its own reference file defining: required materials, underlayment specs, accessories, quantity calculation rules, common mistakes.
+- None
 
-1. Brava composite tile
-2. DaVinci composite tile
-3. Asphalt shingle (Tamko)
-4. Standing seam metal (Schafer)
-5. Flat/low slope (TPO, modified bitumen)
-6. Cedar shake
-7. Cedar shingles
+## What's Next (Priority Order)
 
-### Known Issues
-- Grace Ice & Water High Temp still being selected for Brava — should be different underlayment. Roof system knowledge file will fix this.
-- Tab bar position too high — should be above materials section, not above structure detection panel
-- "Showing combined measurements for 4 structures" text doesn't update to 6 after second PDF (cosmetic)
+1. **Test Phase B end-to-end** — Single structure: setup → select roof system → build → items display → review. Multi-structure: multiple cards → different roof systems → tabs → switching swaps items/measurements.
+2. **Phase C: PDF Generation with Multi-Building Sections** — Proposal generates per-building sections, grand total at end, AI organizer runs per section.
+3. **Context file updates** — After Phase B is tested and stable.
 
-## Blockers
-- None currently
+## Blockers / Notes
 
-## Notes
-- The estimator detection panel / AI summary should collapse or hide once you move to the Build step
-- Smart Selection needs to reference per-system knowledge files
-- Need to identify what underlayment Brava actually requires (Tim changed it from Grace Ice & Water)
+- Porto Potty price discrepancy: DB has $550, Omiah says $600 ($150 delivery + $150 pickup + $150/month × 2). Need to confirm correct price and update.
+- Duplicate snow fence install items: "Snow Fence Install" and "Snowfence Install" both at $5/lf. Should consolidate.
+- Sergio labor at $129/sq seems very low vs Hugo ($550-750) and Alfredo ($1,136). May be a helper/supplement, not full crew. Clarify with Omiah.
+- Cedar and asphalt shingle primary materials not yet in price list. Users need to add custom items or upload supplier quotes for these systems.
+- Non-ringshank nail items (1¾" and 1½") not in price list for asphalt systems.

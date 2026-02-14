@@ -69,3 +69,14 @@ Roofing contractors who need to:
 - Structures detected across all PDFs combined
 - Measurements sum across PDFs
 - estimateStructures array persisted in DB as JSONB
+
+### Roof System Knowledge Files
+- Location: `/data/knowledge/`
+- Files: universal-rules.md, standing-seam-metal.md, brava-tile.md, davinci-shake.md, asphalt-shingle.md, cedar.md, flat-low-slope.md
+- Loaded server-side by `/api/smart-selection` route using fs.readFileSync
+- Each building in a multi-structure estimate gets assigned one roof system
+- Smart Selection reads universal + system-specific file for the active building
+
+### Database Columns Added (Feb 14, 2026)
+- estimates.roof_system TEXT — stores roof system identifier for single-building estimates
+- estimates.buildings JSONB — stores full BuildingEstimate array for multi-building estimates

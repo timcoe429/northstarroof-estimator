@@ -173,3 +173,24 @@
 - Each roof system has its own AI knowledge file
 - Smart Selection reads the relevant knowledge file per building
 - Systems: Brava tile, DaVinci tile, asphalt shingle, standing seam metal, flat/low slope, cedar shake, cedar shingles
+
+## Roof System Knowledge Files (Feb 14, 2026)
+- Created individual knowledge files per roof system instead of one monolithic prompt
+- 6 system files + 1 universal rules file in `/data/knowledge/`
+- AI loads universal + system-specific file based on user's roof system selection
+- Asphalt Presidential and Standard share one file with sub-type passed as context
+- Cedar and flat/low-slope included even though primary materials not yet in price list
+
+## Setup/Build/Review Step Flow (Feb 14, 2026)
+- Replaced upload → extracted → estimate with setup → build → review
+- Setup: upload RoofScope, detect structures, assign roof systems per building, vendor quotes, customer info
+- Build: per-building tabs with line items, Smart Selection uses that building's knowledge file
+- Review: financial summary, PDF generation, save
+- Single-building is treated as multi-building with 1 entry (no separate code paths)
+- Tab switching uses ref pattern + single state update to prevent React batching race conditions
+- "All Combined" tab is read-only display, editing happens on individual building tabs
+
+## Smart Selection API Route (Feb 14, 2026)
+- Moved from client-side hardcoded prompt to server-side `/api/smart-selection` route
+- Route reads knowledge files with fs.readFileSync (same pattern as organize-proposal)
+- Job description is optional — roof system + measurements are sufficient for Smart Selection
