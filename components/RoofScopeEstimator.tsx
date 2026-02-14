@@ -66,10 +66,19 @@ export default function RoofScopeEstimator() {
   const [lastDetection, setLastDetection] = useState<{ structures: AIDetectedStructure[]; summary: string; confidence: string } | null>(null);
   const [aiStatus, setAiStatus] = useState<string | null>(null);
   const [estimateStructures, setEstimateStructures] = useState<EstimateStructure[]>([]);
+  const [editingStructureId, setEditingStructureId] = useState<string | null>(null);
 
   // Initialize AI Project Manager
   const projectManager = useProjectManager(savedEstimateId ?? null);
   const structuresForValidation = projectManager.aiContext?.structures ?? lastDetection?.structures ?? [];
+  const structuresForDisplay = useMemo(
+    () =>
+      structuresForValidation.map((s) => {
+        const est = estimateStructures.find((e) => e.id === s.id);
+        return { ...s, name: est?.name ?? s.name };
+      }),
+    [structuresForValidation, estimateStructures]
+  );
 
   // Initialize hooks
   const financialControls = useFinancialControls();
@@ -241,6 +250,28 @@ export default function RoofScopeEstimator() {
       // Don't alert user - auto-selection is optional enhancement
     }
   }, [allSelectableItems, smartSelection.jobDescription, vendorQuotes.vendorQuotes, vendorQuotes.vendorQuoteItems, selectedItems]);
+
+  const handleStructureNameSave = useCallback((id: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      setEditingStructureId(null);
+      return;
+    }
+    setEstimateStructures((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, name: trimmed } : s))
+    );
+    setLastDetection((prev) =>
+      prev
+        ? {
+            ...prev,
+            structures: prev.structures.map((s) =>
+              s.id === id ? { ...s, name: trimmed } : s
+            ),
+          }
+        : prev
+    );
+    setEditingStructureId(null);
+  }, []);
 
   // Callback when RoofScope image is extracted - run AI structure detection
   const handleRoofScopeImageExtracted = useCallback(
@@ -715,6 +746,7 @@ export default function RoofScopeEstimator() {
     setMeasurements(null);
     setEstimate(null);
     setEstimateStructures([]);
+    setEditingStructureId(null);
     setCustomerInfo({ name: '', address: '', phone: '' });
     setSelectedItems([]);
     setItemQuantities({});
@@ -1254,23 +1286,52 @@ export default function RoofScopeEstimator() {
               )}
 
             {/* Multi-Structure Overview Panel */}
-            {structuresForValidation.length > 1 && (
+            {structuresForDisplay.length > 1 && (
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">
                   Multi-Structure Property Detected
                 </h3>
                 <p className="text-sm text-gray-700 mb-4">
-                  AI detected {structuresForValidation.length} structures. Review each building below.
+                  AI detected {structuresForDisplay.length} structures. Review each building below.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {structuresForValidation.map((structure) => (
+                  {structuresForDisplay.map((structure) => (
                     <div
                       key={structure.id}
                       className="p-3 bg-white border border-gray-200 rounded-lg"
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div>
-                          <h4 className="font-semibold text-gray-900">{structure.name}</h4>
+                          {editingStructureId === structure.id ? (
+                            <input
+                              type="text"
+                              defaultValue={structure.name}
+                              autoFocus
+                              onBlur={(e) =>
+                                handleStructureNameSave(structure.id, e.target.value)
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleStructureNameSave(
+                                    structure.id,
+                                    (e.target as HTMLInputElement).value
+                                  );
+                                }
+                              }}
+                              className="font-semibold text-gray-900 w-full max-w-[200px] border border-transparent hover:border-gray-300 rounded px-1 py-0.5 focus:border-gray-400 focus:ring-1 focus:ring-gray-200 outline-none bg-transparent"
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setEditingStructureId(structure.id)}
+                              className="inline-flex items-center gap-1.5 text-left group"
+                            >
+                              <h4 className="font-semibold text-gray-900 group-hover:text-[#00293f]">
+                                {structure.name}
+                              </h4>
+                              <Edit2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                            </button>
+                          )}
                           <p className="text-sm text-gray-600">
                             Type: {structure.type} • {structure.measurements.total_squares.toFixed(1)} SQ
                           </p>
@@ -1299,10 +1360,10 @@ export default function RoofScopeEstimator() {
                 <div className="mt-4 p-3 bg-white border border-gray-300 rounded">
                   <p className="text-sm text-gray-700">
                     <strong>Total Combined:</strong>{' '}
-                    {structuresForValidation
+                    {structuresForDisplay
                       .reduce((sum, s) => sum + s.measurements.total_squares, 0)
                       .toFixed(1)}{' '}
-                    SQ across {structuresForValidation.length} buildings
+                    SQ across {structuresForDisplay.length} buildings
                   </p>
                 </div>
               </div>
