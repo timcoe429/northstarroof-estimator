@@ -168,7 +168,10 @@ export function getAccessoryPrices(priceItems: PriceItem[]): {
   const snowFenceInstall = findPriceItemByName(priceItems, 'Snow Fence Install', 'labor') ||
                            findPriceItemByName(priceItems, 'Snow Fence', 'labor');
   
-  const snowGuard = findPriceItemByName(priceItems, 'RMSG Yeti Snowguard', 'materials') ||
+  const snowGuard = findPriceItemByName(priceItems, 'RMSG Yeti Snowguard', 'accessories') ||
+                    findPriceItemByName(priceItems, 'Snowguard', 'accessories') ||
+                    findPriceItemByName(priceItems, 'Snow Guard', 'accessories') ||
+                    findPriceItemByName(priceItems, 'RMSG Yeti Snowguard', 'materials') ||
                     findPriceItemByName(priceItems, 'Snowguard', 'materials') ||
                     findPriceItemByName(priceItems, 'Snow Guard', 'materials');
   const snowGuardInstall = findPriceItemByName(priceItems, 'Snowguard Install', 'labor') ||

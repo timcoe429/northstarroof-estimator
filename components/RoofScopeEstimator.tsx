@@ -1113,29 +1113,6 @@ export default function RoofScopeEstimator() {
           </div>
         )}
 
-      {/* AI Status Banner */}
-      {aiStatus && (
-        <div className="fixed top-20 right-4 z-50 max-w-sm">
-          <div
-            className={`px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 ${
-              aiStatus.toLowerCase().includes('failed')
-                ? 'bg-red-600 text-white'
-                : 'bg-blue-600 text-white'
-            }`}
-          >
-            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent flex-shrink-0" />
-            <div>
-              <p className="font-medium">
-                {aiStatus.toLowerCase().includes('failed') ? 'AI Error' : 'AI Working'}
-              </p>
-              <p className={`text-sm ${aiStatus.toLowerCase().includes('failed') ? 'text-red-100' : 'text-blue-100'}`}>
-                {aiStatus}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Extracted Items Modal */}
       {priceItems.extractedItems && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1260,13 +1237,19 @@ export default function RoofScopeEstimator() {
         {step === 'extracted' && measurements && (
           <div className="space-y-4 md:space-y-6">
             {/* Structure Detection Loading */}
-            {projectManager.isLoading && structuresForValidation.length === 0 && (
+            {projectManager.isLoading && (
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-center space-x-3">
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-medium text-blue-900">AI analyzing RoofScope...</p>
-                    <p className="text-xs text-blue-700">Detecting structures and extracting measurements</p>
+                    <p className="text-sm font-medium text-blue-900">
+                      {structuresForValidation.length > 0
+                        ? 'Adding structures from new RoofScope...'
+                        : 'AI analyzing RoofScope...'}
+                    </p>
+                    <p className="text-xs text-blue-700">
+                      Detecting structures and extracting measurements
+                    </p>
                   </div>
                 </div>
               </div>

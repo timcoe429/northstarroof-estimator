@@ -81,7 +81,10 @@ export function CalculatedAccessories({
              findPriceItemByName(priceItems, 'ColorGard', 'materials') ||
              findPriceItemByName(priceItems, 'Snow Fence', 'accessories');
     } else {
-      return findPriceItemByName(priceItems, 'RMSG Yeti Snowguard', 'materials') ||
+      return findPriceItemByName(priceItems, 'RMSG Yeti Snowguard', 'accessories') ||
+             findPriceItemByName(priceItems, 'Snowguard', 'accessories') ||
+             findPriceItemByName(priceItems, 'Snow Guard', 'accessories') ||
+             findPriceItemByName(priceItems, 'RMSG Yeti Snowguard', 'materials') ||
              findPriceItemByName(priceItems, 'Snowguard', 'materials') ||
              findPriceItemByName(priceItems, 'Snow Guard', 'materials');
     }
