@@ -149,3 +149,27 @@
 **Rejected Alternative:** Adding `export const dynamic = 'force-dynamic'` to each individual page
 - Reason: Fragile (easy to forget), repetitive, no centralized control
 - This is a case where centralization was clearly better than repetition
+
+## Feb 14, 2026
+
+### Supabase Storage for PDF uploads
+- Chose Supabase Storage over Vercel Blob, Edge Runtime, or PDF.js page splitting
+- Supabase already in stack, least new dependencies, private bucket with RLS
+- Upload to roofscope-temp bucket, send signed URL to API, API fetches and converts to base64
+
+### Multi-RoofScope merge strategy
+- mergeMeasurements sums numeric fields (not overwrite)
+- Structure detection re-runs with all PDF URLs, returns combined structure list
+- Race condition handled with latestDetectionRef pattern
+
+### Building tabs approach
+- Tabs per building + "All Combined" tab
+- Per-building state stored separately, active tab swaps display
+- Single useEstimateCalculation hook — cannot run multiple instances (has internal state)
+
+### Roof system architecture (planned)
+- Split estimate flow into Setup step + Build step
+- Each building gets assigned a roof system
+- Each roof system has its own AI knowledge file
+- Smart Selection reads the relevant knowledge file per building
+- Systems: Brava tile, DaVinci tile, asphalt shingle, standing seam metal, flat/low slope, cedar shake, cedar shingles

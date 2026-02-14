@@ -1,63 +1,56 @@
-# Current Plan - Updated 2/14/2026
+# Current Plan — Updated Feb 14, 2026
 
-## What's Complete
+## Completed Today
+- Supabase Storage for large PDF uploads (roofscope-temp bucket) — bypasses Vercel 4.5MB body limit
+- Multi-RoofScope upload with "Add Another RoofScope" button
+- Measurements merge correctly across multiple PDFs (sum, not overwrite)
+- 6-structure detection across 2 PDFs (prompt updated for multi-document awareness)
+- Race condition fix for structure detection (latestDetectionRef)
+- Floating point display rounding in ReviewStep
+- Editable building names in multi-structure panel
+- AI naming guidance for multi-document structures
+- Duplicate AI loading indicator removed (kept inline only)
+- Snow guard price lookup category fix (accessories not materials)
+- Phase 3B-1: Building tabs UI + per-structure measurements display
+- StructureTabs component created
 
-- **Phase 1: Rules → Intelligence Refactor** ✅
-  - Replaced hardcoded grouping rules with AI-powered proposal organizer
-  - Removed proposalDescription field entirely — single `name` field everywhere
-  - Created style guide at `/data/proposal-style-guide.md` with examples (not rigid rules)
-  - ID-based matching replaces string-based matching for AI responses
-  - Manual "Organize for Proposal" trigger (not useEffect) to prevent render loops
-  - 15-second timeout with fallback to ungrouped items
+## In Progress
+- Phase 3B-2: Per-building material selection with tabs — ON HOLD pending redesign
 
-- **Phase 2: AI Organizer Bug Fixes** ✅
-  - Fixed duplicate vendor items being sent to AI (was ~42, now ~24)
-  - Added reconciliation step — missing items recovered as standalone after AI response
-  - Debug console logging active in proposalOrganizer.ts
+## Next: Major Redesign — Roof System Architecture
+Vision shift: instead of one long form, split into Setup + Build steps with roof system knowledge.
 
-- **Phase 2b: Style Guide Improvements** ✅
-  - Expanded flashing keywords: eave, rake, ridge, valley, w valley, sidewall, headwall, starter, drip edge, flashing, fab valley, fab ridge, fab eave, fab rake, fab sidewall, fab headwall, fab starter, fab drip edge
-  - Kit names now include component summaries (e.g., "Custom Fabricated Metal Flashing — Eave, Rake, Ridge, Valley & Headwall pieces")
-  - Added critical rule: NEVER rename user-entered item names — AI controls grouping/kit names only
-  - Updated example in style guide to show component list format
-  - Style guide is read dynamically by API route at runtime
+### New Step Flow
+1. **Setup Step** (new)
+   - Upload RoofScope PDFs
+   - See structures detected, rename them
+   - Assign a roof system to each structure (Brava, asphalt, metal, etc.)
+2. **Build Estimate Step** (existing, cleaned up)
+   - Tabs per building
+   - Smart Selection uses building's assigned roof system
+   - Each tab shows only relevant materials for that system
+   - AI references roof system knowledge file for correct product selection
 
-- **Phase A: Knowledge Base Foundation** ✅ (Feb 14, 2026)
-  - Created /lib/knowledge/roofing-rules.md
-  - Created /lib/knowledge/multi-structure-rules.md
-  - Created /lib/knowledge/validation-rules.md
-  - Domain knowledge ready for AI consumption
+### Roof System Knowledge Files Needed
+Each system gets its own reference file defining: required materials, underlayment specs, accessories, quantity calculation rules, common mistakes.
 
-- **Phase B: Database Schema + TypeScript Types** ✅ (Feb 14, 2026)
-  - Migration: supabase/migrations/20260214_add_ai_project_context.sql
-  - New table: ai_project_context with company-based RLS
-  - TypeScript interfaces: AIDetectedStructure, AIProjectContext, AIMessage, AIWarning, AIValidationResult
-  - Build passing, migration applied to Supabase
+1. Brava composite tile
+2. DaVinci composite tile
+3. Asphalt shingle (Tamko)
+4. Standing seam metal (Schafer)
+5. Flat/low slope (TPO, modified bitumen)
+6. Cedar shake
+7. Cedar shingles
 
-## What's In Progress
+### Known Issues
+- Grace Ice & Water High Temp still being selected for Brava — should be different underlayment. Roof system knowledge file will fix this.
+- Tab bar position too high — should be above materials section, not above structure detection panel
+- "Showing combined measurements for 4 structures" text doesn't update to 6 after second PDF (cosmetic)
 
-- **Phase C: Core AI Agent Logic** (Next)
-  - Build /lib/ai/project-manager.ts with AI functions
-  - Create API route /app/api/project-manager/route.ts
-  - Create React hook useProjectManager
-
-## What's Next
-
-1. Complete Phase C (AI agent core)
-2. Phase D (Integration into existing workflow)
-3. Phase E (UI components)
-4. Verify Phase 2b — Test PDF output with updated style guide
-5. Clean up debug logging — Remove console.logs from proposalOrganizer.ts once stable
-6. Future: Additional vendors — TRA Snow & Sun, Rocky Mountain Snow Guards integration
-7. Future: Business dashboard — Trello integration, lead tracking, performance metrics
-
-## Known Issues / Blockers
-
-- None currently — awaiting test results
+## Blockers
+- None currently
 
 ## Notes
-
-- Numbers verified on 39 W Lupine: PDF total ($141,769.07) matches internal view exactly
-- PDF line items sum correctly (off by 1 penny from rounding — acceptable)
-- AI organizer successfully groups small items into kits, keeps $1,500+ items standalone
-- Labor, Equipment, Optional items all showing correctly on PDF
+- The estimator detection panel / AI summary should collapse or hide once you move to the Build step
+- Smart Selection needs to reference per-system knowledge files
+- Need to identify what underlayment Brava actually requires (Tim changed it from Grace Ice & Water)

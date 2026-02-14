@@ -55,3 +55,17 @@ Roofing contractors who need to:
 
 - **Schafer Quotes**: Required for metal roofs. Uploaded quote is the ONLY source of truth for pricing and quantities. All quote items are extracted exactly as quoted. Quote items are read-only in estimate builder (can deselect but cannot edit quantity/price).
 - **Other Vendors** (TRA, Rocky Mountain): Quotes can be uploaded and items selected into estimates. Items can be edited if needed.
+
+## Technical Notes
+
+### PDF Upload
+- Large PDFs uploaded to Supabase Storage (roofscope-temp bucket) first
+- Signed URL sent to API instead of base64 payload
+- Bypasses Vercel 4.5MB serverless body limit
+- Temp files deleted after 2 minutes
+
+### Multi-Structure
+- Supports multiple RoofScope PDFs per estimate
+- Structures detected across all PDFs combined
+- Measurements sum across PDFs
+- estimateStructures array persisted in DB as JSONB
