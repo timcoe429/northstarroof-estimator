@@ -1429,6 +1429,7 @@ export default function RoofScopeEstimator() {
             customerInfo={customerInfo}
             uploadedImages={uploadedImages}
             structures={structuresForSetup}
+            structuresForDisplay={structuresForDisplay}
             structureRoofSystems={structureRoofSystems}
             onStructureRoofSystemChange={(id, val) => setStructureRoofSystems((prev) => ({ ...prev, [id]: val }))}
             vendorQuotes={vendorQuotes.vendorQuotes}
@@ -1442,6 +1443,8 @@ export default function RoofScopeEstimator() {
             onRemoveVendorQuote={vendorQuotes.removeVendorQuoteFromState}
             onBuildEstimate={handleBuildEstimate}
             isProcessing={imageExtraction.isProcessing}
+            isStructureDetectionLoading={projectManager.isLoading}
+            lastDetection={lastDetection ? { summary: lastDetection.summary, confidence: lastDetection.confidence } : null}
             onFileUpload={imageExtraction.handleFileUpload}
             onDrop={imageExtraction.handleDrop}
             editingStructureId={editingStructureId}

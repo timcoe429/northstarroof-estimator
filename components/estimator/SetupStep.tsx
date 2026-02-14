@@ -1,10 +1,13 @@
 'use client'
 
 import React from 'react';
-import { Upload, FileText, X, Check, Edit2, ChevronRight } from 'lucide-react';
+import { Upload, FileText, X, Check, Edit2, ChevronRight, Plus } from 'lucide-react';
 import type { Measurements, CustomerInfo, VendorQuote, VendorQuoteItem, EstimateStructure } from '@/types';
 import { formatCurrency, formatVendorName } from '@/lib/estimatorUtils';
 import { ROOF_SYSTEM_OPTIONS } from '@/lib/roofSystemConstants';
+
+/** Structure with optional AI fields (hasAnalysisPage from AIDetectedStructure) */
+type StructureForDisplay = EstimateStructure & { hasAnalysisPage?: boolean };
 
 interface SetupStepProps {
   /** Extracted measurements (used when no structures detected) */
@@ -15,6 +18,8 @@ interface SetupStepProps {
   uploadedImages: Set<string>;
   /** Structures from AI detection (or default single structure) */
   structures: EstimateStructure[];
+  /** Structures with AI metadata (hasAnalysisPage) for rich card display */
+  structuresForDisplay?: StructureForDisplay[];
   /** Per-structure roof system selection */
   structureRoofSystems: Record<string, string>;
   /** Callback when user changes roof system for a structure */
@@ -41,6 +46,10 @@ interface SetupStepProps {
   onBuildEstimate: () => void;
   /** Whether RoofScope is being processed */
   isProcessing?: boolean;
+  /** Whether AI structure detection is loading */
+  isStructureDetectionLoading?: boolean;
+  /** AI detection result for confidence banner */
+  lastDetection?: { summary: string; confidence: string } | null;
   /** Callback for file upload (RoofScope) */
   onFileUpload?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   /** Callback for drag and drop */
@@ -55,13 +64,14 @@ interface SetupStepProps {
 
 /**
  * Setup step: RoofScope upload, structure configuration, vendor quotes, customer info.
- * User configures the project before building the estimate.
+ * Restores previous extracted-step UI: structure cards with measurements, AI indicators, Add Another RoofScope.
  */
 export function SetupStep({
   measurements,
   customerInfo,
   uploadedImages,
   structures,
+  structuresForDisplay = [],
   structureRoofSystems,
   onStructureRoofSystemChange,
   vendorQuotes,
@@ -75,6 +85,8 @@ export function SetupStep({
   onRemoveVendorQuote,
   onBuildEstimate,
   isProcessing = false,
+  isStructureDetectionLoading = false,
+  lastDetection = null,
   onFileUpload,
   onDrop,
   editingStructureId,
@@ -82,27 +94,45 @@ export function SetupStep({
   onEditingStructureIdChange,
 }: SetupStepProps) {
   const hasSchaferQuote = vendorQuotes.some((q) => q.vendor === 'schafer');
+  const displayStructures = structuresForDisplay.length > 0 ? structuresForDisplay : structures;
   const allStructuresHaveRoofSystem = structures.length > 0 && structures.every((s) => structureRoofSystems[s.id]);
-  const totalSquares = structures.reduce((sum, s) => sum + (s.measurements?.total_squares ?? 0), 0);
-
-  if (isProcessing) {
-    return (
-      <div className="bg-white rounded-2xl p-12 text-center">
-        <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Reading Measurements...</h2>
-        <p className="text-gray-500">Extracting roof data from your image</p>
-      </div>
-    );
-  }
+  const totalSquares = displayStructures.reduce((sum, s) => sum + (s.measurements?.total_squares ?? 0), 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
+      {/* AI Processing Indicators - inline banners */}
+      {isProcessing && (
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center space-x-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-blue-900">Reading Measurements...</p>
+              <p className="text-xs text-blue-700">Extracting roof data from your image</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isStructureDetectionLoading && measurements && (
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center space-x-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-blue-900">
+                {displayStructures.length > 0 ? 'Adding structures from new RoofScope...' : 'AI analyzing RoofScope...'}
+              </p>
+              <p className="text-xs text-blue-700">Detecting structures and extracting measurements</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* RoofScope Upload Area */}
       <div
         onDrop={onDrop}
         onDragOver={(e) => e.preventDefault()}
         onClick={() => document.getElementById('setup-file-upload')?.click()}
-        className="border-2 border-dashed border-gray-300 rounded-2xl p-8 md:p-10 text-center bg-white hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer"
+        className="border-2 border-dashed border-gray-300 rounded-2xl p-6 md:p-8 text-center bg-white hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer"
       >
         <input
           type="file"
@@ -120,61 +150,49 @@ export function SetupStep({
           <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg inline-block">
             <p className="text-sm font-medium text-green-800">
               <Check className="w-4 h-4 inline mr-1" />
-              {totalSquares.toFixed(1)} SQ total • {structures.length} structure{structures.length !== 1 ? 's' : ''} detected
+              {totalSquares.toFixed(1)} SQ total • {displayStructures.length} structure{displayStructures.length !== 1 ? 's' : ''} detected
             </p>
-            {uploadedImages.has('summary') && (
-              <span className="text-xs text-green-600">RoofScope Summary</span>
-            )}
-            {uploadedImages.has('analysis') && (
-              <span className="text-xs text-green-600 ml-2">Roof Area Analysis</span>
-            )}
           </div>
         )}
         <p className="text-xs md:text-sm text-gray-400 mt-2">
           <kbd className="px-2 py-1 bg-gray-100 rounded text-xs md:text-sm font-mono">Ctrl+V</kbd> to paste, or tap to upload
         </p>
-        <div className="mt-4 flex items-center gap-2 justify-center">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onReset();
-            }}
-            className="text-xs md:text-sm text-gray-500 hover:text-gray-700"
-          >
-            Upload Different
-          </button>
-          {measurements && onFileUpload && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                document.getElementById('setup-file-upload')?.click();
-              }}
-              className="text-xs md:text-sm text-[#00293f] font-medium hover:underline"
-            >
-              Add Another RoofScope
-            </button>
-          )}
-        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onReset();
+          }}
+          className="mt-3 text-xs md:text-sm text-gray-500 hover:text-gray-700"
+        >
+          Upload Different
+        </button>
       </div>
 
-      {/* Detected Structures Panel */}
-      {structures.length > 0 && (
-        <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Detected Structures</h3>
-          <div className="space-y-3">
-            {structures.map((structure) => {
+      {/* Multi-Structure Overview Panel / Detected Structures */}
+      {displayStructures.length > 0 && (
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">
+            {displayStructures.length > 1 ? 'Multi-Structure Property Detected' : 'Detected Structure'}
+          </h3>
+          {displayStructures.length > 1 && (
+            <p className="text-sm text-gray-700 mb-4">
+              AI detected {displayStructures.length} structures. Review each building below.
+            </p>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {displayStructures.map((structure) => {
               const sq = structure.measurements?.total_squares ?? 0;
               const roofSystem = structureRoofSystems[structure.id] ?? '';
               const showSchaferHint = hasSchaferQuote && !roofSystem;
               const isEditing = editingStructureId === structure.id;
+              const hasAnalysisPage = 'hasAnalysisPage' in structure ? structure.hasAnalysisPage : true;
 
               return (
                 <div
                   key={structure.id}
-                  className="p-4 border border-gray-200 rounded-xl"
+                  className="p-3 bg-white border border-gray-200 rounded-lg"
                 >
-                  <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex items-start justify-between mb-2">
                     <div>
                       {isEditing ? (
                         <input
@@ -201,10 +219,28 @@ export function SetupStep({
                           <Edit2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                         </button>
                       )}
-                      <p className="text-sm text-gray-600 mt-0.5">{sq.toFixed(1)} SQ</p>
+                      <p className="text-sm text-gray-600 mt-0.5">
+                        Type: {structure.type} • {sq.toFixed(1)} SQ
+                      </p>
                     </div>
+                    <span
+                      className={`px-2 py-1 text-xs font-medium rounded ${
+                        hasAnalysisPage ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                      }`}
+                    >
+                      {hasAnalysisPage ? 'Detailed' : 'Estimated'}
+                    </span>
                   </div>
-                  <div>
+                  <div className="text-xs text-gray-500 space-y-1 mb-2">
+                    <div>Pitch: {structure.measurements?.predominant_pitch || 'N/A'}</div>
+                    <div>Eave: {structure.measurements?.eave_length ?? 0} LF</div>
+                    <div>Valley: {structure.measurements?.valley_length ?? 0} LF</div>
+                    <div>Ridge: {structure.measurements?.ridge_length ?? 0} LF</div>
+                    {!hasAnalysisPage && (
+                      <p className="text-yellow-700 mt-2">No analysis page - measurements estimated</p>
+                    )}
+                  </div>
+                  <div className="pt-2 border-t border-gray-100">
                     <label className="block text-xs font-medium text-gray-500 mb-1">Roof System</label>
                     <select
                       value={roofSystem}
@@ -227,6 +263,72 @@ export function SetupStep({
               );
             })}
           </div>
+          {displayStructures.length > 1 && (
+            <div className="mt-4 p-3 bg-white border border-gray-300 rounded">
+              <p className="text-sm text-gray-700">
+                <strong>Total Combined:</strong>{' '}
+                {totalSquares.toFixed(1)} SQ across {displayStructures.length} buildings
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add Another RoofScope - standalone button */}
+      {measurements && onFileUpload && (
+        <div className="mb-4">
+          <input
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg"
+            onChange={onFileUpload}
+            className="hidden"
+            id="setup-add-another-roofscope"
+          />
+          <button
+            type="button"
+            onClick={() => document.getElementById('setup-add-another-roofscope')?.click()}
+            disabled={isProcessing}
+            className="inline-flex items-center gap-2 px-4 py-2 border border-[#00293f] text-[#00293f] rounded-lg hover:bg-[#00293f]/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            {isProcessing ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#00293f]" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4" />
+                Add Another RoofScope
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* AI Detection Confidence */}
+      {lastDetection && (
+        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded">
+          <p className="text-sm text-gray-700">
+            <strong>AI Detection Summary:</strong> {lastDetection.summary}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Confidence: {lastDetection.confidence === 'high' ? 'High' : lastDetection.confidence === 'medium' ? 'Medium' : 'Low'}
+          </p>
+          {lastDetection.confidence === 'low' && (
+            <p className="text-xs text-yellow-700 mt-1">
+              Low confidence - recommend uploading analysis pages for accurate measurements
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Hint for additional image */}
+      {uploadedImages.has('summary') && !uploadedImages.has('analysis') && (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm text-blue-700 flex items-center gap-2">
+            <Upload className="w-4 h-4" />
+            <span>Paste your <strong>Roof Area Analysis</strong> image to extract slope breakdown (steep vs standard squares)</span>
+          </p>
         </div>
       )}
 
@@ -290,37 +392,34 @@ export function SetupStep({
         )}
       </div>
 
-      {/* Customer Info */}
-      <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
-        <h3 className="font-semibold text-gray-900 mb-3">Customer Info</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <input
-            type="text"
-            value={customerInfo.name}
-            onChange={(e) => onCustomerInfoChange('name', e.target.value)}
-            placeholder="Customer Name"
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
-          />
-          <input
-            type="text"
-            value={customerInfo.address}
-            onChange={(e) => onCustomerInfoChange('address', e.target.value)}
-            placeholder="Address"
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
-          />
-          <input
-            type="text"
-            value={customerInfo.phone}
-            onChange={(e) => onCustomerInfoChange('phone', e.target.value)}
-            placeholder="Phone"
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
-          />
-        </div>
+      {/* Customer Info - compact */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 p-3 md:p-4 bg-gray-50 rounded-xl">
+        <input
+          type="text"
+          value={customerInfo.name}
+          onChange={(e) => onCustomerInfoChange('name', e.target.value)}
+          placeholder="Customer Name"
+          className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+        />
+        <input
+          type="text"
+          value={customerInfo.address}
+          onChange={(e) => onCustomerInfoChange('address', e.target.value)}
+          placeholder="Address"
+          className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+        />
+        <input
+          type="text"
+          value={customerInfo.phone}
+          onChange={(e) => onCustomerInfoChange('phone', e.target.value)}
+          placeholder="Phone"
+          className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+        />
       </div>
 
       {/* Job Description */}
-      <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
-        <h3 className="font-semibold text-gray-900 mb-2">Job Description</h3>
+      <div className="space-y-2">
+        <h3 className="font-semibold text-gray-900">Job Description</h3>
         <input
           type="text"
           value={jobDescription}
