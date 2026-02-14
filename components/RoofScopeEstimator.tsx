@@ -350,6 +350,7 @@ export default function RoofScopeEstimator() {
 
   // Manual organization trigger with guard against concurrent calls
   const organizingRef = useRef(false);
+  const addAnotherRoofScopeInputRef = useRef<HTMLInputElement>(null);
 
   const triggerOrganization = useCallback(async (est: Estimate) => {
     if (organizingRef.current) return;
@@ -1303,6 +1304,35 @@ export default function RoofScopeEstimator() {
                 </div>
               </div>
             )}
+
+            {/* Add Another RoofScope */}
+            <div className="mb-4">
+              <input
+                ref={addAnotherRoofScopeInputRef}
+                type="file"
+                accept=".pdf"
+                onChange={imageExtraction.handleFileUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => addAnotherRoofScopeInputRef.current?.click()}
+                disabled={imageExtraction.isProcessing}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-[#00293f] text-[#00293f] rounded-lg hover:bg-[#00293f]/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              >
+                {imageExtraction.isProcessing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#00293f]" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    Add Another RoofScope
+                  </>
+                )}
+              </button>
+            </div>
 
             {/* AI Detection Confidence */}
             {lastDetection && (
