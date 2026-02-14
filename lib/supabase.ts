@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { SavedQuote, Estimate, Measurements, LineItem, CustomerInfo, PriceItem, VendorQuote, VendorQuoteItem } from '@/types';
+import type { SavedQuote, Estimate, Measurements, LineItem, CustomerInfo, PriceItem, VendorQuote, VendorQuoteItem, BuildingEstimate } from '@/types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
@@ -8,7 +8,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholde
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Save quote to Supabase
-export async function saveQuote(estimate: Estimate, quoteName: string, userId: string | undefined, companyId: string | undefined, jobDescription?: string, roofSystem?: string): Promise<SavedQuote> {
+export async function saveQuote(estimate: Estimate, quoteName: string, userId: string | undefined, companyId: string | undefined, jobDescription?: string, roofSystem?: string, buildings?: BuildingEstimate[]): Promise<SavedQuote> {
   // Debug logging
   console.log('saveQuote received userId:', userId);
   console.log('saveQuote received companyId:', companyId);
@@ -57,6 +57,9 @@ export async function saveQuote(estimate: Estimate, quoteName: string, userId: s
     quoteData.section_headers = estimate.sectionHeaders;
   }
   quoteData.structures = estimate.structures ?? [];
+  if (buildings !== undefined && buildings.length > 0) {
+    quoteData.buildings = buildings;
+  }
 
   // Debug logging - log quoteData before insert
   console.log('saveQuote quoteData:', quoteData);

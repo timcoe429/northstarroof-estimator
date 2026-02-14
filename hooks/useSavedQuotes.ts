@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Estimate, VendorQuote, VendorQuoteItem } from '@/types';
+import type { Estimate, VendorQuote, VendorQuoteItem, BuildingEstimate } from '@/types';
 import type { CustomItem } from '@/types/estimator';
 import { loadQuotes, saveQuote, loadQuote, deleteQuote, saveVendorQuotes, loadVendorQuotes } from '@/lib/supabase';
 
@@ -31,6 +31,8 @@ interface UseSavedQuotesProps {
   onCalculateEstimate: () => void;
   onSetIsLoadingQuote: (loading: boolean) => void;
   jobDescription: string;
+  buildings?: BuildingEstimate[];
+  onSetBuildState?: (buildings: BuildingEstimate[]) => void;
 }
 
 export const useSavedQuotes = ({
@@ -61,6 +63,8 @@ export const useSavedQuotes = ({
   onCalculateEstimate,
   onSetIsLoadingQuote,
   jobDescription,
+  buildings = [],
+  onSetBuildState,
 }: UseSavedQuotesProps) => {
   const [savedQuotes, setSavedQuotes] = useState<any[]>([]);
   const [showSavedQuotes, setShowSavedQuotes] = useState(false);
@@ -127,7 +131,7 @@ export const useSavedQuotes = ({
         throw new Error('Invalid user ID format. Please log out and log back in.');
       }
       
-      const savedQuote = await saveQuote(estimateWithCustomerInfo, quoteName.trim(), userId, companyId, jobDescription, roofSystem);
+      const savedQuote = await saveQuote(estimateWithCustomerInfo, quoteName.trim(), userId, companyId, jobDescription, roofSystem, buildings);
 
       if (vendorQuotes.length > 0) {
         await saveVendorQuotes(savedQuote.id, vendorQuotes, vendorQuoteItems);
@@ -340,6 +344,26 @@ export const useSavedQuotes = ({
       };
       
       onSetEstimate(restoredEstimate);
+
+      // Restore buildings (Phase B) - create single building from old quote if none saved
+      const savedBuildings = (savedQuote as any).buildings as BuildingEstimate[] | undefined;
+      if (onSetBuildState) {
+        if (savedBuildings && Array.isArray(savedBuildings) && savedBuildings.length > 0) {
+          onSetBuildState(savedBuildings);
+        } else {
+          const singleBuilding: BuildingEstimate = {
+            structureId: 'default-1',
+            structureName: 'Main Building',
+            roofSystem: restoredRoofSystem || '',
+            measurements: cleanMeasurements,
+            selectedItems: restoredSelectedItems,
+            itemQuantities: restoredQuantities,
+            vendorQuoteItemIds: loadedVendorItems.map((i) => i.id),
+          };
+          onSetBuildState([singleBuilding]);
+        }
+      }
+
       onSetStep('estimate');
       setShowSavedQuotes(false);
       

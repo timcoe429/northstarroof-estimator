@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Upload, DollarSign, Calculator, Settings, ChevronDown, ChevronUp, ChevronRight, AlertCircle, Check, X, Edit2, Plus, Trash2, Package, Users, Truck, Wrench, FileText, Copy, Bot } from 'lucide-react';
 import Image from 'next/image';
-import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, EstimateStructure, SavedQuote, VendorQuote, VendorQuoteItem, AIDetectedStructure } from '@/types';
+import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, EstimateStructure, BuildingEstimate, SavedQuote, VendorQuote, VendorQuoteItem, AIDetectedStructure } from '@/types';
 import { saveQuote, loadQuotes, loadQuote, deleteQuote, loadPriceItems, savePriceItem, savePriceItemsBulk, deletePriceItemFromDB, saveVendorQuotes, loadVendorQuotes, updateShareSettings } from '@/lib/supabase';
 import { generateProposalPDF } from '@/lib/generateProposal';
 import { useAuth } from '@/lib/AuthContext';
@@ -24,7 +24,7 @@ import { useFinancialControls } from '@/hooks/useFinancialControls';
 import { useUIState } from '@/hooks/useUIState';
 import { useCustomItems } from '@/hooks/useCustomItems';
 import { useProjectManager } from '@/hooks/useProjectManager';
-import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView, CalculatedAccessories, StructureTabs } from '@/components/estimator';
+import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, SetupStep, BuildStep, BuildingTabs, EstimateView, CalculatedAccessories } from '@/components/estimator';
 
 export default function RoofScopeEstimator() {
   const { user, companyId, signOut } = useAuth();
@@ -35,7 +35,7 @@ export default function RoofScopeEstimator() {
   }, [companyId]);
 
   // Core state that must remain in main component
-  const [step, setStep] = useState('upload');
+  const [step, setStep] = useState<'setup' | 'build' | 'review'>('setup');
   const [measurements, setMeasurements] = useState<Measurements | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -67,8 +67,14 @@ export default function RoofScopeEstimator() {
   const [aiStatus, setAiStatus] = useState<string | null>(null);
   const [estimateStructures, setEstimateStructures] = useState<EstimateStructure[]>([]);
   const [editingStructureId, setEditingStructureId] = useState<string | null>(null);
-  const [activeStructureTab, setActiveStructureTab] = useState<string>('combined');
+  const [structureRoofSystems, setStructureRoofSystems] = useState<Record<string, string>>({});
   const [roofSystem, setRoofSystem] = useState<string>('');
+  const [buildState, setBuildState] = useState<{
+    buildings: BuildingEstimate[];
+    activeIndex: number;
+  }>({ buildings: [], activeIndex: -1 });
+  const currentBuildingRef = useRef<{ selectedItems: string[]; itemQuantities: Record<string, number> }>({ selectedItems: [], itemQuantities: {} });
+  const [pendingCalculate, setPendingCalculate] = useState(false);
 
   // Initialize AI Project Manager
   const projectManager = useProjectManager(savedEstimateId ?? null);
@@ -81,6 +87,20 @@ export default function RoofScopeEstimator() {
       }),
     [structuresForValidation, estimateStructures]
   );
+
+  // Structures for Setup step: use detected structures or create default single structure
+  const structuresForSetup = useMemo((): EstimateStructure[] => {
+    if (estimateStructures.length > 0) return estimateStructures;
+    if (measurements) {
+      return [{
+        id: 'default-1',
+        name: 'Main Building',
+        type: 'unknown',
+        measurements,
+      }];
+    }
+    return [];
+  }, [estimateStructures, measurements]);
 
   // Initialize hooks
   const financialControls = useFinancialControls();
@@ -154,10 +174,29 @@ export default function RoofScopeEstimator() {
 
   const vendorItemCount = vendorQuotes.vendorQuoteItems.length;
 
+  // Effective measurements and roof system for Build step (per-building or merged)
+  const effectiveMeasurements = useMemo((): Measurements | null => {
+    if (step !== 'build' || buildState.buildings.length === 0) return measurements;
+    if (buildState.activeIndex === -1) {
+      return buildState.buildings.reduce(
+        (acc, b) => mergeMeasurements(acc, b.measurements),
+        buildState.buildings[0].measurements
+      );
+    }
+    const b = buildState.buildings[buildState.activeIndex];
+    return b?.measurements ?? measurements;
+  }, [step, buildState.buildings, buildState.activeIndex, measurements]);
+
+  const effectiveRoofSystem = useMemo((): string => {
+    if (step !== 'build' || buildState.activeIndex < 0) return roofSystem;
+    const b = buildState.buildings[buildState.activeIndex];
+    return b?.roofSystem ?? roofSystem;
+  }, [step, buildState.activeIndex, buildState.buildings, roofSystem]);
+
   // Initialize smart selection hook
   const smartSelection = useSmartSelection({
-    measurements,
-    roofSystem,
+    measurements: effectiveMeasurements,
+    roofSystem: effectiveRoofSystem,
     vendorQuotes: vendorQuotes.vendorQuotes,
     allSelectableItems,
     vendorQuoteItems: vendorQuotes.vendorQuoteItems,
@@ -255,6 +294,122 @@ export default function RoofScopeEstimator() {
     }
   }, [allSelectableItems, smartSelection.jobDescription, vendorQuotes.vendorQuotes, vendorQuotes.vendorQuoteItems, selectedItems]);
 
+  // Keep currentBuildingRef in sync when editing a building tab
+  useEffect(() => {
+    if (buildState.activeIndex >= 0) {
+      currentBuildingRef.current = { selectedItems, itemQuantities };
+    }
+  }, [buildState.activeIndex, selectedItems, itemQuantities]);
+
+  // Build step: create buildings from structures + roof systems, assign vendor items
+  const handleBuildEstimate = useCallback(() => {
+    const vendorItemIds = vendorQuotes.vendorQuoteItems.map((i) => i.id);
+    const hasSchafer = vendorQuotes.vendorQuotes.some((q) => q.vendor === 'schafer');
+
+    const newBuildings: BuildingEstimate[] = structuresForSetup.map((s) => ({
+      structureId: s.id,
+      structureName: s.name,
+      roofSystem: structureRoofSystems[s.id] ?? '',
+      measurements: s.measurements,
+      selectedItems: [],
+      itemQuantities: {},
+      vendorQuoteItemIds: [],
+    }));
+
+    // Assign vendor items: 1 building = all; multi + schafer = to standing-seam; else first
+    if (vendorItemIds.length > 0) {
+      const targetIdx =
+        structuresForSetup.length === 1
+          ? 0
+          : newBuildings.findIndex((b) => b.roofSystem === 'standing-seam-metal') >= 0
+            ? newBuildings.findIndex((b) => b.roofSystem === 'standing-seam-metal')
+            : 0;
+      newBuildings[targetIdx] = {
+        ...newBuildings[targetIdx],
+        vendorQuoteItemIds: vendorItemIds,
+        selectedItems: vendorItemIds,
+        itemQuantities: Object.fromEntries(
+          vendorQuotes.vendorQuoteItems.map((i) => [i.id, i.quantity ?? 0])
+        ),
+      };
+    }
+
+    setBuildState({ buildings: newBuildings, activeIndex: -1 });
+    setSelectedItems([]);
+    setItemQuantities({});
+    setStep('build');
+  }, [structuresForSetup, structureRoofSystems, vendorQuotes.vendorQuoteItems, vendorQuotes.vendorQuotes]);
+
+  // Tab switch: single state update, persist current building to ref then to buildings
+  const handleTabChange = useCallback((newIndex: number) => {
+    setBuildState((prev) => {
+      const nextBuildings = [...prev.buildings];
+      if (prev.activeIndex >= 0 && prev.activeIndex < nextBuildings.length) {
+        nextBuildings[prev.activeIndex] = {
+          ...nextBuildings[prev.activeIndex],
+          selectedItems: [...currentBuildingRef.current.selectedItems],
+          itemQuantities: { ...currentBuildingRef.current.itemQuantities },
+        };
+      }
+      return { buildings: nextBuildings, activeIndex: newIndex };
+    });
+  }, []);
+
+  // Sync selectedItems/itemQuantities when tab changes
+  useEffect(() => {
+    const { buildings: buildingsList, activeIndex } = buildState;
+    if (buildingsList.length === 0) return;
+
+    if (activeIndex === -1) {
+      const mergedItems = Array.from(
+        new Set(buildingsList.flatMap((b) => [...b.selectedItems, ...b.vendorQuoteItemIds]))
+      );
+      const mergedQuantities: Record<string, number> = {};
+      buildingsList.forEach((b) => {
+        Object.entries(b.itemQuantities).forEach(([id, qty]) => {
+          mergedQuantities[id] = (mergedQuantities[id] ?? 0) + qty;
+        });
+        b.vendorQuoteItemIds.forEach((id) => {
+          const v = vendorQuotes.vendorQuoteItems.find((i) => i.id === id);
+          if (v && mergedQuantities[id] === undefined) mergedQuantities[id] = v.quantity ?? 0;
+        });
+      });
+      setSelectedItems(mergedItems);
+      setItemQuantities(mergedQuantities);
+    } else if (activeIndex >= 0 && activeIndex < buildingsList.length) {
+      const b = buildingsList[activeIndex];
+      const allIds = [...b.selectedItems, ...b.vendorQuoteItemIds];
+      setSelectedItems(allIds);
+      const qty: Record<string, number> = { ...b.itemQuantities };
+      b.vendorQuoteItemIds.forEach((id) => {
+        const v = vendorQuotes.vendorQuoteItems.find((i) => i.id === id);
+        if (v) qty[id] = v.quantity ?? 0;
+      });
+      setItemQuantities(qty);
+    }
+  }, [buildState.activeIndex, buildState.buildings]);
+
+  // Run calculate after switching to All Combined (when user clicked Calculate from building tab)
+  useEffect(() => {
+    if (!pendingCalculate || buildState.activeIndex !== -1 || buildState.buildings.length === 0) return;
+    setPendingCalculate(false);
+    const result = calculateEstimateHook();
+    if (result) {
+      const updatedEstimate: Estimate = {
+        ...result,
+        sectionHeaders: sectionHeaders,
+        structures: estimateStructures.length > 0 ? estimateStructures : undefined,
+        lineItems: result.lineItems.map((item) => ({ ...item, manualOverrides: manualOverrides[item.id] })),
+        optionalItems: result.optionalItems.map((item) => ({ ...item, manualOverrides: manualOverrides[item.id] })),
+      };
+      setEstimate(updatedEstimate);
+      setValidationWarnings(calcValidationWarnings);
+      setStep('review');
+      triggerOrganization(updatedEstimate);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCalculate, buildState.activeIndex, buildState.buildings.length, selectedItems, itemQuantities]);
+
   const handleStructureNameSave = useCallback((id: string, newName: string) => {
     const trimmed = newName.trim();
     if (!trimmed) {
@@ -321,7 +476,7 @@ export default function RoofScopeEstimator() {
     onSetMeasurements: setMeasurements,
     onSetCustomerInfo: setCustomerInfo,
     onSetUploadedImages: setUploadedImages,
-    onSetStep: setStep,
+    onSetStep: (s) => setStep((s === 'extracted' ? 'setup' : s) as 'setup' | 'build' | 'review'),
     onSetExtractedItems: priceItems.setExtractedItems,
     onSetPriceSheetProcessing: priceItems.setPriceSheetProcessing,
     onAnalyzeJobForQuickSelections: smartSelection.analyzeJobForQuickSelections,
@@ -368,7 +523,7 @@ export default function RoofScopeEstimator() {
     calculateItemQuantities: calculateItemQuantitiesHook,
     validationWarnings: calcValidationWarnings,
   } = useEstimateCalculation({
-    measurements,
+    measurements: effectiveMeasurements,
     priceItems: priceItems.priceItems,
     allSelectableItems,
     selectedItems,
@@ -412,7 +567,13 @@ export default function RoofScopeEstimator() {
   }, [manualOverrides, vendorQuotes.vendorQuoteItems, vendorQuotes.groupedVendorItems]);
 
   // Wrapper for calculateEstimate that updates local state
+  // When on a building tab, first persist and switch to All Combined so we use merged data
   const calculateEstimate = useCallback(() => {
+    if (buildState.activeIndex >= 0 && buildState.buildings.length > 0) {
+      setPendingCalculate(true);
+      handleTabChange(-1);
+      return;
+    }
     const result = calculateEstimateHook();
     if (result) {
       // Preserve section headers and manual overrides from line items
@@ -431,13 +592,13 @@ export default function RoofScopeEstimator() {
       };
       setEstimate(updatedEstimate);
       setValidationWarnings(calcValidationWarnings);
-      setStep('estimate');
+      setStep('review');
       // Trigger organization after estimate is calculated
       if (updatedEstimate) {
         triggerOrganization(updatedEstimate);
       }
     }
-  }, [calculateEstimateHook, calcValidationWarnings, sectionHeaders, manualOverrides, triggerOrganization, estimateStructures]);
+  }, [calculateEstimateHook, calcValidationWarnings, sectionHeaders, manualOverrides, triggerOrganization, estimateStructures, buildState.activeIndex, buildState.buildings.length, handleTabChange]);
 
   // Calculate quantities for ALL items when measurements change
   // Skip recalculation when loading a saved quote to prevent overwriting restored quantities
@@ -514,12 +675,25 @@ export default function RoofScopeEstimator() {
         setNameOverrides(names);
       }
     },
-    onSetStep: setStep,
+    onSetStep: (s) => setStep((s === 'estimate' ? 'review' : s) as 'setup' | 'build' | 'review'),
     onSetShowVendorBreakdown: vendorQuotes.setShowVendorBreakdown,
     onAnalyzeJobForQuickSelections: smartSelection.analyzeJobForQuickSelections,
     onCalculateEstimate: calculateEstimate,
     onSetIsLoadingQuote: setIsLoadingQuote,
     jobDescription: smartSelection.jobDescription,
+    buildings: buildState.buildings,
+    onSetBuildState: (buildings) => {
+      setBuildState({ buildings, activeIndex: -1 });
+      setStructureRoofSystems(Object.fromEntries(buildings.map((b) => [b.structureId, b.roofSystem])));
+      setEstimateStructures(
+        buildings.map((b) => ({
+          id: b.structureId,
+          name: b.structureName,
+          type: 'unknown' as const,
+          measurements: b.measurements,
+        }))
+      );
+    },
   });
 
   // Handle inline item updates
@@ -549,7 +723,7 @@ export default function RoofScopeEstimator() {
         }));
         setOrganizedProposal(null); // Invalidate organization when items change
         // Trigger recalculation for price changes
-        if (estimate && step === 'estimate') {
+        if (estimate && step === 'review') {
           setTimeout(() => calculateEstimate(), 100);
         }
       }
@@ -570,12 +744,12 @@ export default function RoofScopeEstimator() {
       }));
       setOrganizedProposal(null); // Invalidate organization when items change
       // Trigger recalculation for unit changes
-      if (estimate && step === 'estimate') {
+      if (estimate && step === 'review') {
         setTimeout(() => calculateEstimate(), 100);
       }
     }
     // Trigger recalculation for quantity changes
-    if (field === 'quantity' && estimate && step === 'estimate') {
+    if (field === 'quantity' && estimate && step === 'review') {
       setTimeout(() => calculateEstimate(), 100);
     }
   }, [allSelectableItems, vendorQuotes, estimate, step, calculateEstimate]);
@@ -601,7 +775,7 @@ export default function RoofScopeEstimator() {
         return updated;
       });
       // Trigger recalculation to restore original price
-      if (estimate && step === 'estimate') {
+      if (estimate && step === 'review') {
         setTimeout(() => calculateEstimate(), 100);
       }
     } else if (field === 'name') {
@@ -616,7 +790,7 @@ export default function RoofScopeEstimator() {
       const calculatedQtys = calculateItemQuantities(measurements);
       setItemQuantities(prev => ({ ...prev, [itemId]: calculatedQtys[itemId] ?? 0 }));
       // Trigger recalculation
-      if (estimate && step === 'estimate') {
+      if (estimate && step === 'review') {
         setTimeout(() => calculateEstimate(), 100);
       }
     }
@@ -636,7 +810,7 @@ export default function RoofScopeEstimator() {
 
   // Auto-recalculate estimate when financial controls change (if estimate already exists)
   useEffect(() => {
-    if (estimate && step === 'estimate' && measurements && selectedItems.length > 0) {
+    if (estimate && step === 'review' && measurements && selectedItems.length > 0) {
       calculateEstimate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -691,7 +865,7 @@ export default function RoofScopeEstimator() {
           const file = item.getAsFile();
           if (!file) return;
 
-          if (step === 'upload' || step === 'extracted') {
+          if (step === 'setup' || step === 'build') {
             imageExtraction.extractFromImage(file);
           }
           break;
@@ -704,7 +878,7 @@ export default function RoofScopeEstimator() {
 
           if (uiState.showPrices) {
             imageExtraction.extractPricesFromImage(file);
-          } else if (step === 'upload' || step === 'extracted') {
+          } else if (step === 'setup' || step === 'build') {
             // Allow pasting in 'extracted' step to add analysis image
             imageExtraction.extractFromImage(file);
           }
@@ -748,11 +922,12 @@ export default function RoofScopeEstimator() {
 
   // Reset estimator
   const resetEstimator = () => {
-    setStep('upload');
+    setStep('setup');
     setMeasurements(null);
     setEstimate(null);
     setEstimateStructures([]);
-    setActiveStructureTab('combined');
+    setStructureRoofSystems({});
+    setBuildState({ buildings: [], activeIndex: -1 });
     setEditingStructureId(null);
     setCustomerInfo({ name: '', address: '', phone: '' });
     setSelectedItems([]);
@@ -1191,19 +1366,28 @@ export default function RoofScopeEstimator() {
 
       {/* Main Content */}
       <div className="max-w-5xl mx-auto px-4 py-6 md:py-8">
-        {/* Structure Tabs - only when multi-structure */}
-        {(step === 'extracted' || step === 'estimate') && estimateStructures.length > 1 && (
+        {/* Step indicator */}
+        <div className="flex items-center gap-2 mb-6 text-sm">
+          <span className={step === 'setup' ? 'font-semibold text-[#00293f]' : 'text-gray-500'}>Setup</span>
+          <span className="text-gray-400">→</span>
+          <span className={step === 'build' ? 'font-semibold text-[#00293f]' : 'text-gray-500'}>Build</span>
+          <span className="text-gray-400">→</span>
+          <span className={step === 'review' ? 'font-semibold text-[#00293f]' : 'text-gray-500'}>Review</span>
+        </div>
+
+        {/* Building Tabs - when multi-structure */}
+        {(step === 'build' || step === 'review') && buildState.buildings.length > 1 && (
           <div className="mb-4">
-            <StructureTabs
-              structures={estimateStructures}
-              activeTab={activeStructureTab}
-              onTabChange={setActiveStructureTab}
+            <BuildingTabs
+              buildings={buildState.buildings}
+              activeIndex={buildState.activeIndex}
+              onTabChange={handleTabChange}
             />
           </div>
         )}
 
         {/* AI Validation Warnings */}
-        {(step === 'extracted' || step === 'estimate') && projectManager.aiContext && projectManager.aiContext.warnings.filter((w) => !w.dismissed).length > 0 && (
+        {(step === 'build' || step === 'review') && projectManager.aiContext && projectManager.aiContext.warnings.filter((w) => !w.dismissed).length > 0 && (
           <div className="mb-4 space-y-2">
             <h3 className="text-sm font-semibold text-gray-700">AI Validation Warnings</h3>
             {projectManager.aiContext.warnings
@@ -1238,241 +1422,82 @@ export default function RoofScopeEstimator() {
           </div>
         )}
 
-        {/* Upload Step */}
-        {(step === 'upload' || imageExtraction.isProcessing) && (
-          <UploadStep
+        {/* Setup Step */}
+        {step === 'setup' && (
+          <SetupStep
+            measurements={measurements}
+            customerInfo={customerInfo}
+            uploadedImages={uploadedImages}
+            structures={structuresForSetup}
+            structureRoofSystems={structureRoofSystems}
+            onStructureRoofSystemChange={(id, val) => setStructureRoofSystems((prev) => ({ ...prev, [id]: val }))}
             vendorQuotes={vendorQuotes.vendorQuotes}
             vendorQuoteItems={vendorQuotes.vendorQuoteItems}
             isExtractingVendorQuote={vendorQuotes.isExtractingVendorQuote}
+            jobDescription={smartSelection.jobDescription}
+            onCustomerInfoChange={(field, value) => setCustomerInfo((prev) => ({ ...prev, [field]: value }))}
+            onJobDescriptionChange={smartSelection.setJobDescription}
+            onReset={resetEstimator}
+            onVendorQuoteUpload={vendorQuotes.handleVendorQuoteUpload}
+            onRemoveVendorQuote={vendorQuotes.removeVendorQuoteFromState}
+            onBuildEstimate={handleBuildEstimate}
             isProcessing={imageExtraction.isProcessing}
             onFileUpload={imageExtraction.handleFileUpload}
             onDrop={imageExtraction.handleDrop}
-            onVendorQuoteUpload={vendorQuotes.handleVendorQuoteUpload}
-            onRemoveVendorQuote={vendorQuotes.removeVendorQuoteFromState}
+            editingStructureId={editingStructureId}
+            onStructureNameSave={handleStructureNameSave}
+            onEditingStructureIdChange={setEditingStructureId}
           />
         )}
 
-        {/* Review & Build Estimate */}
-        {step === 'extracted' && measurements && (
+        {/* Build Step */}
+        {step === 'build' && measurements && buildState.buildings.length > 0 && (
           <div className="space-y-4 md:space-y-6">
-            {/* Structure Detection Loading */}
             {projectManager.isLoading && (
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-center space-x-3">
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-blue-900">
-                      {structuresForValidation.length > 0
-                        ? 'Adding structures from new RoofScope...'
-                        : 'AI analyzing RoofScope...'}
-                    </p>
-                    <p className="text-xs text-blue-700">
-                      Detecting structures and extracting measurements
-                    </p>
-                  </div>
+                  <p className="text-sm text-blue-900">Adding structures from new RoofScope...</p>
                 </div>
               </div>
             )}
 
-            {/* Material Validation Loading */}
-            {projectManager.isLoading &&
-              structuresForValidation.length > 0 &&
-              estimate &&
-              [...(estimate.lineItems ?? []), ...(estimate.optionalItems ?? [])].length > 0 && (
-                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-600 flex-shrink-0" />
-                    <p className="text-sm text-yellow-900">Validating material compatibility...</p>
-                  </div>
-                </div>
-              )}
-
-            {/* Multi-Structure Overview Panel */}
-            {structuresForDisplay.length > 1 && (
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                  Multi-Structure Property Detected
-                </h3>
-                <p className="text-sm text-gray-700 mb-4">
-                  AI detected {structuresForDisplay.length} structures. Review each building below.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {structuresForDisplay.map((structure) => (
-                    <div
-                      key={structure.id}
-                      className="p-3 bg-white border border-gray-200 rounded-lg"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          {editingStructureId === structure.id ? (
-                            <input
-                              type="text"
-                              defaultValue={structure.name}
-                              autoFocus
-                              onBlur={(e) =>
-                                handleStructureNameSave(structure.id, e.target.value)
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleStructureNameSave(
-                                    structure.id,
-                                    (e.target as HTMLInputElement).value
-                                  );
-                                }
-                              }}
-                              className="font-semibold text-gray-900 w-full max-w-[200px] border border-transparent hover:border-gray-300 rounded px-1 py-0.5 focus:border-gray-400 focus:ring-1 focus:ring-gray-200 outline-none bg-transparent"
-                            />
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setEditingStructureId(structure.id)}
-                              className="inline-flex items-center gap-1.5 text-left group"
-                            >
-                              <h4 className="font-semibold text-gray-900 group-hover:text-[#00293f]">
-                                {structure.name}
-                              </h4>
-                              <Edit2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                            </button>
-                          )}
-                          <p className="text-sm text-gray-600">
-                            Type: {structure.type} • {structure.measurements.total_squares.toFixed(1)} SQ
-                          </p>
-                        </div>
-                        <span
-                          className={`px-2 py-1 text-xs font-medium rounded ${
-                            structure.hasAnalysisPage ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                          }`}
-                        >
-                          {structure.hasAnalysisPage ? 'Detailed' : 'Estimated'}
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-500 space-y-1">
-                        <div>Pitch: {structure.measurements.predominant_pitch || 'N/A'}</div>
-                        <div>Eave: {structure.measurements.eave_length} LF</div>
-                        <div>Valley: {structure.measurements.valley_length} LF</div>
-                        {!structure.hasAnalysisPage && (
-                          <p className="text-yellow-700 mt-2">
-                            No analysis page - measurements estimated
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 p-3 bg-white border border-gray-300 rounded">
-                  <p className="text-sm text-gray-700">
-                    <strong>Total Combined:</strong>{' '}
-                    {structuresForDisplay
-                      .reduce((sum, s) => sum + s.measurements.total_squares, 0)
-                      .toFixed(1)}{' '}
-                    SQ across {structuresForDisplay.length} buildings
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Add Another RoofScope */}
-            <div className="mb-4">
-              <input
-                ref={addAnotherRoofScopeInputRef}
-                type="file"
-                accept=".pdf"
-                onChange={imageExtraction.handleFileUpload}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => addAnotherRoofScopeInputRef.current?.click()}
-                disabled={imageExtraction.isProcessing}
-                className="inline-flex items-center gap-2 px-4 py-2 border border-[#00293f] text-[#00293f] rounded-lg hover:bg-[#00293f]/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-              >
-                {imageExtraction.isProcessing ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#00293f]" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" />
-                    Add Another RoofScope
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* AI Detection Confidence */}
-            {lastDetection && (
-              <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded">
-                <p className="text-sm text-gray-700">
-                  <strong>AI Detection Summary:</strong> {lastDetection.summary}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Confidence:{' '}
-                  {lastDetection.confidence === 'high'
-                    ? 'High'
-                    : lastDetection.confidence === 'medium'
-                      ? 'Medium'
-                      : 'Low'}
-                </p>
-                {lastDetection.confidence === 'low' && (
-                  <p className="text-xs text-yellow-700 mt-1">
-                    Low confidence - recommend uploading analysis pages for accurate measurements
-                  </p>
-                )}
-              </div>
-            )}
-
-            <ReviewStep
-              measurements={measurements}
-              customerInfo={customerInfo}
-              uploadedImages={uploadedImages}
-              structureCount={structuresForValidation.length}
-              activeStructureTab={activeStructureTab}
-              estimateStructures={estimateStructures}
-              roofSystem={roofSystem}
-              onRoofSystemChange={setRoofSystem}
-              vendorQuotes={vendorQuotes.vendorQuotes}
-              vendorQuoteItems={vendorQuotes.vendorQuoteItems}
-              isExtractingVendorQuote={vendorQuotes.isExtractingVendorQuote}
-              jobDescription={smartSelection.jobDescription}
+            <BuildStep
+              activeBuilding={buildState.activeIndex >= 0 ? buildState.buildings[buildState.activeIndex] ?? null : null}
+              isAllCombinedTab={buildState.activeIndex === -1}
+              measurements={effectiveMeasurements}
+              structureCount={buildState.buildings.length}
+              roofSystem={effectiveRoofSystem}
               quickSelections={smartSelection.quickSelections}
               smartSelectionReasoning={smartSelection.smartSelectionReasoning}
               smartSelectionWarnings={smartSelection.smartSelectionWarnings}
               isGeneratingSelection={smartSelection.isGeneratingSelection}
               allSelectableItemsLength={allSelectableItems.length}
-              onCustomerInfoChange={(field, value) => {
-                setCustomerInfo(prev => ({ ...prev, [field]: value }));
-              }}
-              onReset={resetEstimator}
-              onVendorQuoteUpload={vendorQuotes.handleVendorQuoteUpload}
-              onRemoveVendorQuote={vendorQuotes.removeVendorQuoteFromState}
-              onJobDescriptionChange={smartSelection.setJobDescription}
-              onToggleQuickSelection={(optionId) => {
-                smartSelection.setQuickSelections(prev => prev.map(opt => {
-                  if (opt.id === optionId) {
-                    const nextSelected = !opt.selected;
-                    smartSelection.setJobDescription(prevDesc => {
-                      const hasKeyword = prevDesc.toLowerCase().includes(opt.keyword.toLowerCase());
-                      if (!nextSelected) {
-                        return removeKeywordFromDescription(prevDesc, opt.keyword);
-                      }
-                      if (hasKeyword) return prevDesc;
-                      return prevDesc ? `${prevDesc}, ${opt.keyword}` : opt.keyword;
-                    });
-                    return { ...opt, selected: nextSelected };
-                  }
-                  return opt;
-                }));
-              }}
+              combinedEstimate={buildState.activeIndex === -1 ? calculateEstimateHook() ?? null : null}
+              buildings={buildState.buildings}
               onGenerateSmartSelection={smartSelection.generateSmartSelection}
-            />
+              onToggleQuickSelection={(optionId) => {
+                smartSelection.setQuickSelections((prev) =>
+                  prev.map((opt) => {
+                    if (opt.id === optionId) {
+                      const nextSelected = !opt.selected;
+                      smartSelection.setJobDescription((prevDesc) => {
+                        const hasKeyword = prevDesc.toLowerCase().includes(opt.keyword.toLowerCase());
+                        if (!nextSelected) return removeKeywordFromDescription(prevDesc, opt.keyword);
+                        if (hasKeyword) return prevDesc;
+                        return prevDesc ? `${prevDesc}, ${opt.keyword}` : opt.keyword;
+                      });
+                      return { ...opt, selected: nextSelected };
+                    }
+                    return opt;
+                  })
+                );
+              }}
+            >
+              <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
+                <h2 className="font-semibold text-gray-900 mb-4">Build Your Estimate</h2>
 
-
-            {/* Line Item Builder */}
-            <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
-              <h2 className="font-semibold text-gray-900 mb-4">Build Your Estimate</h2>
-
-              {allSelectableItems.length === 0 ? (
+                {allSelectableItems.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
                   <p className="mb-2 text-sm">No price items or vendor items yet.</p>
                   <button
@@ -1529,9 +1554,9 @@ export default function RoofScopeEstimator() {
                   onCalculateEstimate={calculateEstimate}
                   getEstimateCategoryItems={getEstimateCategoryItems}
                   calculatedAccessories={
-                    measurements && measurements.eave_length ? (
+                    effectiveMeasurements && effectiveMeasurements.eave_length ? (
                       <CalculatedAccessories
-                        measurements={measurements}
+                        measurements={effectiveMeasurements}
                         isMetalRoof={isMetalRoof}
                         priceItems={priceItems.priceItems}
                         selectedItems={selectedItems}
@@ -1573,16 +1598,17 @@ export default function RoofScopeEstimator() {
                 />
               )}
             </div>
+            </BuildStep>
           </div>
         )}
 
         {/* Final Estimate */}
-        {step === 'estimate' && estimate && (
+        {step === 'review' && estimate && (
           <EstimateView
             estimate={estimate}
             displayMeasurements={
-              activeStructureTab !== 'combined' && estimateStructures.length > 1
-                ? estimateStructures.find((s) => s.id === activeStructureTab)?.measurements ?? estimate.measurements
+              buildState.activeIndex >= 0 && buildState.buildings.length > 1
+                ? buildState.buildings[buildState.activeIndex]?.measurements ?? estimate.measurements
                 : undefined
             }
             validationWarnings={validationWarnings}
@@ -1601,7 +1627,7 @@ export default function RoofScopeEstimator() {
             onToggleSection={toggleSection}
             onToggleVendorBreakdown={() => vendorQuotes.setShowVendorBreakdown(prev => !prev)}
             onEditEstimate={() => {
-              setStep('extracted');
+              setStep('build');
               setValidationWarnings([]);
             }}
             onSaveQuote={async () => {
@@ -1650,7 +1676,7 @@ export default function RoofScopeEstimator() {
                   return updated;
                 });
                 // Trigger recalculation
-                if (estimate && step === 'estimate') {
+                if (estimate && step === 'review') {
                   setTimeout(() => calculateEstimate(), 100);
                 }
               }

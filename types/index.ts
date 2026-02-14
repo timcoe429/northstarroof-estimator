@@ -27,6 +27,18 @@ export interface EstimateStructure {
   sourceRoofScopeIndex?: number;
 }
 
+/** Per-building estimate state for Setup/Build/Review flow (Phase B) */
+export interface BuildingEstimate {
+  structureId: string;
+  structureName: string;
+  roofSystem: string;
+  measurements: Measurements;
+  selectedItems: string[];
+  itemQuantities: Record<string, number>;
+  vendorQuoteItemIds: string[];
+  jobDescription?: string;
+}
+
 export interface PriceItem {
   id: string;
   name: string;
@@ -136,6 +148,7 @@ export interface SavedQuote {
   created_at: string;
   updated_at: string;
   structures?: EstimateStructure[];
+  buildings?: BuildingEstimate[];
 }
 
 export interface VendorQuote {

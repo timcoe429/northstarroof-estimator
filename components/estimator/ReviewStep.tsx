@@ -304,7 +304,7 @@ export function ReviewStep({
         />
         <button
           onClick={onGenerateSmartSelection}
-          disabled={!roofSystem || !jobDescription.trim() || allSelectableItemsLength === 0 || isGeneratingSelection}
+          disabled={!roofSystem || allSelectableItemsLength === 0 || isGeneratingSelection}
           className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium rounded-lg flex items-center justify-center gap-2 text-sm"
         >
           {isGeneratingSelection ? (

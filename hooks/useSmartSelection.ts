@@ -129,8 +129,8 @@ export const useSmartSelection = ({
       alert('Select a roof system first.');
       return;
     }
-    if (!jobDescription.trim() || !measurements || allSelectableItems.length === 0) {
-      alert('Please provide a job description and ensure you have price items or vendor items.');
+    if (!measurements || allSelectableItems.length === 0) {
+      alert('Ensure measurements exist and you have price items or vendor items.');
       return;
     }
 
@@ -153,7 +153,7 @@ export const useSmartSelection = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           roofSystem,
-          jobDescription,
+          jobDescription: jobDescription.trim() || '',
           measurements,
           selectionItems,
           vendorQuoteItems,

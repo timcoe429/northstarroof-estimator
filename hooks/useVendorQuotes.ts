@@ -529,9 +529,11 @@ Return only the JSON object, no other text.`;
       }
 
       if (newItems.length > 0) {
-        const newItemIds = newItems.map(item => item.id);
+        const newItemIdsToSelect = newItems
+          .filter(item => (item.quantity ?? 0) > 0)
+          .map(item => item.id);
         setVendorQuoteItems(prev => [...prev, ...newItems]);
-        onSetSelectedItems(prev => Array.from(new Set([...prev, ...newItemIds])));
+        onSetSelectedItems(prev => Array.from(new Set([...prev, ...newItemIdsToSelect])));
         onSetItemQuantities(prev => {
           const updated = { ...prev };
           newItems.forEach(item => {
