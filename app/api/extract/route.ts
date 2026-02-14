@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { image, prompt, max_tokens = 4000 } = await request.json();
+    const { image, imageUrl, prompt, max_tokens = 4000 } = await request.json();
 
     if (!prompt) {
       return NextResponse.json(
@@ -20,16 +20,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build content array - include image if provided, otherwise text-only
+    // Build content array - include image if provided (image or imageUrl), otherwise text-only
     const content: any[] = [];
-    
-    if (image) {
-      const mediaType = image.includes('data:')
+    let base64Data: string | undefined;
+    let mediaType: string;
+
+    if (imageUrl) {
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        return NextResponse.json(
+          { error: 'Failed to fetch image from URL' },
+          { status: 400 }
+        );
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      base64Data = Buffer.from(arrayBuffer).toString('base64');
+      mediaType = response.headers.get('content-type') || 'application/pdf';
+    } else if (image) {
+      mediaType = image.includes('data:')
         ? image.split(';')[0].split(':')[1]
         : 'image/png';
-      const base64Data = image.includes(',') ? image.split(',')[1] : image;
-      const contentType = mediaType === 'application/pdf' ? 'document' : 'image';
+      base64Data = image.includes(',') ? image.split(',')[1] : image;
+    }
 
+    if (base64Data) {
+      const contentType = mediaType === 'application/pdf' ? 'document' : 'image';
       content.push({
         type: contentType,
         source: { type: 'base64', media_type: mediaType, data: base64Data },

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Measurements, CustomerInfo, PriceItem } from '@/types';
-import { fileToBase64, mergeMeasurements } from '@/lib/estimatorUtils';
+import { fileToBase64, mergeMeasurements, generateId } from '@/lib/estimatorUtils';
+import { supabase } from '@/lib/supabase';
 
 interface UseImageExtractionProps {
   measurements: Measurements | null;
@@ -92,18 +93,23 @@ Return ONLY a JSON object:
 
 Use 0 for any values not visible. Use empty string for address fields if not visible. Return only JSON.`;
 
-  const extractSummaryFromDataUrl = async (
-    dataUrl: string,
-    fileName: string
-  ): Promise<boolean> => {
+  const callExtractApi = async (params: {
+    image?: string;
+    imageUrl?: string;
+    prompt: string;
+    max_tokens?: number;
+  }) => {
+    const body: Record<string, unknown> = {
+      prompt: params.prompt,
+      max_tokens: params.max_tokens ?? 1500,
+    };
+    if (params.image) body.image = params.image;
+    if (params.imageUrl) body.imageUrl = params.imageUrl;
+
     const response = await fetch('/api/extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        image: dataUrl,
-        prompt: SUMMARY_PROMPT,
-        max_tokens: 1500,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -116,16 +122,18 @@ Use 0 for any values not visible. Use empty string for address fields if not vis
     if (!jsonMatch) {
       throw new Error('Could not parse measurements');
     }
+    return JSON.parse(jsonMatch[0]);
+  };
 
-    const extracted = JSON.parse(jsonMatch[0]);
+  const processExtractResponse = (extracted: Record<string, unknown>, fileName: string) => {
     if (extracted.street_name || extracted.project_address) {
       onSetCustomerInfo(prev => ({
         ...prev,
-        name: extracted.street_name || prev.name || '',
-        address: extracted.project_address || prev.address || '',
+        name: (extracted.street_name as string) || prev.name || '',
+        address: (extracted.project_address as string) || prev.address || '',
       }));
     }
-    const newMeasurements = { ...extracted, fileName };
+    const newMeasurements = { ...extracted, fileName } as Measurements;
 
     if (measurements) {
       const merged = mergeMeasurements(measurements, newMeasurements);
@@ -138,6 +146,18 @@ Use 0 for any values not visible. Use empty string for address fields if not vis
       onApplyAutoSelection(newMeasurements);
       onSetStep('extracted');
     }
+  };
+
+  const extractSummaryFromDataUrl = async (
+    dataUrl: string,
+    fileName: string
+  ): Promise<boolean> => {
+    const extracted = await callExtractApi({
+      image: dataUrl,
+      prompt: SUMMARY_PROMPT,
+      max_tokens: 1500,
+    });
+    processExtractResponse(extracted, fileName);
     return true;
   };
 
@@ -360,20 +380,40 @@ Use null for any values not visible. Return only JSON.`;
 
   // Extract roof measurements from image (routes to appropriate extractor based on context)
   const extractFromImage = async (file: File) => {
-    // RoofScope PDFs: send directly to Claude (no pdf.js conversion)
+    // RoofScope PDFs: upload to Supabase Storage, then send URL to bypass 4.5MB body limit
     if (file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf')) {
       setIsProcessing(true);
+      const storagePath = `temp/${Date.now()}-${generateId()}.pdf`;
       try {
-        const base64 = await fileToBase64(file);
-        const pdfDataUrl = `data:application/pdf;base64,${base64}`;
+        const { error: uploadError } = await supabase.storage
+          .from('roofscope-temp')
+          .upload(storagePath, file, { upsert: false });
 
-        await extractSummaryFromDataUrl(pdfDataUrl, file.name || 'RoofScope PDF');
+        if (uploadError) {
+          throw new Error(uploadError.message);
+        }
+
+        const { data: signedData, error: signedError } = await supabase.storage
+          .from('roofscope-temp')
+          .createSignedUrl(storagePath, 600);
+
+        if (signedError || !signedData?.signedUrl) {
+          await supabase.storage.from('roofscope-temp').remove([storagePath]);
+          throw new Error(signedError?.message || 'Failed to create signed URL');
+        }
+
+        const extracted = await callExtractApi({
+          imageUrl: signedData.signedUrl,
+          prompt: SUMMARY_PROMPT,
+          max_tokens: 1500,
+        });
+        processExtractResponse(extracted, file.name || 'RoofScope PDF');
 
         onSetUploadedImages(prev =>
           new Set(Array.from(prev).concat('summary', 'analysis'))
         );
         try {
-          onRoofScopeImageExtracted?.(pdfDataUrl);
+          onRoofScopeImageExtracted?.(signedData.signedUrl);
         } catch (aiError) {
           console.error('AI structure detection callback error:', aiError);
         }
@@ -382,6 +422,10 @@ Use null for any values not visible. Return only JSON.`;
         alert('Could not read PDF. Please try again.');
       } finally {
         setIsProcessing(false);
+        // Delete temp file after 2 min so structure detection can fetch it first
+        setTimeout(() => {
+          supabase.storage.from('roofscope-temp').remove([storagePath]).catch(() => {});
+        }, 120000);
       }
       return;
     }

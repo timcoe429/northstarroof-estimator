@@ -153,20 +153,34 @@ export async function detectStructures(
     const content: unknown[] = [];
 
     for (const item of roofScopeImages.slice(0, 5)) {
-      const base64Data = item.includes(',') ? item.split(',')[1] : item;
-      if (item.startsWith('data:application/pdf')) {
+      let base64Data: string;
+      let mediaType: string;
+
+      if (item.startsWith('http://') || item.startsWith('https://')) {
+        const response = await fetch(item);
+        if (!response.ok) continue;
+        const arrayBuffer = await response.arrayBuffer();
+        base64Data = Buffer.from(arrayBuffer).toString('base64');
+        mediaType = response.headers.get('content-type') || 'application/pdf';
+      } else {
+        base64Data = item.includes(',') ? item.split(',')[1] : item;
+        mediaType = item.startsWith('data:application/pdf')
+          ? 'application/pdf'
+          : item.includes('data:image/')
+            ? item.split(';')[0].split(':')[1]
+            : 'image/png';
+      }
+
+      if (mediaType === 'application/pdf') {
         content.push({
           type: 'document',
           source: {
             type: 'base64',
-            media_type: 'application/pdf',
+            media_type: mediaType,
             data: base64Data,
           },
         });
       } else {
-        const mediaType = item.includes('data:image/')
-          ? item.split(';')[0].split(':')[1]
-          : 'image/png';
         content.push({
           type: 'image',
           source: { type: 'base64', media_type: mediaType, data: base64Data },
