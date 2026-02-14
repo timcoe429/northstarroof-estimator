@@ -249,9 +249,11 @@ export default function RoofScopeEstimator() {
       const updatedImages = [...roofScopeImages, ...newImages];
       setRoofScopeImages(updatedImages);
       setAiStatus('Analyzing document structure...');
+      const requestId = ++latestDetectionRef.current;
       projectManager
         .detectStructures(updatedImages)
         .then((result) => {
+          if (requestId !== latestDetectionRef.current) return;
           if (result.structures.length !== (lastDetection?.structures.length ?? 0)) {
             console.log(
               `Structure count changed: ${lastDetection?.structures.length ?? 0} → ${result.structures.length}`
@@ -351,6 +353,7 @@ export default function RoofScopeEstimator() {
   // Manual organization trigger with guard against concurrent calls
   const organizingRef = useRef(false);
   const addAnotherRoofScopeInputRef = useRef<HTMLInputElement>(null);
+  const latestDetectionRef = useRef(0);
 
   const triggerOrganization = useCallback(async (est: Estimate) => {
     if (organizingRef.current) return;

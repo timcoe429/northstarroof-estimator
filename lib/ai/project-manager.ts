@@ -188,7 +188,7 @@ export async function detectStructures(
       }
     }
 
-    const prompt = `Analyze this RoofScope document or these images. Apply the multi-structure detection rules above.
+    const prompt = `Analyze the following RoofScope document(s). There may be MULTIPLE separate RoofScope PDFs for the same property — each PDF may contain one or more structures. Find ALL structures across ALL documents and return them as a single combined list. Each structure should have its own measurements extracted from the relevant pages. Apply the multi-structure detection rules above.
 
 Return ONLY valid JSON in this exact format (no markdown, no commentary):
 {

@@ -244,7 +244,7 @@ export function ReviewStep({
           <div key={key} className="bg-gray-50 rounded-lg p-2 md:p-3">
             <div className="text-xs text-gray-500">{label}</div>
             <div className="text-lg md:text-xl font-bold">
-              {measurements[key]} <span className="text-xs md:text-sm font-normal text-gray-400">{unit}</span>
+              {typeof measurements[key] === 'number' ? Math.round(measurements[key] * 10) / 10 : measurements[key]} <span className="text-xs md:text-sm font-normal text-gray-400">{unit}</span>
             </div>
           </div>
         ))}
