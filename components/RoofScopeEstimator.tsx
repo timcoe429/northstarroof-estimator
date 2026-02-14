@@ -68,6 +68,7 @@ export default function RoofScopeEstimator() {
   const [estimateStructures, setEstimateStructures] = useState<EstimateStructure[]>([]);
   const [editingStructureId, setEditingStructureId] = useState<string | null>(null);
   const [activeStructureTab, setActiveStructureTab] = useState<string>('combined');
+  const [roofSystem, setRoofSystem] = useState<string>('');
 
   // Initialize AI Project Manager
   const projectManager = useProjectManager(savedEstimateId ?? null);
@@ -156,6 +157,7 @@ export default function RoofScopeEstimator() {
   // Initialize smart selection hook
   const smartSelection = useSmartSelection({
     measurements,
+    roofSystem,
     vendorQuotes: vendorQuotes.vendorQuotes,
     allSelectableItems,
     vendorQuoteItems: vendorQuotes.vendorQuoteItems,
@@ -186,6 +188,7 @@ export default function RoofScopeEstimator() {
         availablePriceItems: allSelectableItems,
         vendorQuotes: vendorQuotes.vendorQuotes,
         vendorQuoteItems: vendorQuotes.vendorQuoteItems,
+        roofSystemId: roofSystem || undefined,
         selectedLaborItems: selectedItems.filter(id => {
           const item = allSelectableItems.find(i => i.id === id);
           return item?.category === 'labor';
@@ -464,6 +467,8 @@ export default function RoofScopeEstimator() {
     userId: user?.id,
     companyId: companyId ?? undefined,
     estimate,
+    roofSystem,
+    onSetRoofSystem: setRoofSystem,
     vendorQuotes: vendorQuotes.vendorQuotes,
     vendorQuoteItems: vendorQuotes.vendorQuoteItems,
     onSetVendorQuotes: vendorQuotes.setVendorQuotes,
@@ -761,6 +766,7 @@ export default function RoofScopeEstimator() {
     vendorQuotes.setVendorQuotes([]);
     vendorQuotes.setVendorQuoteItems([]);
     smartSelection.setJobDescription('');
+    setRoofSystem('');
     smartSelection.setQuickSelections([]);
     setValidationWarnings([]);
     setSkylightCount(0);
@@ -1423,6 +1429,8 @@ export default function RoofScopeEstimator() {
               structureCount={structuresForValidation.length}
               activeStructureTab={activeStructureTab}
               estimateStructures={estimateStructures}
+              roofSystem={roofSystem}
+              onRoofSystemChange={setRoofSystem}
               vendorQuotes={vendorQuotes.vendorQuotes}
               vendorQuoteItems={vendorQuotes.vendorQuoteItems}
               isExtractingVendorQuote={vendorQuotes.isExtractingVendorQuote}

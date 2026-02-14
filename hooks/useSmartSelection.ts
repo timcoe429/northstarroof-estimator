@@ -5,6 +5,7 @@ import { removeKeywordFromDescription } from '@/lib/estimatorUtils';
 
 interface UseSmartSelectionProps {
   measurements: Measurements | null;
+  roofSystem: string;
   vendorQuotes: any[];
   allSelectableItems: SelectableItem[];
   vendorQuoteItems: any[];
@@ -18,6 +19,7 @@ interface UseSmartSelectionProps {
 
 export const useSmartSelection = ({
   measurements,
+  roofSystem,
   vendorQuotes,
   allSelectableItems,
   vendorQuoteItems,
@@ -121,8 +123,12 @@ export const useSmartSelection = ({
     }
   };
 
-  // Generate smart selection based on job description
+  // Generate smart selection based on job description and roof system
   const generateSmartSelection = async () => {
+    if (!roofSystem) {
+      alert('Select a roof system first.');
+      return;
+    }
     if (!jobDescription.trim() || !measurements || allSelectableItems.length === 0) {
       alert('Please provide a job description and ensure you have price items or vendor items.');
       return;
@@ -142,69 +148,16 @@ export const useSmartSelection = ({
         source: item.isVendorItem ? 'vendor' : 'price-list',
       }));
 
-      const prompt = `You are a roofing estimator assistant. Based on the job description and measurements, select the appropriate items from the price list.
-
-JOB DESCRIPTION:
-${jobDescription}
-
-MEASUREMENTS:
-${JSON.stringify(measurements, null, 2)}
-
-PRICE LIST:
-${JSON.stringify(selectionItems, null, 2)}
-
-RULES:
-1. METAL ROOF: If the job description mentions "metal roof", do NOT select Brava or DaVinci products.
-2. PRODUCT LINES: Only select ONE system (Brava OR DaVinci, never both)
-3. LABOR: Only select ONE crew (Hugo/Alfredo/Chris/Sergio). Pick the right Hugo rate based on pitch if Hugo is chosen.
-4. SLOPE-AWARE: If pitch >= 8/12, use High Slope/Hinged H&R variants. If < 8/12, use regular H&R.
-5. TEAR-OFF: If mentioned, include Rolloff and OSB. Calculate OSB as (total_squares * 3) sheets.
-6. DELIVERY: If Brava selected, include Brava Delivery.
-7. UNDERLAYMENT: Select appropriate underlayment (Ice & Water for valleys/eaves, synthetic for field)
-8. ACCESSORIES/CONSUMABLES: Do NOT select items like caulk, sealant, spray paint, nails, screws unless they are:
-   a) Explicitly mentioned in job description (e.g., "need 5 tubes of sealant")
-   b) Part of a vendor quote (vendor items always get selected)
-   These items are typically covered by the Sundries/Misc Materials percentage.
-9. ZERO QUANTITY RULE: Do NOT select any item that would result in 0 quantity. If you can't calculate a quantity for an item and it's not a flat-fee item (delivery, rolloff), don't select it.
-10. SPECIAL REQUESTS: If user mentions specific items (copper valleys, snowguards, skylights), select those.
-11. VENDOR ITEMS: Vendor items already have quantities from the quote. Do NOT infer quantities unless explicitly stated.
-
-EXPLICIT QUANTITIES:
-If the job description specifies an exact quantity for an item, extract it in the "explicitQuantities" object.
-- Look for patterns like "250 snowguards", "3 rolloffs", "2 dumpsters", "3 porto potties", "need 2 rolloffs"
-- Only extract when a NUMBER is directly stated with an item name
-- Use a partial item name as the key (e.g., "snowguard" for "Snowguard Install", "rolloff" or "dumpster" for "Rolloff", "porto" for "Porto Potty")
-- Do NOT guess quantities - only extract when explicitly stated
-- Handle synonyms: "dumpster" and "rolloff" refer to the same item, "porto" and "porto potty" refer to the same item
-- Examples:
-  * "Also give us 250 snowguards" → {"snowguard": 250}
-  * "add 2 dumpsters" → {"rolloff": 2} or {"dumpster": 2} (both work)
-  * "need 2 rolloffs" → {"rolloff": 2}
-  * "3 porto potties" → {"porto": 3} or {"porto potty": 3}
-  * "add snowguards" → NO explicit quantity (don't include in explicitQuantities)
-  * "Brava tile" → NO explicit quantity
-
-Return ONLY JSON:
-{
-  "selectedItemIds": ["id1", "id2", ...],
-  "explicitQuantities": {
-    "item_name_partial": quantity_number
-  },
-  "reasoning": "Brief explanation of why you selected these items",
-  "warnings": ["Any concerns or things to double-check"]
-}
-
-The "explicitQuantities" object should only contain items where a NUMBER was explicitly stated in the job description.
-If no explicit quantities are found, use an empty object: "explicitQuantities": {}
-
-Only return the JSON, no other text.`;
-
-      const response = await fetch('/api/extract', {
+      const response = await fetch('/api/smart-selection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt,
-          max_tokens: 2000,
+          roofSystem,
+          jobDescription,
+          measurements,
+          selectionItems,
+          vendorQuoteItems,
+          itemQuantities,
         }),
       });
 

@@ -8,7 +8,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholde
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Save quote to Supabase
-export async function saveQuote(estimate: Estimate, quoteName: string, userId: string | undefined, companyId: string | undefined, jobDescription?: string): Promise<SavedQuote> {
+export async function saveQuote(estimate: Estimate, quoteName: string, userId: string | undefined, companyId: string | undefined, jobDescription?: string, roofSystem?: string): Promise<SavedQuote> {
   // Debug logging
   console.log('saveQuote received userId:', userId);
   console.log('saveQuote received companyId:', companyId);
@@ -49,6 +49,9 @@ export async function saveQuote(estimate: Estimate, quoteName: string, userId: s
   // Add optional fields
   if (jobDescription !== undefined) {
     quoteData.job_description = jobDescription;
+  }
+  if (roofSystem !== undefined) {
+    quoteData.roof_system = roofSystem;
   }
   if (estimate.sectionHeaders) {
     quoteData.section_headers = estimate.sectionHeaders;

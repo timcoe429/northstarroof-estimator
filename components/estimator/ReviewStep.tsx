@@ -5,6 +5,7 @@ import { Check, Upload, FileText, X, Calculator } from 'lucide-react';
 import type { Measurements, CustomerInfo, VendorQuote, VendorQuoteItem, EstimateStructure } from '@/types';
 import type { QuickSelectOption } from '@/types/estimator';
 import { formatCurrency, formatVendorName, removeKeywordFromDescription } from '@/lib/estimatorUtils';
+import { ROOF_SYSTEM_OPTIONS } from '@/lib/roofSystemConstants';
 
 interface ReviewStepProps {
   /** Extracted measurements */
@@ -13,7 +14,11 @@ interface ReviewStepProps {
   customerInfo: CustomerInfo;
   /** Set of uploaded image types */
   uploadedImages: Set<string>;
-  /** Vendor quotes */
+  /** Selected roof system ID */
+  roofSystem: string;
+  /** Callback to change roof system */
+  onRoofSystemChange: (value: string) => void;
+  /** Vendor quotes (array from useVendorQuotes.vendorQuotes) */
   vendorQuotes: VendorQuote[];
   /** Vendor quote items */
   vendorQuoteItems: VendorQuoteItem[];
@@ -61,6 +66,8 @@ export function ReviewStep({
   measurements,
   customerInfo,
   uploadedImages,
+  roofSystem,
+  onRoofSystemChange,
   vendorQuotes,
   vendorQuoteItems,
   isExtractingVendorQuote,
@@ -268,8 +275,25 @@ export function ReviewStep({
         ))}
       </div>
 
-      {/* Job Description and Smart Selection */}
+      {/* Roof System and Job Description */}
       <div className="space-y-3">
+        <h3 className="font-semibold text-gray-900">Roof System</h3>
+        <select
+          value={roofSystem}
+          onChange={(e) => onRoofSystemChange(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+        >
+          {ROOF_SYSTEM_OPTIONS.map((opt) => (
+            <option key={opt.value || 'empty'} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        {vendorQuotes.some((q) => q.vendor === 'schafer') && (
+          <p className="text-sm text-amber-700">
+            Schafer quote detected — Standing Seam Metal recommended
+          </p>
+        )}
         <h3 className="font-semibold text-gray-900">Job Description</h3>
         <input
           type="text"
@@ -280,7 +304,7 @@ export function ReviewStep({
         />
         <button
           onClick={onGenerateSmartSelection}
-          disabled={!jobDescription.trim() || allSelectableItemsLength === 0 || isGeneratingSelection}
+          disabled={!roofSystem || !jobDescription.trim() || allSelectableItemsLength === 0 || isGeneratingSelection}
           className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium rounded-lg flex items-center justify-center gap-2 text-sm"
         >
           {isGeneratingSelection ? (
@@ -295,6 +319,9 @@ export function ReviewStep({
             </>
           )}
         </button>
+        {!roofSystem && (
+          <p className="text-sm text-gray-500">Select a roof system to enable Smart Selection</p>
+        )}
         {smartSelectionReasoning && (
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm font-medium text-blue-900 mb-1">AI Reasoning:</p>

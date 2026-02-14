@@ -12,6 +12,7 @@ export interface AutoSelectionContext {
   availablePriceItems: PriceItem[];
   vendorQuotes: VendorQuote[];
   vendorQuoteItems: VendorQuoteItem[];
+  roofSystemId?: string;
   selectedLaborItems?: string[];
 }
 
@@ -22,10 +23,32 @@ export interface AutoSelectionResult {
 }
 
 /**
+ * Map roof system ID to RoofType for auto-selection
+ */
+function roofSystemIdToRoofType(id: string): RoofType | null {
+  const map: Record<string, RoofType> = {
+    'standing-seam-metal': 'metal',
+    'brava-tile': 'synthetic',
+    'davinci-shake': 'synthetic',
+    'asphalt-presidential': 'asphalt-presidential',
+    'asphalt-standard': 'asphalt-basic',
+    'cedar': 'non-metal',
+    'flat-low-slope': 'non-metal',
+  };
+  return map[id] ?? null;
+}
+
+/**
  * Detect roof type using multi-source detection in priority order
  */
 export function detectRoofType(context: AutoSelectionContext): RoofType {
-  const { jobDescription, vendorQuotes, vendorQuoteItems } = context;
+  const { jobDescription, vendorQuotes, vendorQuoteItems, roofSystemId } = context;
+
+  // Use explicit roof system selection when provided
+  if (roofSystemId) {
+    const mapped = roofSystemIdToRoofType(roofSystemId);
+    if (mapped) return mapped;
+  }
 
   // Priority 1: Check vendor quote vendor name
   const hasMetalVendor = vendorQuotes.some(

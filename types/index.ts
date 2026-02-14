@@ -128,6 +128,7 @@ export interface SavedQuote {
     schafer: string;
   };
   job_description?: string;
+  roof_system?: string;
   total_cost: number;
   sell_price: number;
   gross_profit: number;

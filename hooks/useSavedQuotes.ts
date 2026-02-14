@@ -7,6 +7,8 @@ interface UseSavedQuotesProps {
   userId: string | undefined;
   companyId: string | undefined;
   estimate: Estimate | null;
+  roofSystem: string;
+  onSetRoofSystem: (value: string) => void;
   vendorQuotes: VendorQuote[];
   vendorQuoteItems: VendorQuoteItem[];
   onSetVendorQuotes: (quotes: VendorQuote[] | ((prev: VendorQuote[]) => VendorQuote[])) => void;
@@ -35,6 +37,8 @@ export const useSavedQuotes = ({
   userId,
   companyId,
   estimate,
+  roofSystem,
+  onSetRoofSystem,
   vendorQuotes,
   vendorQuoteItems,
   onSetVendorQuotes,
@@ -123,7 +127,7 @@ export const useSavedQuotes = ({
         throw new Error('Invalid user ID format. Please log out and log back in.');
       }
       
-      const savedQuote = await saveQuote(estimateWithCustomerInfo, quoteName.trim(), userId, companyId, jobDescription);
+      const savedQuote = await saveQuote(estimateWithCustomerInfo, quoteName.trim(), userId, companyId, jobDescription, roofSystem);
 
       if (vendorQuotes.length > 0) {
         await saveVendorQuotes(savedQuote.id, vendorQuotes, vendorQuoteItems);
@@ -174,6 +178,14 @@ export const useSavedQuotes = ({
         onSetJobDescription(restoredJobDescription);
       }
       onAnalyzeJobForQuickSelections(cleanMeasurements, restoredJobDescription || jobDescription);
+
+      // Restore roof system from database
+      const restoredRoofSystem = (savedQuote as any).roof_system || '';
+      if (restoredRoofSystem) {
+        onSetRoofSystem(restoredRoofSystem);
+      } else {
+        onSetRoofSystem('');
+      }
 
       // Load vendor quotes tied to this estimate
       let loadedVendorItems: VendorQuoteItem[] = [];
