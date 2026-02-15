@@ -1,11 +1,20 @@
 'use client'
 
 import React from 'react';
-import { Calculator } from 'lucide-react';
+import { Calculator, ClipboardList } from 'lucide-react';
 import type { Measurements, BuildingEstimate, Estimate } from '@/types';
 import type { QuickSelectOption } from '@/types/estimator';
 import { roofSystemIdToDisplayName } from '@/lib/roofSystemConstants';
 import { formatCurrency } from '@/lib/estimatorUtils';
+
+interface AllBuildingsProgress {
+  isRunning: boolean;
+  current: number;
+  total: number;
+  skipped: string[];
+  failed: string[];
+  completeMessage: string | null;
+}
 
 interface BuildStepProps {
   /** Active building when editing (null = All Combined read-only view) */
@@ -34,6 +43,10 @@ interface BuildStepProps {
   buildings?: BuildingEstimate[];
   /** Callback to generate smart selection */
   onGenerateSmartSelection: () => void;
+  /** Callback to generate smart selection for all buildings (All Combined tab) */
+  onGenerateSmartSelectionForAll?: () => void;
+  /** Progress state when running smart selection for all buildings */
+  allBuildingsProgress?: AllBuildingsProgress | null;
   /** Callback to toggle quick selection */
   onToggleQuickSelection: (optionId: string) => void;
   /** Content to render when editing a building (EstimateBuilder + CalculatedAccessories) */
@@ -59,18 +72,59 @@ export function BuildStep({
   combinedEstimate,
   buildings = [],
   onGenerateSmartSelection,
+  onGenerateSmartSelectionForAll,
+  allBuildingsProgress,
   onToggleQuickSelection,
   children,
 }: BuildStepProps) {
   if (isAllCombinedTab) {
     // Read-only All Combined view
     const totals = combinedEstimate?.totals;
+    const isGeneratingForAll = allBuildingsProgress?.isRunning ?? false;
+    const hasCompleteMessage = allBuildingsProgress?.completeMessage && !allBuildingsProgress?.isRunning;
+
     return (
       <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
         <h2 className="font-semibold text-gray-900 mb-4">All Combined — Read Only</h2>
         <p className="text-sm text-gray-500 mb-4">
           Total across all {buildings.length} building{buildings.length !== 1 ? 's' : ''}. Switch to individual building tabs to edit.
         </p>
+
+        {/* Generate Smart Selection for All Buildings button */}
+        {onGenerateSmartSelectionForAll && allSelectableItemsLength > 0 && (
+          <div className="space-y-2 mb-4">
+            <button
+              onClick={onGenerateSmartSelectionForAll}
+              disabled={isGeneratingForAll || buildings.length === 0}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium rounded-lg flex items-center justify-center gap-2 text-sm"
+            >
+              {isGeneratingForAll ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Generating selections... {allBuildingsProgress?.current ?? 0} of {allBuildingsProgress?.total ?? 0} buildings
+                </>
+              ) : (
+                <>
+                  <ClipboardList className="w-4 h-4" />
+                  Generate Smart Selection for All Buildings
+                </>
+              )}
+            </button>
+            {isGeneratingForAll && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-900">
+                  Generating selections... {allBuildingsProgress?.current ?? 0} of {allBuildingsProgress?.total ?? 0} buildings
+                </p>
+              </div>
+            )}
+            {hasCompleteMessage && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-900">{allBuildingsProgress?.completeMessage}</p>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="space-y-4">
           {totals && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-gray-50 rounded-xl">

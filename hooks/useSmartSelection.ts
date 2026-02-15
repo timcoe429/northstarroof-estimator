@@ -261,6 +261,100 @@ export const useSmartSelection = ({
     }
   };
 
+  /**
+   * Run Smart Selection for a specific building (used by "Generate for All Buildings").
+   * Does not update global state — returns selectedItems and itemQuantities for the caller to store on that building.
+   */
+  const runSmartSelectionForBuilding = async (params: {
+    roofSystem: string;
+    measurements: Measurements;
+    itemQuantities: Record<string, number>;
+    vendorQuoteItemIds: string[];
+  }): Promise<{ selectedItems: string[]; itemQuantities: Record<string, number> }> => {
+    const { roofSystem: rs, measurements: m, itemQuantities: iq, vendorQuoteItemIds } = params;
+    if (!rs || !m || allSelectableItems.length === 0) {
+      throw new Error(rs ? 'Missing measurements or price items' : 'Roof system required');
+    }
+
+    const selectionItems = allSelectableItems.map((item) => ({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      unit: item.unit,
+      price: item.price,
+      source: item.isVendorItem ? 'vendor' : 'price-list',
+    }));
+
+    const response = await fetch('/api/smart-selection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roofSystem: rs,
+        jobDescription: jobDescription.trim() || '',
+        measurements: m,
+        selectionItems,
+        vendorQuoteItems,
+        itemQuantities: iq,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to generate smart selection');
+    }
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Could not parse smart selection response');
+    }
+
+    const result = JSON.parse(jsonMatch[0]);
+    const selectedFromAI = Array.isArray(result.selectedItemIds) ? result.selectedItemIds : [];
+    const mergedSelection = Array.from(new Set([...selectedFromAI, ...vendorQuoteItemIds]));
+    const updatedQuantities = { ...iq };
+
+    if (result.explicitQuantities && typeof result.explicitQuantities === 'object') {
+      const synonymMap: Record<string, string[]> = {
+        dumpster: ['rolloff', 'dumpster'],
+        rolloff: ['rolloff', 'dumpster'],
+        porto: ['porto', 'porto potty', 'portable'],
+        'porto potty': ['porto', 'porto potty', 'portable'],
+        portable: ['porto', 'porto potty', 'portable'],
+      };
+      Object.entries(result.explicitQuantities).forEach(([key, value]) => {
+        const quantity = typeof value === 'number' ? value : parseFloat(value as string);
+        if (isNaN(quantity) || quantity <= 0) return;
+        const keyLower = key.toLowerCase();
+        const searchTerms = synonymMap[keyLower] || [keyLower];
+        allSelectableItems.forEach((item) => {
+          const itemNameLower = item.name.toLowerCase();
+          if (searchTerms.some((term) => itemNameLower.includes(term))) {
+            updatedQuantities[item.id] = quantity;
+          }
+        });
+      });
+    }
+
+    mergedSelection.forEach((id) => {
+      if (updatedQuantities[id] === undefined) {
+        const vendorItem = vendorItemMap.get(id);
+        if (vendorItem) updatedQuantities[id] = vendorItem.quantity || 0;
+      }
+    });
+
+    const cleanedSelection = mergedSelection.filter((id) => {
+      const item = allSelectableItems.find((i) => i.id === id);
+      const qty = updatedQuantities[id] ?? 0;
+      if (item?.isVendorItem) return true;
+      const name = item?.name?.toLowerCase() || '';
+      if (name.includes('delivery') || name.includes('rolloff') || name.includes('dumpster')) return true;
+      return qty > 0;
+    });
+
+    return { selectedItems: cleanedSelection, itemQuantities: updatedQuantities };
+  };
+
   return {
     jobDescription,
     setJobDescription,
@@ -271,6 +365,7 @@ export const useSmartSelection = ({
     setQuickSelections,
     isTearOff: isTearOffMemo,
     generateSmartSelection,
+    runSmartSelectionForBuilding,
     analyzeJobForQuickSelections,
   };
 };

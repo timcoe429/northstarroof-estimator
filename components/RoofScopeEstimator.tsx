@@ -75,6 +75,14 @@ export default function RoofScopeEstimator() {
   }>({ buildings: [], activeIndex: -1 });
   const currentBuildingRef = useRef<{ selectedItems: string[]; itemQuantities: Record<string, number> }>({ selectedItems: [], itemQuantities: {} });
   const [pendingCalculate, setPendingCalculate] = useState(false);
+  const [allBuildingsProgress, setAllBuildingsProgress] = useState<{
+    isRunning: boolean;
+    current: number;
+    total: number;
+    skipped: string[];
+    failed: string[];
+    completeMessage: string | null;
+  } | null>(null);
 
   // Initialize AI Project Manager
   const projectManager = useProjectManager(savedEstimateId ?? null);
@@ -354,6 +362,78 @@ export default function RoofScopeEstimator() {
       return { buildings: nextBuildings, activeIndex: newIndex };
     });
   }, []);
+
+  // Generate Smart Selection for all buildings (from All Combined tab)
+  const handleGenerateSmartSelectionForAll = useCallback(async () => {
+    const buildings = buildState.buildings;
+    if (buildings.length === 0 || allSelectableItems.length === 0) return;
+
+    const toProcess = buildings
+      .map((b, idx) => ({ building: b, index: idx }))
+      .filter(({ building }) => building.roofSystem?.trim());
+    const total = toProcess.length;
+    const skipped = buildings.filter((b) => !b.roofSystem?.trim()).map((b) => b.structureName);
+    const failed: string[] = [];
+
+    if (total === 0) {
+      setAllBuildingsProgress({
+        isRunning: false,
+        current: 0,
+        total: buildings.length,
+        skipped,
+        failed: [],
+        completeMessage: `No buildings with roof system assigned. Skipped: ${skipped.join(', ') || 'all'}.`,
+      });
+      return;
+    }
+
+    setAllBuildingsProgress({
+      isRunning: true,
+      current: 0,
+      total,
+      skipped,
+      failed: [],
+      completeMessage: null,
+    });
+
+    let nextBuildings = [...buildings];
+    for (let i = 0; i < toProcess.length; i++) {
+      const { building, index } = toProcess[i];
+      setAllBuildingsProgress((prev) =>
+        prev ? { ...prev, current: i + 1 } : prev
+      );
+      try {
+        const result = await smartSelection.runSmartSelectionForBuilding({
+          roofSystem: building.roofSystem,
+          measurements: building.measurements,
+          itemQuantities: building.itemQuantities || {},
+          vendorQuoteItemIds: building.vendorQuoteItemIds || [],
+        });
+        nextBuildings = [...nextBuildings];
+        nextBuildings[index] = {
+          ...building,
+          selectedItems: result.selectedItems,
+          itemQuantities: result.itemQuantities,
+        };
+        setBuildState((prev) => ({ ...prev, buildings: nextBuildings }));
+      } catch (err) {
+        console.error('Smart selection failed for', building.structureName, err);
+        failed.push(building.structureName);
+      }
+    }
+
+    const processed = total - failed.length;
+    setAllBuildingsProgress({
+      isRunning: false,
+      current: total,
+      total,
+      skipped,
+      failed,
+      completeMessage: `Smart Selection complete — ${processed} of ${total} buildings processed${skipped.length > 0 ? `. Skipped: ${skipped.join(', ')}` : ''}${failed.length > 0 ? `. Failed: ${failed.join(', ')}` : ''}`,
+    });
+
+    // useEffect (sync on tab change) will refresh merged selectedItems/itemQuantities when buildState.buildings updates
+  }, [buildState.buildings, allSelectableItems.length, smartSelection.runSmartSelectionForBuilding, vendorQuotes.vendorQuoteItems]);
 
   // Sync selectedItems/itemQuantities when tab changes
   useEffect(() => {
@@ -1479,6 +1559,8 @@ export default function RoofScopeEstimator() {
               combinedEstimate={buildState.activeIndex === -1 ? calculateEstimateHook(true) ?? null : null}
               buildings={buildState.buildings}
               onGenerateSmartSelection={smartSelection.generateSmartSelection}
+              onGenerateSmartSelectionForAll={handleGenerateSmartSelectionForAll}
+              allBuildingsProgress={allBuildingsProgress}
               onToggleQuickSelection={(optionId) => {
                 smartSelection.setQuickSelections((prev) =>
                   prev.map((opt) => {
