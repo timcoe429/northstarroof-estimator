@@ -172,13 +172,18 @@ export function BuildStep({
             <div className="mt-4 space-y-2">
               <h4 className="text-sm font-medium text-gray-700">Per-building breakdown</h4>
               {buildings.map((b) => {
-                const buildingTotal = Object.entries(b.itemQuantities).reduce(
-                  (sum, [itemId, qty]) => {
-                    const item = priceItems.find((p) => p.id === itemId);
-                    return sum + qty * (item?.price ?? 0);
-                  },
-                  0
-                );
+                const itemDetails = Object.entries(b.itemQuantities).map(([itemId, qty]) => {
+                  const item = priceItems.find((p) => p.id === itemId);
+                  return { itemId, name: item?.name ?? '???', qty, price: item?.price ?? 0, lineTotal: qty * (item?.price ?? 0) };
+                });
+                const buildingTotal = itemDetails.reduce((sum, d) => sum + d.lineTotal, 0);
+                console.log(`[BuildStep] Per-building breakdown — "${b.structureName}" (${b.structureId}):`, {
+                  itemCount: Object.keys(b.itemQuantities).length,
+                  selectedItems: b.selectedItems,
+                  itemQuantities: b.itemQuantities,
+                  itemDetails,
+                  buildingTotal,
+                });
                 return (
                   <div key={b.structureId} className="flex justify-between text-sm py-2 border-b border-gray-100">
                     <span className="text-gray-700">{b.structureName}</span>
