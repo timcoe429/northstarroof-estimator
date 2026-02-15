@@ -22,12 +22,16 @@ export async function POST(request: NextRequest) {
       itemQuantities,
     } = body;
 
-    if (!roofSystem || !jobDescription) {
+    if (!roofSystem) {
       return NextResponse.json(
-        { error: 'roofSystem and jobDescription are required' },
+        { error: 'roofSystem is required' },
         { status: 400 }
       );
     }
+
+    const jdContext = jobDescription?.trim()
+      ? `JOB DESCRIPTION:\n${jobDescription}`
+      : 'JOB DESCRIPTION:\nNo specific job description provided. Use roof system rules and measurements to select appropriate items.';
 
     const { universalRules, systemRules, subType } =
       loadRoofSystemKnowledge(roofSystem);
@@ -48,8 +52,7 @@ ${universalRules}
 ROOF SYSTEM RULES:
 ${systemRules}
 
-JOB DESCRIPTION:
-${jobDescription}
+${jdContext}
 
 MEASUREMENTS:
 ${JSON.stringify(measurements || {}, null, 2)}
