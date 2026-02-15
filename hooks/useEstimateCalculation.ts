@@ -257,7 +257,8 @@ export const useEstimateCalculation = ({
   };
 
   // Calculate estimate
-  const calculateEstimate = useCallback((): Estimate | null => {
+  // skipValidation: when true, avoids setValidationWarnings (for read-only display during render, e.g. All Combined tab)
+  const calculateEstimate = useCallback((skipValidation?: boolean): Estimate | null => {
     if (!measurements) return null;
     
     const wasteFactor = 1 + (wastePercent / 100);
@@ -362,9 +363,11 @@ export const useEstimateCalculation = ({
       generatedAt: new Date().toLocaleString(),
     };
 
-    // Run validation checks - IMPORTANT: pass newEstimate directly, NOT estimate state
-    const warnings = runValidationChecks(newEstimate);
-    setValidationWarnings(warnings);
+    // Run validation checks - skip when used for read-only display (prevents setState-during-render infinite loop)
+    if (!skipValidation) {
+      const warnings = runValidationChecks(newEstimate);
+      setValidationWarnings(warnings);
+    }
 
     return newEstimate;
   }, [

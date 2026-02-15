@@ -1476,7 +1476,7 @@ export default function RoofScopeEstimator() {
               smartSelectionWarnings={smartSelection.smartSelectionWarnings}
               isGeneratingSelection={smartSelection.isGeneratingSelection}
               allSelectableItemsLength={allSelectableItems.length}
-              combinedEstimate={buildState.activeIndex === -1 ? calculateEstimateHook() ?? null : null}
+              combinedEstimate={buildState.activeIndex === -1 ? calculateEstimateHook(true) ?? null : null}
               buildings={buildState.buildings}
               onGenerateSmartSelection={smartSelection.generateSmartSelection}
               onToggleQuickSelection={(optionId) => {
