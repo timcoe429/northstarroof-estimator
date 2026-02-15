@@ -194,3 +194,47 @@
 - Moved from client-side hardcoded prompt to server-side `/api/smart-selection` route
 - Route reads knowledge files with fs.readFileSync (same pattern as organize-proposal)
 - Job description is optional — roof system + measurements are sufficient for Smart Selection
+
+## Claude Code Desktop for Surgical Fixes (Feb 15, 2026)
+- **Decision**: Use Claude Code Desktop for targeted single-file bug fixes, Cursor for bigger architectural work
+- **Why**: Claude Code excels at focused debugging and surgical changes. Cursor better for multi-file refactors and architectural decisions.
+- **Pattern**: Tell Claude Code: "Work on main branch, no worktrees, commit and push to origin."
+- **Integration**: `.claude/` added to `.gitignore` to avoid cluttering repo with Claude's workspace files
+
+## Labor Default to Hugo Standard (Feb 15, 2026)
+- **Decision**: Default labor crew to Hugo (standard) $550/sq on all estimates
+- **Why**: Hugo is the standard crew, most common use case. User manually swaps crew if needed based on pitch/complexity/availability.
+- **Implementation**: Knowledge files should reference Hugo as default labor option. AI Smart Selection will select Hugo unless job description specifies otherwise (e.g., "use Alfredo crew" or "steep pitch, premium install").
+
+## Coverage Data Lives in DB (Feb 15, 2026)
+- **Decision**: Coverage and coverage_unit MUST be populated in price_items table for quantity calculations to work
+- **Why**: Without coverage data, quantity calculations fall back to incorrect defaults or show 0 quantities
+- **Lesson**: Coverage data was lost during price list rebuild (bulk DB changes). Always verify coverage data after bulk operations.
+- **Examples**:
+  - OC Titanium PSU 30: coverage=2, coverage_unit='sq' (2 squares per roll)
+  - Brava Field Tile: coverage=14.3, coverage_unit='sqft' (14.3 sq ft per bundle)
+  - Copper Valley: coverage=10, coverage_unit='lf' (10 linear feet per piece)
+  - Brava Solids: coverage=10, coverage_unit='lf' (used for valleys/rakes, not full coverage)
+
+## Build Step Shows Raw Cost Only (Feb 15, 2026)
+- **Decision**: Build step displays base quantities × prices without markup
+- **Why**: Clearer separation of concerns. Build = item selection and quantities. Review = financial controls and markup.
+- **Implementation**: 
+  - Build step shows subtotals per category (materials, labor, equipment)
+  - Label: "Before office overhead and margin — markup is applied in Review"
+  - Markup (waste, office overhead, profit margin, sales tax) applied only in Review step
+- **User Flow**: User can see raw costs in Build, then see final pricing in Review after markup is applied
+
+## Brava Solids Are Linear Not Area (Feb 15, 2026)
+- **Decision**: Brava Solids use coverage_unit='lf' (linear feet), not 'sq' or 'sqft'
+- **Why**: Brava Solids are solid tiles used for valleys and rakes (detail work), not full roof coverage
+- **Impact**: Quantity calculation uses valley_length and rake_length, not total_squares
+- **Database**: coverage=10 (bundled in 10' pieces), coverage_unit='lf'
+
+## Per-Building Breakdown Uses Building's Own Data (Feb 15, 2026)
+- **Decision**: Never filter `combinedEstimate.lineItems` by building ID to calculate per-building totals
+- **Why**: Combined estimate merges quantities (e.g., 4 buildings with same item = 4× quantity in one line item). Filtering by building ID gives incorrect totals (all buildings get the full combined total).
+- **Correct Approach**: Calculate per-building totals from `building.itemQuantities × item.price` independently, before creating combined estimate
+- **Example**: 
+  - Wrong: `combinedEstimate.lineItems.filter(item => buildingItemIds.has(item.id))` → each building shows $25k (combined total)
+  - Right: `Object.entries(building.itemQuantities).reduce((sum, [id, qty]) => sum + qty * item.price, 0)` → each building shows $6.25k (individual total)

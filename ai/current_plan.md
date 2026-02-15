@@ -1,7 +1,7 @@
 # Current Plan
 
 ## Last Updated
-February 14, 2026
+February 15, 2026
 
 ## What's Complete
 
@@ -53,19 +53,54 @@ February 14, 2026
   - Standalone "Add Another RoofScope" button with Plus icon
   - AI Detection Confidence banner when present
   - Compact layout (space-y-4, compact customer info grid)
+- **React render loop fix** ✅
+  - Added `skipValidation` parameter to `calculateEstimate` to prevent setState-during-render infinite loop
+  - All Combined tab now passes `skipValidation: true` when calculating read-only display
+- **Smart Selection API improvements** ✅
+  - Job description made optional — roof system + measurements are sufficient for Smart Selection
+  - "Generate Smart Selection for All Buildings" button on All Combined tab
+- **cleanedSelection filter fix** ✅
+  - Quantity calculation now happens BEFORE filtering inside `runSmartSelectionForBuilding`
+  - Items no longer incorrectly filtered out due to missing quantities
+  - Fixes issue where only 2 items (Brava Delivery + Rolloff) were selected instead of 15+
+  - `calculateItemQuantitiesFromMeasurements` called with measurements, priceItems, and isTearOff before cleanedSelection runs
+- **Build step UX improvements** ✅
+  - Build step shows raw cost only (no markup) with "Before office overhead and margin — markup is applied in Review" label
+  - "Continue to Review →" button added to Build step
+- **Brava Starter quantity fix** ✅
+  - Uses coverage-based linear calculation with Math.ceil when coverage exists in DB
+  - Properly calculates from (eave_length + rake_length) / coverage
+- **Coverage data restoration** ✅
+  - Coverage data restored in Supabase for ALL materials (Brava, DaVinci, copper, aluminum, underlayments, fasteners, low slope)
+  - Coverage was wiped during earlier price list rebuild — all restored from product specifications
+  - OC Titanium PSU 30 corrected to coverage=2 sq/roll (was incorrectly set to 10)
+  - Brava Solids coverage_unit changed to 'lf' (valley/rake detail work, not full coverage)
+- **Claude Code Desktop integration** ✅
+  - Claude Code Desktop introduced as primary tool for surgical fixes
+  - `.claude/` added to `.gitignore`, worktree cleanup done
 
-## What's Partially Done
+## What's In Progress
 
-- None
+- **Quantity calculations need retest** after coverage data restore
+- **PDF/Proposal issues identified** but not yet fixed:
+  - Cover letter says "Brava Starter" instead of "Brava Composite Tile"
+  - No per-building breakdown in PDF for multi-structure properties
+  - Floating point display (84.85999999999999 sq) needs rounding
 
 ## What's Next (Priority Order)
 
-1. **Test Phase B end-to-end** — Single structure: setup → select roof system → build → items display → review. Multi-structure: multiple cards → different roof systems → tabs → switching swaps items/measurements.
-2. **Phase C: PDF Generation with Multi-Building Sections** — Proposal generates per-building sections, grand total at end, AI organizer runs per section.
-3. **Context file updates** — After Phase B is tested and stable.
+1. **Retest full flow with corrected coverage data** — Verify all quantities make sense after coverage data restore
+2. **Fix PDF proposal issues**:
+   - Add per-building breakdown for multi-structure properties
+   - Correct roof system name in cover letter (use display name, not item name)
+   - Round floating point numbers in measurements display
+3. **Add labor default to knowledge files** — Hugo standard $550/sq as default, user adjusts manually based on pitch/complexity/availability
+4. **Overnight auto-select verification** — Verify in multi-building context
+5. **Per-building sum vs combined total reconciliation** — Investigate difference (may be from items not attributed to buildings)
 
 ## Blockers / Notes
 
+- **None currently** — coverage data restored, code fixes deployed
 - Porto Potty price discrepancy: DB has $550, Omiah says $600 ($150 delivery + $150 pickup + $150/month × 2). Need to confirm correct price and update.
 - Duplicate snow fence install items: "Snow Fence Install" and "Snowfence Install" both at $5/lf. Should consolidate.
 - Sergio labor at $129/sq seems very low vs Hugo ($550-750) and Alfredo ($1,136). May be a helper/supplement, not full crew. Clarify with Omiah.
