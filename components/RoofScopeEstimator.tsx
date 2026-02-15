@@ -1561,6 +1561,7 @@ export default function RoofScopeEstimator() {
               allSelectableItemsLength={allSelectableItems.length}
               combinedEstimate={buildState.activeIndex === -1 ? calculateEstimateHook(true) ?? null : null}
               buildings={buildState.buildings}
+              priceItems={allSelectableItems}
               onGenerateSmartSelection={smartSelection.generateSmartSelection}
               onGenerateSmartSelectionForAll={handleGenerateSmartSelectionForAll}
               allBuildingsProgress={allBuildingsProgress}

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Calculator, ClipboardList } from 'lucide-react';
-import type { Measurements, BuildingEstimate, Estimate } from '@/types';
+import type { Measurements, BuildingEstimate, Estimate, PriceItem } from '@/types';
 import type { QuickSelectOption } from '@/types/estimator';
 import { roofSystemIdToDisplayName } from '@/lib/roofSystemConstants';
 import { formatCurrency } from '@/lib/estimatorUtils';
@@ -41,6 +41,8 @@ interface BuildStepProps {
   combinedEstimate?: Estimate | null;
   /** Buildings for per-building subtotals in All Combined view */
   buildings?: BuildingEstimate[];
+  /** All selectable price items for per-building total calculation */
+  priceItems?: PriceItem[];
   /** Callback to generate smart selection */
   onGenerateSmartSelection: () => void;
   /** Callback to generate smart selection for all buildings (All Combined tab) */
@@ -71,6 +73,7 @@ export function BuildStep({
   allSelectableItemsLength,
   combinedEstimate,
   buildings = [],
+  priceItems = [],
   onGenerateSmartSelection,
   onGenerateSmartSelectionForAll,
   allBuildingsProgress,
@@ -159,14 +162,17 @@ export function BuildStep({
               </div>
             </div>
           )}
-          {buildings.length > 1 && combinedEstimate?.lineItems && (
+          {buildings.length > 1 && priceItems.length > 0 && (
             <div className="mt-4 space-y-2">
               <h4 className="text-sm font-medium text-gray-700">Per-building breakdown</h4>
               {buildings.map((b) => {
-                const buildingItemIds = new Set([...b.selectedItems, ...b.vendorQuoteItemIds]);
-                const buildingTotal = combinedEstimate.lineItems
-                  .filter((item) => buildingItemIds.has(item.id))
-                  .reduce((sum, item) => sum + item.total, 0);
+                const buildingTotal = Object.entries(b.itemQuantities).reduce(
+                  (sum, [itemId, qty]) => {
+                    const item = priceItems.find((p) => p.id === itemId);
+                    return sum + qty * (item?.price ?? 0);
+                  },
+                  0
+                );
                 return (
                   <div key={b.structureId} className="flex justify-between text-sm py-2 border-b border-gray-100">
                     <span className="text-gray-700">{b.structureName}</span>
