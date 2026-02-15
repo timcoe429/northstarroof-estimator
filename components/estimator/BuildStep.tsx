@@ -51,6 +51,8 @@ interface BuildStepProps {
   allBuildingsProgress?: AllBuildingsProgress | null;
   /** Callback to toggle quick selection */
   onToggleQuickSelection: (optionId: string) => void;
+  /** Callback to advance to the Review step (calculates estimate and transitions) */
+  onContinueToReview?: () => void;
   /** Content to render when editing a building (EstimateBuilder + CalculatedAccessories) */
   children: React.ReactNode;
 }
@@ -77,6 +79,7 @@ export function BuildStep({
   onGenerateSmartSelection,
   onGenerateSmartSelectionForAll,
   allBuildingsProgress,
+  onContinueToReview,
   onToggleQuickSelection,
   children,
 }: BuildStepProps) {
@@ -158,8 +161,11 @@ export function BuildStep({
           {combinedEstimate && (
             <div>
               <div className="text-lg font-bold text-[#00293f]">
-                Total: {formatCurrency(combinedEstimate.sellPrice)}
+                Raw Cost Total: {formatCurrency(combinedEstimate.baseCost)}
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Before office overhead and margin — markup is applied in Review.
+              </p>
             </div>
           )}
           {buildings.length > 1 && priceItems.length > 0 && (
@@ -183,6 +189,15 @@ export function BuildStep({
             </div>
           )}
         </div>
+
+        {onContinueToReview && (
+          <button
+            onClick={onContinueToReview}
+            className="w-full mt-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-base flex items-center justify-center gap-2"
+          >
+            Continue to Review →
+          </button>
+        )}
       </div>
     );
   }
@@ -285,6 +300,15 @@ export function BuildStep({
 
       {/* Line items (EstimateBuilder + CalculatedAccessories) */}
       {children}
+
+      {onContinueToReview && (
+        <button
+          onClick={onContinueToReview}
+          className="w-full mt-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-base flex items-center justify-center gap-2"
+        >
+          Continue to Review →
+        </button>
+      )}
     </div>
   );
 }

@@ -1565,6 +1565,7 @@ export default function RoofScopeEstimator() {
               onGenerateSmartSelection={smartSelection.generateSmartSelection}
               onGenerateSmartSelectionForAll={handleGenerateSmartSelectionForAll}
               allBuildingsProgress={allBuildingsProgress}
+              onContinueToReview={calculateEstimate}
               onToggleQuickSelection={(optionId) => {
                 smartSelection.setQuickSelections((prev) =>
                   prev.map((opt) => {
