@@ -1,7 +1,8 @@
 import { useMemo, useState, useCallback } from 'react';
 import type { Measurements, PriceItem, LineItem, CustomerInfo, Estimate, VendorQuoteItem } from '@/types';
 import type { SelectableItem, ValidationWarning } from '@/types/estimator';
-import { CATEGORIES, UNIT_TYPES } from '@/lib/constants';
+import { CATEGORIES } from '@/lib/constants';
+import { calculateItemQuantitiesFromMeasurements } from '@/lib/calculateItemQuantities';
 
 interface UseEstimateCalculationProps {
   measurements: Measurements | null;
@@ -42,138 +43,10 @@ export const useEstimateCalculation = ({
   }, [officeCostPercent, marginPercent]);
 
   // Calculate quantities for ALL items based on measurements
-  const calculateItemQuantities = useCallback((m: Measurements) => {
-    const quantities: Record<string, number> = {};
-    
-    priceItems.forEach(item => {
-      const name = item.name.toLowerCase();
-      let qty = 0;
-
-      // Normalize coverage to number and coverageUnit to lowercase string
-      const coverage = item.coverage ? (typeof item.coverage === 'string' ? parseFloat(item.coverage) : item.coverage) : null;
-      const coverageUnit = item.coverageUnit ? item.coverageUnit.toLowerCase() : null;
-
-      // PRIORITY 1: IF item has coverage AND coverageUnit → Calculate using coverage FIRST
-      if (coverage && coverageUnit) {
-        if (coverageUnit === 'lf') {
-          // Linear coverage calculation
-          if (name.includes('starter')) {
-            // Starter uses perimeter: eave_length + rake_length
-            qty = Math.ceil(((m.eave_length || 0) + (m.rake_length || 0)) / coverage);
-          } else if (name.includes('valley')) {
-            qty = Math.ceil((m.valley_length || 0) / coverage);
-          } else if (name.includes('eave') || name.includes('drip')) {
-            qty = Math.ceil((m.eave_length || 0) / coverage);
-          } else if (name.includes('rake')) {
-            qty = Math.ceil((m.rake_length || 0) / coverage);
-          } else if (name.includes('ridge') || name.includes('h&r')) {
-            // H&R covers both ridge and hip
-            qty = Math.ceil(((m.ridge_length || 0) + (m.hip_length || 0)) / coverage);
-          } else if (name.includes('hip')) {
-            qty = Math.ceil((m.hip_length || 0) / coverage);
-          } else {
-            // Default linear: use eave_length
-            qty = Math.ceil((m.eave_length || 0) / coverage);
-          }
-        } else if (coverageUnit === 'sqft') {
-          // Convert squares to sq ft, then divide by coverage
-          qty = Math.ceil((m.total_squares * 100) / coverage);
-        } else if (coverageUnit === 'sq') {
-          // Coverage in squares
-          qty = Math.ceil(m.total_squares / coverage);
-        }
-      }
-      // PRIORITY 1.5: Manual-entry items (unit "each", no coverage, not flat fee) → Default to 0
-      else if (item.unit === 'each' && !coverage) {
-        // Check if it's a known flat fee item
-        const isFlatFeeItem = name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || name.includes('reprographic');
-        
-        // If not a flat fee item, default to 0 (user must enter quantity manually)
-        // This includes labor items with "each" unit that aren't per-square (like "Snowguard Install")
-        if (!isFlatFeeItem) {
-          qty = 0;
-        } else {
-          // Flat fee items: always 1
-          qty = 1;
-        }
-      }
-      // PRIORITY 2: ELSE IF special cases (only when no coverage)
-      else if (name.includes('osb') || name.includes('oriented strand')) {
-        // OSB sheets: total_squares × 3
-        qty = m.total_squares * 3;
-      } else if (name.includes('starter')) {
-        // Starter: eave_length + rake_length (perimeter) - no coverage
-        qty = (m.eave_length || 0) + (m.rake_length || 0);
-      } else if (name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || item.unit === 'flat') {
-        if (name.includes('rolloff') && isTearOff) {
-          qty = Math.ceil((m.total_squares || 0) / 15);
-        } else {
-          // Flat fee items: always 1
-          qty = 1;
-        }
-      } else if (item.category === 'labor' && item.unit !== 'each') {
-        // Labor items (per-square): total_squares
-        // Exclude "each" unit labor items (they're handled above as manual-entry)
-        qty = m.total_squares || 0;
-      }
-      // PRIORITY 3: ELSE fall back to unit-based calculation
-      else {
-        const unitType = UNIT_TYPES.find(u => u.value === item.unit);
-        if (!unitType) {
-          quantities[item.id] = 0;
-          return;
-        }
-
-        if (unitType.calcType === 'area') {
-          if (item.unit === 'sf') {
-            qty = (m.total_squares || 0) * 100;
-          } else {
-            // Area-based items (Field Tile, Shakes, Shingles, Underlayment)
-            // No coverage, use total_squares directly
-            qty = m.total_squares || 0;
-          }
-        } else if (unitType.calcType === 'linear') {
-          // Linear-based items - no coverage, use direct measurements
-          if (name.includes('valley')) {
-            qty = m.valley_length || 0;
-          } else if (name.includes('eave') || name.includes('drip')) {
-            qty = m.eave_length || 0;
-          } else if (name.includes('rake')) {
-            qty = m.rake_length || 0;
-          } else if (name.includes('ridge')) {
-            qty = m.ridge_length || 0;
-          } else if (name.includes('hip')) {
-            qty = m.hip_length || 0;
-          } else if (name.includes('h&r')) {
-            // H&R covers both ridge and hip
-            qty = (m.ridge_length || 0) + (m.hip_length || 0);
-          } else {
-            // Default linear: 0 if no match
-            qty = 0;
-          }
-        } else if (unitType.calcType === 'count') {
-          // Count-based items
-          if (name.includes('boot') || name.includes('pipe') || name.includes('jack') || name.includes('flash') || name.includes('vent')) {
-            qty = m.penetrations || 0;
-          } else if (name.includes('skylight') || name.includes('velux')) {
-            qty = m.skylights || 0;
-          } else if (name.includes('chimney')) {
-            qty = m.chimneys || 0;
-          } else {
-            // Default count: 0
-            qty = 0;
-          }
-        } else if (unitType.calcType === 'flat') {
-          // Flat fee items
-          qty = 1;
-        }
-      }
-
-      quantities[item.id] = qty;
-    });
-
-    return quantities;
-  }, [priceItems, isTearOff]);
+  const calculateItemQuantities = useCallback(
+    (m: Measurements) => calculateItemQuantitiesFromMeasurements(m, priceItems, isTearOff),
+    [priceItems, isTearOff]
+  );
 
   // Run validation checks on estimate
   const runValidationChecks = (estimate: Estimate): ValidationWarning[] => {

@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { CATEGORIES, UNIT_TYPES, CALC_MAPPINGS, descriptionMap } from '@/lib/constants';
 import type { SelectableItem, GroupedVendorItem, CustomItem, QuickSelectOption, ValidationWarning } from '@/types/estimator';
 import { fileToBase64, generateId, normalizeVendor, formatVendorName, toNumber, escapeRegExp, removeKeywordFromDescription, formatCurrency, mergeMeasurements } from '@/lib/estimatorUtils';
+import { calculateItemQuantitiesFromMeasurements } from '@/lib/calculateItemQuantities';
 import { matchSchaferDescription } from '@/lib/schaferMatching';
 import { useEstimateCalculation } from '@/hooks/useEstimateCalculation';
 import { buildClientViewSections, buildEstimateForClientPdf, copyClientViewToClipboard as copyClientViewToClipboardUtil } from '@/lib/clientViewBuilder';
@@ -211,6 +212,7 @@ export default function RoofScopeEstimator() {
     vendorItemMap: vendorQuotes.vendorItemMap,
     itemQuantities,
     isTearOff: false, // Will be overridden by hook's internal calculation
+    priceItems: priceItems.priceItems,
     onSetItemQuantities: setItemQuantities,
     onSetSelectedItems: setSelectedItems,
     onSetJobDescription: (desc) => {
@@ -409,11 +411,28 @@ export default function RoofScopeEstimator() {
           itemQuantities: building.itemQuantities || {},
           vendorQuoteItemIds: building.vendorQuoteItemIds || [],
         });
+        const measuredQuantities = calculateItemQuantitiesFromMeasurements(
+          building.measurements,
+          priceItems.priceItems,
+          smartSelection.isTearOff
+        );
+        const finalQuantities: Record<string, number> = {};
+        for (const itemId of result.selectedItems) {
+          const measured = measuredQuantities[itemId];
+          if (measured !== undefined && measured > 0) {
+            finalQuantities[itemId] = measured;
+          }
+        }
+        for (const [itemId, qty] of Object.entries(result.itemQuantities)) {
+          if (qty > 0) {
+            finalQuantities[itemId] = qty;
+          }
+        }
         nextBuildings = [...nextBuildings];
         nextBuildings[index] = {
           ...building,
           selectedItems: result.selectedItems,
-          itemQuantities: result.itemQuantities,
+          itemQuantities: finalQuantities,
         };
         setBuildState((prev) => ({ ...prev, buildings: nextBuildings }));
       } catch (err) {
@@ -433,7 +452,7 @@ export default function RoofScopeEstimator() {
     });
 
     // useEffect (sync on tab change) will refresh merged selectedItems/itemQuantities when buildState.buildings updates
-  }, [buildState.buildings, allSelectableItems.length, smartSelection.runSmartSelectionForBuilding, vendorQuotes.vendorQuoteItems]);
+  }, [buildState.buildings, allSelectableItems.length, smartSelection.runSmartSelectionForBuilding, smartSelection.isTearOff, vendorQuotes.vendorQuoteItems, priceItems.priceItems]);
 
   // Sync selectedItems/itemQuantities when tab changes
   useEffect(() => {

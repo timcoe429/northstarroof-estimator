@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import type { Measurements } from '@/types';
+import type { Measurements, PriceItem } from '@/types';
 import type { QuickSelectOption, SelectableItem } from '@/types/estimator';
-import { removeKeywordFromDescription } from '@/lib/estimatorUtils';
+import { calculateItemQuantitiesFromMeasurements } from '@/lib/calculateItemQuantities';
 
 interface UseSmartSelectionProps {
   measurements: Measurements | null;
@@ -12,6 +12,7 @@ interface UseSmartSelectionProps {
   vendorItemMap: Map<string, any>;
   itemQuantities: Record<string, number>;
   isTearOff: boolean;
+  priceItems: PriceItem[];
   onSetItemQuantities: (quantities: Record<string, number> | ((prev: Record<string, number>) => Record<string, number>)) => void;
   onSetSelectedItems: (items: string[] | ((prev: string[]) => string[])) => void;
   onSetJobDescription: (description: string | ((prev: string) => string)) => void;
@@ -26,6 +27,7 @@ export const useSmartSelection = ({
   vendorItemMap,
   itemQuantities,
   isTearOff,
+  priceItems,
   onSetItemQuantities,
   onSetSelectedItems,
   onSetJobDescription,
@@ -221,6 +223,23 @@ export const useSmartSelection = ({
             }
           }
         });
+
+        // Merge measurement-based quantities for selected items that lack explicit/vendor quantities
+        if (priceItems.length > 0 && measurements) {
+          const measuredQuantities = calculateItemQuantitiesFromMeasurements(
+            measurements,
+            priceItems,
+            isTearOffMemo
+          );
+          mergedSelection.forEach((id) => {
+            if ((updatedQuantities[id] ?? 0) === 0) {
+              const measured = measuredQuantities[id];
+              if (measured !== undefined && measured > 0) {
+                updatedQuantities[id] = measured;
+              }
+            }
+          });
+        }
 
         // Remove zero-quantity items (keep vendor + flat-fee)
         const cleanedSelection = mergedSelection.filter(id => {
