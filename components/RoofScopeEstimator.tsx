@@ -10,7 +10,6 @@ import { useAuth } from '@/lib/AuthContext';
 import { CATEGORIES, UNIT_TYPES, CALC_MAPPINGS, descriptionMap } from '@/lib/constants';
 import type { SelectableItem, GroupedVendorItem, CustomItem, QuickSelectOption, ValidationWarning } from '@/types/estimator';
 import { fileToBase64, generateId, normalizeVendor, formatVendorName, toNumber, escapeRegExp, removeKeywordFromDescription, formatCurrency, mergeMeasurements } from '@/lib/estimatorUtils';
-import { calculateItemQuantitiesFromMeasurements } from '@/lib/calculateItemQuantities';
 import { matchSchaferDescription } from '@/lib/schaferMatching';
 import { useEstimateCalculation } from '@/hooks/useEstimateCalculation';
 import { buildClientViewSections, buildEstimateForClientPdf, copyClientViewToClipboard as copyClientViewToClipboardUtil } from '@/lib/clientViewBuilder';
@@ -410,29 +409,14 @@ export default function RoofScopeEstimator() {
           measurements: building.measurements,
           itemQuantities: building.itemQuantities || {},
           vendorQuoteItemIds: building.vendorQuoteItemIds || [],
+          priceItems: priceItems.priceItems,
+          isTearOff: smartSelection.isTearOff,
         });
-        const measuredQuantities = calculateItemQuantitiesFromMeasurements(
-          building.measurements,
-          priceItems.priceItems,
-          smartSelection.isTearOff
-        );
-        const finalQuantities: Record<string, number> = {};
-        for (const itemId of result.selectedItems) {
-          const measured = measuredQuantities[itemId];
-          if (measured !== undefined && measured > 0) {
-            finalQuantities[itemId] = measured;
-          }
-        }
-        for (const [itemId, qty] of Object.entries(result.itemQuantities)) {
-          if (qty > 0) {
-            finalQuantities[itemId] = qty;
-          }
-        }
         nextBuildings = [...nextBuildings];
         nextBuildings[index] = {
           ...building,
           selectedItems: result.selectedItems,
-          itemQuantities: finalQuantities,
+          itemQuantities: result.itemQuantities,
         };
         setBuildState((prev) => ({ ...prev, buildings: nextBuildings }));
       } catch (err) {

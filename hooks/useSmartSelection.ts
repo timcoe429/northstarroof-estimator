@@ -289,8 +289,10 @@ export const useSmartSelection = ({
     measurements: Measurements;
     itemQuantities: Record<string, number>;
     vendorQuoteItemIds: string[];
+    priceItems: PriceItem[];
+    isTearOff: boolean;
   }): Promise<{ selectedItems: string[]; itemQuantities: Record<string, number> }> => {
-    const { roofSystem: rs, measurements: m, itemQuantities: iq, vendorQuoteItemIds } = params;
+    const { roofSystem: rs, measurements: m, itemQuantities: iq, vendorQuoteItemIds, priceItems: items, isTearOff: tearOff } = params;
     if (!rs || !m || allSelectableItems.length === 0) {
       throw new Error(rs ? 'Missing measurements or price items' : 'Roof system required');
     }
@@ -361,6 +363,21 @@ export const useSmartSelection = ({
         if (vendorItem) updatedQuantities[id] = vendorItem.quantity || 0;
       }
     });
+
+    // Calculate measured quantities BEFORE filtering (Fix for Issue 1 & 2)
+    // This ensures items have quantities before the cleanedSelection filter runs
+    if (items.length > 0 && m) {
+      const measuredQuantities = calculateItemQuantitiesFromMeasurements(m, items, tearOff);
+      mergedSelection.forEach((id) => {
+        // Only apply measured quantities if item doesn't already have a quantity
+        if ((updatedQuantities[id] ?? 0) === 0) {
+          const measured = measuredQuantities[id];
+          if (measured !== undefined && measured > 0) {
+            updatedQuantities[id] = measured;
+          }
+        }
+      });
+    }
 
     const cleanedSelection = mergedSelection.filter((id) => {
       const item = allSelectableItems.find((i) => i.id === id);
