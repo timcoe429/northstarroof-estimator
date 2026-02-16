@@ -97,14 +97,29 @@ export const buildEstimateForClientPdf = (
     organizedProposal,
   });
   
-  // Calculate effective multiplier for applying to line items (uses finalPrice which includes sales tax)
-  const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
-  const effectiveMultiplier = rawTotal > 0 ? estimate.finalPrice / rawTotal : 1;
+  // Calculate category totals
+  const equipmentTotal = estimate.totals.equipment;
+  const otherTotal = estimate.totals.materials + estimate.totals.labor + 
+                     estimate.totals.accessories + estimate.totals.schafer;
+  
+  // Calculate category-specific multipliers
+  // Equipment: office overhead only (no profit margin)
+  const equipmentMultiplier = 1 + (estimate.officeCostPercent / 100);
+  // Other categories: absorb remaining markup to reach finalPrice
+  const otherMultiplier = otherTotal > 0 
+    ? (estimate.finalPrice - equipmentTotal * equipmentMultiplier) / otherTotal 
+    : 1;
+
+  // Helper to get multiplier for category
+  const getMultiplier = (category: LineItem['category']) => {
+    return category === 'equipment' ? equipmentMultiplier : otherMultiplier;
+  };
 
   const buildLineItems = (items: Array<{ name: string; description: string; total: number }>, category: LineItem['category']) => {
+    const multiplier = getMultiplier(category);
     return items.map((item, idx) => {
-      // Apply effective multiplier to get client-facing price
-      const clientPrice = Math.round(item.total * effectiveMultiplier * 100) / 100;
+      // Apply category-specific multiplier to get client-facing price
+      const clientPrice = Math.round(item.total * multiplier * 100) / 100;
       return {
         id: `client_${category}_${idx}`,
         name: item.name,
@@ -167,9 +182,18 @@ export const copyClientViewToClipboard = async (
     organizedProposal,
   });
   
-  // Calculate effective multiplier for applying to line items (uses finalPrice which includes sales tax)
-  const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
-  const effectiveMultiplier = rawTotal > 0 ? estimate.finalPrice / rawTotal : 1;
+  // Calculate category totals
+  const equipmentTotal = estimate.totals.equipment;
+  const otherTotal = estimate.totals.materials + estimate.totals.labor + 
+                     estimate.totals.accessories + estimate.totals.schafer;
+                     
+  // Calculate category-specific multipliers
+  // Equipment: office overhead only (no profit margin)
+  const equipmentMultiplier = 1 + (estimate.officeCostPercent / 100);
+  // Other categories: absorb remaining markup to reach finalPrice
+  const otherMultiplier = otherTotal > 0 
+    ? (estimate.finalPrice - equipmentTotal * equipmentMultiplier) / otherTotal 
+    : 1;
 
   const sectionConfig = [
     { key: 'materials', label: 'Materials', items: clientSections.materials },
@@ -180,12 +204,14 @@ export const copyClientViewToClipboard = async (
   sectionConfig.forEach(section => {
     if (!section.items || section.items.length === 0) return;
     text += `${section.label.toUpperCase()}\n`;
+    // Use category-specific multiplier
+    const multiplier = section.key === 'equipment' ? equipmentMultiplier : otherMultiplier;
     section.items.forEach(item => {
-      const clientPrice = Math.round(item.total * effectiveMultiplier * 100) / 100;
+      const clientPrice = Math.round(item.total * multiplier * 100) / 100;
       text += `${item.description}\t${formatCurrency(clientPrice)}\n`;
     });
     const sectionTotal = section.items.reduce((sum, item) => sum + item.total, 0);
-    const clientSubtotal = Math.round(sectionTotal * effectiveMultiplier * 100) / 100;
+    const clientSubtotal = Math.round(sectionTotal * multiplier * 100) / 100;
     text += `${section.label} Subtotal\t${formatCurrency(clientSubtotal)}\n\n`;
   });
 
