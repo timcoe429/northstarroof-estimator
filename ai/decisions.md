@@ -212,3 +212,42 @@
 - One crew per job
 - Hugo (12/12): $750/sq, Hugo (8-11/12): $650/sq, Hugo (<8/12): $550/sq
 - Alfredo: $1,136/sq, Chris: $750/sq, Sergio: $129/sq
+
+## 2/16/2026 — Track 1 Stabilization Session
+
+### AI Organizer Removed
+- Removed AI proposal organizer from PDF pipeline (had race condition, inconsistent results)
+- PDF now uses deterministic line items — what you see in Build step is what shows on PDF
+- proposalOrganizer.ts still in codebase but unused
+
+### Knowledge Files Wired Up
+- Created /app/api/smart-selection/route.ts to load knowledge files server-side
+- Smart selection detects roof system from job description keywords
+- Loads universal-rules.md + roof-specific file (e.g., brava-tile.md)
+- Inline rules in useSmartSelection.ts kept as fallback
+
+### Knowledge File Fixes Applied
+- Removed copper as default flashing (aluminum is default, copper only if explicitly requested)
+- Removed Sharkskin from all files (replaced by SolarHide)
+- Removed Flat Sheet from standard flashing lists (custom fabrication only)
+- Fixed snow guard name: "RMSG Yeti Snowguard" → "Snow Guard"
+- Fixed equipment names: "Rolloff" → "Landfill Charge", "Overnights" → "Overnight Charge"
+- Added Hugo as default labor crew in all roof system files
+- Added "always include" rule for Landfill Charge, Porto Potty, Fuel Charge
+
+### Split Multiplier Implemented
+- Equipment items get office overhead only: cost × (1 + officeCostPercent/100)
+- Materials, labor, accessories, schafer get full markup
+- Math ensures total still equals finalPrice
+
+### Deterministic Kit Grouping Added
+- lib/kitGrouping.ts groups small items into named kits for PDF display
+- Aluminum Flashing Kit: D-Style Eave, Rake, Valley, Step Flash, Headwall, Hip & Ridge
+- Copper Flashing Kit: same items with copper variants
+- Fasteners & Hardware Kit: nails, screws, plasticap
+- Kit items group regardless of price; non-kit items use $1,500 threshold
+- Subtitles show individual items and prices within each kit
+
+### Overnight Charge Fix
+- Added "overnight" to flat fee detection in 3 locations (useEstimateCalculation.ts, RoofScopeEstimator.tsx)
+- Fixed "overnights" plural typo to "overnight" singular

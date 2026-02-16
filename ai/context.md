@@ -70,3 +70,17 @@ Roofing contractors who need to:
 - Previous work preserved on branch: backup-multi-building-work
 - Will be re-implemented with additive-only approach
 - Must not modify any Track 1 code paths
+
+## Knowledge File Architecture (Added 2/16/2026)
+- Knowledge files live in data/knowledge/ (7 files: 6 roof systems + universal rules)
+- Loaded server-side via /app/api/smart-selection/route.ts
+- Smart selection hook detects roof system and requests matching file
+- Knowledge files are the SOURCE OF TRUTH for material selection rules
+- Inline rules in useSmartSelection.ts are FALLBACK only
+- To change what gets selected: edit the knowledge .md file, not the code
+
+## Kit Grouping Architecture
+- lib/kitGrouping.ts contains deterministic grouping rules
+- Called in lib/clientViewBuilder.ts after markup is applied
+- Display-only: changes PDF appearance, not underlying math
+- Kit definitions are hardcoded rules, not AI-powered
