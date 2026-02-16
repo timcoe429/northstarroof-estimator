@@ -154,7 +154,8 @@ export const buildEstimateForClientPdf = (
         quantity: 1,
         total: clientPrice,
         wasteAdded: 0,
-      };
+        baseCost: item.total, // Preserve base cost for grouping logic
+      } as any;
     });
   };
 

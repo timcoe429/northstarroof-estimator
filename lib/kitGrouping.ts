@@ -3,8 +3,9 @@ import { formatCurrency } from './estimatorUtils';
 
 // Items that should NEVER be grouped
 const isStandaloneItem = (item: LineItem): boolean => {
-  // Price threshold
-  if (item.total > 1500) return true;
+  // Price threshold - check base cost, not marked-up client price
+  const baseCost = (item as any).baseCost || item.total;
+  if (baseCost > 1500) return true;
   
   const nameLower = item.name.toLowerCase();
   
