@@ -193,7 +193,7 @@ export default function RoofScopeEstimator() {
         // Equipment items: Porto Potty, Rolloff/Dumpster = 1
         if (itemName.includes('porto') || itemName.includes('porta potty') ||
             itemName.includes('rolloff') || itemName.includes('dumpster') ||
-            itemName.includes('landfill') || itemName.includes('overnights')) {
+            itemName.includes('landfill') || itemName.includes('overnight')) {
           qty = 1;
         }
         // Materials with coverage: calculate based on roof size

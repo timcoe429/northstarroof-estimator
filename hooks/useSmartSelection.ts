@@ -337,7 +337,7 @@ Only return the JSON, no other text.`;
           const qty = updatedQuantities[id] ?? 0;
           if (item?.isVendorItem) return true;
           const name = item?.name?.toLowerCase() || '';
-          if (name.includes('delivery') || name.includes('rolloff') || name.includes('dumpster')) return true;
+          if (name.includes('delivery') || name.includes('rolloff') || name.includes('dumpster') || name.includes('overnight')) return true;
           return qty > 0;
         });
 

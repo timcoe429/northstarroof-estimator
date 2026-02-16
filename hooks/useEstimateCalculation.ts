@@ -86,7 +86,7 @@ export const useEstimateCalculation = ({
       // PRIORITY 1.5: Manual-entry items (unit "each", no coverage, not flat fee) → Default to 0
       else if (item.unit === 'each' && !coverage) {
         // Check if it's a known flat fee item
-        const isFlatFeeItem = name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || name.includes('reprographic');
+        const isFlatFeeItem = name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || name.includes('reprographic') || name.includes('overnight');
         
         // If not a flat fee item, default to 0 (user must enter quantity manually)
         // This includes labor items with "each" unit that aren't per-square (like "Snowguard Install")
@@ -104,7 +104,7 @@ export const useEstimateCalculation = ({
       } else if (name.includes('starter')) {
         // Starter: eave_length + rake_length (perimeter) - no coverage
         qty = (m.eave_length || 0) + (m.rake_length || 0);
-      } else if (name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || item.unit === 'flat') {
+      } else if (name.includes('delivery') || name.includes('fuel') || name.includes('porto') || name.includes('rolloff') || name.includes('overnight') || item.unit === 'flat') {
         if (name.includes('rolloff') && isTearOff) {
           qty = Math.ceil((m.total_squares || 0) / 15);
         } else {
