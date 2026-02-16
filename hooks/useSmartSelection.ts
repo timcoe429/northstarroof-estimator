@@ -121,6 +121,18 @@ export const useSmartSelection = ({
     }
   };
 
+  // Detect roof system from job description
+  const detectRoofSystem = (description: string): string => {
+    const desc = description.toLowerCase();
+    if (desc.includes('brava')) return 'brava';
+    if (desc.includes('davinci')) return 'davinci';
+    if (desc.includes('metal') || desc.includes('standing seam') || desc.includes('schafer')) return 'metal';
+    if (desc.includes('asphalt') || desc.includes('shingle') || desc.includes('presidential')) return 'asphalt';
+    if (desc.includes('cedar') || desc.includes('shake')) return 'cedar';
+    if (desc.includes('flat') || desc.includes('low slope') || desc.includes('tpo') || desc.includes('epdm')) return 'flat';
+    return 'asphalt'; // default
+  };
+
   // Generate smart selection based on job description
   const generateSmartSelection = async () => {
     if (!jobDescription.trim() || !measurements || allSelectableItems.length === 0) {
@@ -133,6 +145,23 @@ export const useSmartSelection = ({
     setSmartSelectionWarnings([]);
 
     try {
+      // Load knowledge files for detected roof system
+      let knowledgeContext = '';
+      try {
+        const roofSystem = detectRoofSystem(jobDescription);
+        const knowledgeResponse = await fetch('/api/smart-selection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roofSystem }),
+        });
+        if (knowledgeResponse.ok) {
+          const data = await knowledgeResponse.json();
+          knowledgeContext = data.knowledge || '';
+        }
+      } catch (error) {
+        console.warn('Failed to load knowledge files, using inline rules:', error);
+      }
+
       const selectionItems = allSelectableItems.map(item => ({
         id: item.id,
         name: item.name,
@@ -143,6 +172,13 @@ export const useSmartSelection = ({
       }));
 
       const prompt = `You are a roofing estimator assistant. Based on the job description and measurements, select the appropriate items from the price list.
+
+${knowledgeContext ? `ROOF SYSTEM KNOWLEDGE:
+${knowledgeContext}
+
+Use the knowledge above to guide your selections. Follow these rules as fallback:
+
+` : ''}JOB DESCRIPTION:
 
 JOB DESCRIPTION:
 ${jobDescription}
@@ -156,9 +192,9 @@ ${JSON.stringify(selectionItems, null, 2)}
 RULES:
 1. METAL ROOF: If the job description mentions "metal roof", do NOT select Brava or DaVinci products.
 2. PRODUCT LINES: Only select ONE system (Brava OR DaVinci, never both)
-3. LABOR: Only select ONE crew (Hugo/Alfredo/Chris/Sergio). Pick the right Hugo rate based on pitch if Hugo is chosen.
+3. LABOR: Only select ONE crew. DEFAULT to Hugo (pick Hugo rate based on pitch). Only select Alfredo/Chris/Sergio if explicitly requested.
 4. SLOPE-AWARE: If pitch >= 8/12, use High Slope/Hinged H&R variants. If < 8/12, use regular H&R.
-5. TEAR-OFF: If mentioned, include Landfill Charge (NOT "Rolloff") and OSB. Calculate OSB as (total_squares * 3) sheets. Landfill Charge quantity = Math.ceil(total_squares / 15).
+5. TEAR-OFF: If mentioned, include Landfill Charge (NOT "Rolloff") and OSB. Calculate OSB as (total_squares * 3) sheets. Landfill Charge quantity = 1 on EVERY job.
 6. DELIVERY: If Brava selected, include Brava Delivery ($5,000 flat fee).
 7. UNDERLAYMENT — CRITICAL RULES:
    a) OC Titanium PSU 30 — ALWAYS select on EVERY roof (metal and non-metal), no exceptions
@@ -167,7 +203,7 @@ RULES:
    d) NEVER select Sharkskin (replaced by SolarHide)
    e) NEVER select Grace Ice & Water High Temp as primary underlayment (it is supplemental only for valleys/eaves)
 8. FLASHING — CRITICAL RULES:
-   a) For NON-METAL roofs (Brava, DaVinci, asphalt, cedar): DEFAULT to standard aluminum flashing (D-Style Eave, D-Style Rake, Valley, Step Flash, Headwall or Pitch Change, Flat Sheet, Hip & Ridge)
+   a) For NON-METAL roofs (Brava, DaVinci, asphalt, cedar): DEFAULT to standard aluminum flashing (D-Style Eave, D-Style Rake, Valley, Step Flash, Headwall or Pitch Change, Hip & Ridge). Do NOT select Flat Sheet (custom only).
    b) NEVER auto-select copper flashing UNLESS user explicitly says "copper" in job description
    c) For METAL roofs (with Schafer vendor quote): Do NOT select ANY flashing from price list — all flashing comes from Schafer vendor quote
 9. FASTENERS — CRITICAL RULES:
@@ -175,12 +211,13 @@ RULES:
    b) Presidential asphalt: select 1 3/4" non-ringshank nails
    c) Basic/standard asphalt: select 1 1/2" non-ringshank nails
    d) Metal roofs (with Schafer vendor quote): Do NOT select nails from price list — fasteners come from Schafer vendor quote
-   e) ALL systems: select 1.25" Plasticap Pail for underlayment attachment
+   e) Do NOT select Plasticap or other accessories — covered by Sundries %
 10. EQUIPMENT & FEES — Use exact names:
-   a) Landfill Charge (NOT "Rolloff") — $750, quantity 1 per job
-   b) Porto Potty — $600, quantity 1 per job
-   c) Fuel Charge — $194, quantity 1 per job
+   a) Landfill Charge (NOT "Rolloff") — $750, quantity 1 on EVERY job (always include)
+   b) Porto Potty — $600, quantity 1 on EVERY job (always include)
+   c) Fuel Charge — $194, quantity 1 on EVERY job (always include)
    d) Overnight Charge — $387/night, quantity 1, auto-include when Hugo or Sergio labor crew is selected
+   e) Do NOT select accessories/consumables (nails, caulk, sealant, plasticap, coil screws) — covered by Sundries %
 11. OPTIONAL ITEMS — Do NOT auto-select these (user adds manually via Calculated Accessories):
    a) Heat Tape (material and labor)
    b) Snow Guards (material and install)
@@ -190,7 +227,7 @@ RULES:
    a) Explicitly mentioned in job description (e.g., "need 5 tubes of sealant")
    b) Part of a vendor quote (vendor items always get selected)
    These are covered by the Sundries/Misc Materials percentage.
-13. ZERO QUANTITY RULE: Do NOT select any item that would result in 0 quantity. If you can't calculate a quantity for an item and it's not a flat-fee item (delivery, landfill), don't select it.
+13. ZERO QUANTITY RULE: Do NOT select items with 0 quantity EXCEPT flat-fee items (delivery, fuel, porto potty, landfill charge, overnights).
 14. SPECIAL REQUESTS: If user mentions specific items (copper valleys, specific accessories), select those even if they override defaults.
 15. VENDOR ITEMS: Vendor items already have quantities from the quote. Do NOT infer quantities unless explicitly stated.
 
