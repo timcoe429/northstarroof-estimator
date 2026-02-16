@@ -55,3 +55,18 @@ Roofing contractors who need to:
 
 - **Schafer Quotes**: Required for metal roofs. Uploaded quote is the ONLY source of truth for pricing and quantities. All quote items are extracted exactly as quoted. Quote items are read-only in estimate builder (can deselect but cannot edit quantity/price).
 - **Other Vendors** (TRA, Rocky Mountain): Quotes can be uploaded and items selected into estimates. Items can be edited if needed.
+
+## Track Architecture (Added 2/16/2026)
+
+### Track 1: Single-Building (PRODUCTION)
+- Current working app on main branch
+- Upload → Extracted → Estimate flow
+- All bug fixes and improvements go here first
+- Must always be deployable
+
+### Track 2: Multi-Building (DEVELOPMENT)
+- Feature branches only (e.g., feature/multi-building)
+- Setup → Build (with tabs) → Review flow
+- Previous work preserved on branch: backup-multi-building-work
+- Will be re-implemented with additive-only approach
+- Must not modify any Track 1 code paths

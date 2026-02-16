@@ -149,3 +149,66 @@
 **Rejected Alternative:** Adding `export const dynamic = 'force-dynamic'` to each individual page
 - Reason: Fragile (easy to forget), repetitive, no centralized control
 - This is a case where centralization was clearly better than repetition
+
+## 2/16/2026 - Track Isolation Architecture
+
+- **Two tracks**: Single-building (Track 1, production) and Multi-building (Track 2, development)
+- Multi-building code is ADDITIVE ONLY — never modifies single-building code paths
+- Multi-building lives on feature branches, never direct to main
+- Reverted to commit 2be0a57 (pre-multi-building) as stable baseline
+
+## 2/16/2026 - Commit Safety Rules
+
+- Max 3 files per commit
+- Always audit before fixing (two separate prompts)
+- Feature branches for new work, not direct to main
+- Protected files list: RoofScopeEstimator.tsx, EstimateView.tsx, generateProposal.ts, clientViewBuilder.ts
+- Claude Code banned for multi-file changes — Cursor only
+
+## 2/16/2026 - Roofing Business Rules Master Reference
+
+### Underlayment
+- OC Titanium PSU 30 ($145/roll, 2 sq) — ALWAYS on every roof
+- GAF VersaShield ($200/roll) — metal roofs ONLY, in addition to PSU 30
+- SolarHide Radiant Barrier ($340/roll) — ALL non-metal roofs, in addition to PSU 30
+- Sharkskin — NO LONGER AUTO-SELECTED. Replaced by SolarHide.
+- Grace Ice & Water High Temp — supplemental only for valleys/eaves, NOT primary underlayment
+
+### Flashing Defaults
+- Brava/DaVinci/asphalt/cedar: DEFAULT to standard aluminum. Copper only if user specifies.
+- Metal roofs: ALL flashing from Schafer vendor quote
+
+### Fasteners
+- Synthetic (Brava, DaVinci): 1 3/4" ringshank nails
+- Presidential asphalt: 1 3/4" non-ringshank
+- Basic asphalt: 1 1/2" non-ringshank
+- Metal: from Schafer vendor quote
+- All systems: 1.25" Plasticap Pail for underlayment
+
+### Snow Retention
+- Metal roofs: snow fence (ColorGard) $12/lf + install $5/lf
+- Synthetic & asphalt: Snow Guard $7/ea + install $5/ea
+- Rows by pitch: 1-4/12=1, 5-7/12=2, 8-10/12=3, 11-12/12=4
+- NEVER mix snow fence and snow guards
+
+### Optional Items (show on PDF, excluded from Quote Total)
+- Heat Tape: material $5/lf + labor $7.50/lf
+- Snow Guard: $7/ea + install $5/ea
+- Snow Fence (ColorGard): $12/lf + install $5/lf
+- Skylights: $2,400 each
+
+### Equipment & Fees
+- Porto Potty: $600/job
+- Landfill Charge: $750/each (was "Rolloff")
+- Fuel Charge: $194/job
+- Overnights: $387/night — auto-include for Hugo or Sergio crews
+- Brava Delivery: $5,000 flat — always include for Brava jobs
+
+### Margin Rules
+- Materials + Labor: full markup (office + margin)
+- Equipment & pass-throughs (delivery, landfill, fuel, porto potty, overnights): office overhead ONLY, no profit margin
+
+### Labor
+- One crew per job
+- Hugo (12/12): $750/sq, Hugo (8-11/12): $650/sq, Hugo (<8/12): $550/sq
+- Alfredo: $1,136/sq, Chris: $750/sq, Sergio: $129/sq
