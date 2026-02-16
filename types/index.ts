@@ -42,6 +42,12 @@ export interface LineItem extends PriceItem {
   };
 }
 
+export interface GroupedLineItem extends LineItem {
+  isKit: boolean;
+  subtitle?: string;
+  kitItems?: LineItem[];
+}
+
 export interface CustomerInfo {
   name: string;
   address: string;

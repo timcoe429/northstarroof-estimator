@@ -675,7 +675,8 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
       // Draw item row - ensure we don't go below regular page bottom margin
       const description = contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
-      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false);
+      const subtitle = (contentItem.item as any).subtitle;
+      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false, subtitle);
       
       // Ensure we don't exceed the bottom margin
       if (newYPos < REGULAR_PAGE_BOTTOM_MARGIN) {
@@ -714,7 +715,8 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
       // Draw item row - ensure we don't go below quote page bottom margin
       const description = contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
-      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false);
+      const subtitle = (contentItem.item as any).subtitle;
+      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false, subtitle);
       
       // Ensure we don't exceed the bottom margin (quote page has larger margin for the box)
       if (newYPos < QUOTE_PAGE_BOTTOM_MARGIN) {
@@ -806,14 +808,23 @@ function drawLineItemRow(
   price: string, 
   font: any, 
   isFirstInSection: boolean = false,
-  isOptional: boolean = false
+  isOptional: boolean = false,
+  subtitle?: string
 ): number {
   const maxDescWidth = DESC_COLUMN_WIDTH - ROW_PADDING * 2;
   const fontSize = 10;
+  const subtitleFontSize = 8;
   
   // Calculate row height based on text wrapping
   const lines = wordWrap(description, font, fontSize, maxDescWidth);
-  const textHeight = lines.length * (fontSize + 4);
+  let textHeight = lines.length * (fontSize + 4);
+  
+  // Add subtitle height if present
+  if (subtitle) {
+    const subtitleLines = wordWrap(subtitle, font, subtitleFontSize, maxDescWidth);
+    textHeight += subtitleLines.length * (subtitleFontSize + 3) + 6; // Extra spacing between title and subtitle
+  }
+  
   const rowHeight = Math.max(ROW_HEIGHT_SINGLE, textHeight + ROW_PADDING * 2);
   
   const rowBottom = y - rowHeight;
@@ -868,7 +879,12 @@ function drawLineItemRow(
   });
   
   // Description text - vertically centered
-  const totalTextHeight = lines.length * (fontSize + 4) - 4; // Subtract last line spacing
+  let totalTextHeight = lines.length * (fontSize + 4) - 4; // Subtract last line spacing
+  if (subtitle) {
+    const subtitleLines = wordWrap(subtitle, font, subtitleFontSize, maxDescWidth);
+    totalTextHeight += subtitleLines.length * (subtitleFontSize + 3) + 6;
+  }
+  
   const centerY = rowBottom + (rowHeight / 2);
   const textStartY = centerY + (totalTextHeight / 2) - fontSize;
   let textY = textStartY;
@@ -885,6 +901,22 @@ function drawLineItemRow(
       color: textColor,
     });
     textY -= (fontSize + 4);
+  }
+  
+  // Draw subtitle if present
+  if (subtitle) {
+    textY -= 6; // Extra spacing before subtitle
+    const subtitleLines = wordWrap(subtitle, font, subtitleFontSize, maxDescWidth);
+    for (const line of subtitleLines) {
+      page.drawText(line, {
+        x: DESC_COLUMN_LEFT + ROW_PADDING + 10, // Indent subtitle slightly
+        y: textY,
+        size: subtitleFontSize,
+        font: font,
+        color: rgb(0.5, 0.5, 0.5), // Gray color for subtitle
+      });
+      textY -= (subtitleFontSize + 3);
+    }
   }
   
   // Price text - vertically centered

@@ -2,6 +2,7 @@ import type { Estimate, LineItem, VendorQuoteItem } from '@/types';
 import type { GroupedVendorItem } from '@/types/estimator';
 import type { OrganizedProposal } from '@/lib/proposalOrganizer';
 import { formatCurrency } from '@/lib/estimatorUtils';
+import { groupItemsIntoKits } from './kitGrouping';
 
 interface BuildClientViewSectionsParams {
   estimate: Estimate;
@@ -161,25 +162,30 @@ export const buildEstimateForClientPdf = (
   const labor = buildLineItems(clientSections.labor, 'labor');
   const equipment = buildLineItems(clientSections.equipment, 'equipment');
 
+  // Apply deterministic kit grouping
+  const groupedMaterials = groupItemsIntoKits(materials);
+  const groupedLabor = labor; // Labor never grouped
+  const groupedEquipment = equipment; // Equipment never grouped
+
   const byCategory = {
-    materials,
-    labor,
-    equipment,
+    materials: groupedMaterials,
+    labor: groupedLabor,
+    equipment: groupedEquipment,
     accessories: [],
     schafer: [],
   };
 
   const totals = {
-    materials: materials.reduce((sum, item) => sum + item.total, 0),
-    labor: labor.reduce((sum, item) => sum + item.total, 0),
-    equipment: equipment.reduce((sum, item) => sum + item.total, 0),
+    materials: groupedMaterials.reduce((sum, item) => sum + item.total, 0),
+    labor: groupedLabor.reduce((sum, item) => sum + item.total, 0),
+    equipment: groupedEquipment.reduce((sum, item) => sum + item.total, 0),
     accessories: 0,
     schafer: 0,
   };
 
   return {
     ...estimate,
-    lineItems: [...materials, ...labor, ...equipment],
+    lineItems: [...groupedMaterials, ...groupedLabor, ...groupedEquipment],
     byCategory,
     totals,
   } as Estimate;
