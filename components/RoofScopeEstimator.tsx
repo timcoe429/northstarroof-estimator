@@ -809,14 +809,8 @@ export default function RoofScopeEstimator() {
         }
       }
 
-      // If organized proposal doesn't exist, organize first
-      if (!organizedProposal) {
-        await triggerOrganization(estimate);
-      }
-
-      const pdfEstimate = vendorQuotes.groupedVendorItems.length > 0 || organizedProposal 
-        ? buildEstimateForClientPdfWrapper(estimate) 
-        : estimate;
+      // Transform estimate for client PDF (applies markup multiplier to line items)
+      const pdfEstimate = buildEstimateForClientPdfWrapper(estimate);
       const blob = await generateProposalPDF(pdfEstimate, aiSuggestions);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

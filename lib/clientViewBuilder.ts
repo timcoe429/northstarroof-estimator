@@ -20,28 +20,7 @@ export const buildClientViewSections = ({
   const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
   const effectiveMultiplier = rawTotal > 0 ? estimate.finalPrice / rawTotal : 1;
 
-  // If organized proposal is provided, use it instead of raw estimate items
-  if (organizedProposal) {
-    return {
-      materials: organizedProposal.materials.map(item => ({
-        name: item.displayName,
-        description: item.displayName,
-        total: item.total, // Already from calculator, will apply multiplier later
-      })),
-      labor: organizedProposal.labor.map(item => ({
-        name: item.displayName,
-        description: item.displayName,
-        total: item.total,
-      })),
-      equipment: organizedProposal.equipment.map(item => ({
-        name: item.displayName,
-        description: item.displayName,
-        total: item.total,
-      })),
-    };
-  }
-
-  // Fallback to original behavior (ungrouped items)
+  // Use actual item names from estimate (no AI organization)
   const vendorItemIds = new Set(vendorQuoteItems.map(item => item.id));
 
   const nonVendorMaterials = estimate.byCategory.materials.filter(item => !vendorItemIds.has(item.id));
