@@ -19,20 +19,29 @@ Natural cedar roofing ΓÇö either cedar shakes (thicker, hand-split or machine
 ## Fasteners
 - Cedar typically uses stainless steel nails to prevent corrosion/staining
 - **1.75" SS RS Coil Nail** ($350/box) ΓÇö Stainless steel ring shank, recommended for cedar at high altitude
-- **1.25" Plasticap Pail** ($40/pail) ΓÇö For underlayment
 - Note: Cedar-specific nail items may need to be added to the price list
+
+## Labor
+- **Default crew: Hugo**
+- Select Hugo rate based on predominant pitch:
+  - Hugo (standard): $550/sq for pitches below 8/12
+  - Hugo (lower pitch): $650/sq for 8/12 to 11/12
+  - Hugo (12/12 pitch): $750/sq for 12/12 pitch roofs
+- Only select Alfredo ($1,136/sq), Chris ($750/sq), or Sergio ($129/sq) if explicitly specified in job description
 
 ## Flashing
 
 ### Standard Flashings
 - D-Style Eave ($46/ea), D-Style Rake ($46/ea)
 - Valley ($83/ea), Step Flash ($365/box)
-- Headwall or Pitch Change ($36/ea), Flat Sheet ($120/ea)
+- Headwall or Pitch Change ($36/ea)
 
 Standard aluminum is the default. Copper is only selected when customer explicitly requests it for aesthetic purposes (copper pairs well with cedar visually).
 
+Do NOT select Flat Sheet unless explicitly requested — it is for custom fabrication only.
+
 ## Snow Retention
-- **RMSG Yeti Snowguard** ($7.00/ea) ΓÇö Snow guards, NOT snow fence
+- **Snow Guard** ($7.00/ea) ΓÇö Snow guards, NOT snow fence
   - Same calculation: eave_length ├ù rows_by_pitch
   - Rows: 1-4/12 = 1, 5-7/12 = 2, 8-10/12 = 3, 11-12/12 = 4
 - Labor: **Snowguard Install** ($5.00/ea)

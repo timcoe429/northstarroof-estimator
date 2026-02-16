@@ -1,4 +1,4 @@
-﻿# Flat / Low Slope Roof System
+# Flat / Low Slope Roof System
 
 ## Overview
 Low slope and flat roofs (pitch below 2/12) use modified bitumen or single-ply membrane systems. Different materials and installation methods than steep-slope systems. Common on commercial sections, additions, or porches in the Roaring Fork Valley.
@@ -18,11 +18,15 @@ Low slope and flat roofs (pitch below 2/12) use modified bitumen or single-ply m
 - **1.25" Plasticap Pail** ($40/pail) ΓÇö For securing base sheet
 - **7/8" Gun Nail** ($28.95/box) ΓÇö For sheathing/substrate
 
+## Labor
+- **Default crew: Hugo (standard)** at $550/sq
+- Only select other crews if explicitly specified in job description
+
 ## Flashing
 Standard aluminum flashing:
 - D-Style Eave ($46/ea) ΓÇö if applicable
 - Headwall or Pitch Change ($36/ea)
-- Flat Sheet ($120/ea) ΓÇö for custom details and edge work
+- Flat Sheet ($120/ea) ΓÇö for custom details and edge work (only if explicitly requested)
 - Note: Flat roofs often need more custom flashing work than steep roofs
 
 ## Snow Retention

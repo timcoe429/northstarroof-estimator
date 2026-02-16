@@ -10,15 +10,21 @@ These rules apply to EVERY estimate regardless of roof system.
 - NEVER select Grace Ice & Water High Temp as primary underlayment
 
 ## Equipment & Fees (Always Include)
-- **Porto Potty** ΓÇö 1 per job. Covers delivery ($150) + pickup ($150) + monthly rental.
-- **Landfill/Dumpster** ΓÇö 1 per job minimum. This is a landfill disposal fee, not a dumpster rental.
-  - If tear-off: quantity = CEILING(total_squares / 15) rolloffs
+- **Porto Potty** ΓÇö $600, quantity 1 per job. Covers delivery ($150) + pickup ($150) + monthly rental.
+- **Landfill Charge** ΓÇö $750 each, quantity 1 on EVERY job (not just tear-offs)
+  - This is a flat fee for landfill disposal, included on all jobs
 - **Fuel Charge** ($194) ΓÇö 1 per job
 - **Aspen Reprographic** ($55/ea) ΓÇö For permit drawings. Include if permits mentioned.
+- **IMPORTANT**: Landfill Charge, Porto Potty, and Fuel Charge are ALWAYS included on every job
 
-## Overnights
-- $387/night
-- Auto-include when **Sergio** or **Hugo** is the selected labor crew
+## Accessories Rule
+- Do NOT select items from the accessories category (nails, plasticap, coil screws, caulk, sealant, spray paint)
+- These consumables are covered by the Sundries/Misc Materials percentage
+- Only select accessories if explicitly mentioned with a quantity in the job description OR part of a vendor quote
+
+## Overnight Charge
+- **Overnight Charge** ΓÇö $387/night, quantity 1
+- Auto-include when **Hugo** or **Sergio** is the selected labor crew
 - Also suggest when job is >25 SQ (large job likely multi-day)
 
 ## Labor Rules
@@ -34,7 +40,7 @@ These rules apply to EVERY estimate regardless of roof system.
 
 ## Tear-Off Rules
 - When tear-off is part of the job:
-  - Include **Rolloff** at $48/sq ΓÇö quantity = CEILING(total_squares / 15)
+  - Include **Landfill Charge** at $750 ΓÇö quantity 1 per job
   - Include **7/16" OSB** at $24.35/sheet ΓÇö quantity = total_squares ├ù 3
   - Include **2X4 Toe Boards** for OSHA safety
 

@@ -27,20 +27,29 @@ Brava is a synthetic composite slate tile system. Lightweight, durable, Class A 
 - **1.75" Coil Nails RS HDG** ($188/box) — Ring shank, hot-dip galvanized for standard applications
 - **1.75" SS RS Coil Nail** ($350/box) — Stainless steel ring shank for coastal/high-moisture (use if specified)
 - **3" Coil Screws (H&R)** ($60/box) — For hip and ridge cap attachment
-- **1.25" Plasticap Pail** ($40/pail) — Plastic cap nails for underlayment installation
+
+## Labor
+- **Default crew: Hugo**
+- Select Hugo rate based on predominant pitch:
+  - Hugo (standard): $550/sq for pitches below 8/12
+  - Hugo (lower pitch): $650/sq for 8/12 to 11/12
+  - Hugo (12/12 pitch): $750/sq for 12/12 pitch roofs
+- Only select Alfredo ($1,136/sq), Chris ($750/sq), or Sergio ($129/sq) if explicitly specified in job description
 
 ## Flashing Options
 
 ### Standard Flashings
 - D-Style Eave ($46/ea), D-Style Rake ($46/ea)
 - Valley ($83/ea), Step Flash ($365/box)
-- Headwall or Pitch Change ($36/ea), Flat Sheet ($120/ea)
+- Headwall or Pitch Change ($36/ea)
 - Hip & Ridge ($25/ea) — metal hip/ridge trim
 
 Always use standard aluminum flashing. Copper flashing is only used if the customer explicitly requests it.
 
+Do NOT select Flat Sheet unless explicitly requested — it is for custom fabrication only.
+
 ## Snow Retention
-- **RMSG Yeti Snowguard** ($7.00/ea) — Individual snow guards
+- **Snow Guard** ($7.00/ea) — Individual snow guards
   - Guards per row = eave_length (1 per foot)
   - Rows: 1-4/12 = 1, 5-7/12 = 2, 8-10/12 = 3, 11-12/12 = 4
   - Total = guards_per_row × number_of_rows

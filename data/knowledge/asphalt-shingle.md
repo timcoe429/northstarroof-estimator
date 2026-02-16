@@ -25,18 +25,27 @@ The job description or user selection determines the sub-type:
 ## Fasteners
 - **Presidential**: 1┬╛" non-ringshank nails (item may need to be added to price list)
 - **Basic/Standard**: 1┬╜" non-ringshank nails (item may need to be added to price list)
-- **1.25" Plasticap Pail** ($40/pail) ΓÇö For underlayment
 - Note: Specific non-ringshank nail items do not currently exist in the price list. Flag this to the user.
+
+## Labor
+- **Default crew: Hugo**
+- Select Hugo rate based on predominant pitch:
+  - Hugo (standard): $550/sq for pitches below 8/12
+  - Hugo (lower pitch): $650/sq for 8/12 to 11/12
+  - Hugo (12/12 pitch): $750/sq for 12/12 pitch roofs
+- Only select Alfredo ($1,136/sq), Chris ($750/sq), or Sergio ($129/sq) if explicitly specified in job description
 
 ## Flashing
 Standard aluminum flashing (copper is less common with asphalt but can be specified):
 - D-Style Eave ($46/ea), D-Style Rake ($46/ea)
 - Valley ($83/ea), Step Flash ($365/box)
-- Headwall or Pitch Change ($36/ea), Flat Sheet ($120/ea)
+- Headwall or Pitch Change ($36/ea)
 - Hip & Ridge ($25/ea)
 
+Do NOT select Flat Sheet unless explicitly requested — it is for custom fabrication only.
+
 ## Snow Retention
-- **RMSG Yeti Snowguard** ($7.00/ea)
+- **Snow Guard** ($7.00/ea)
   - Same calculation: eave_length ├ù rows_by_pitch
   - Rows: 1-4/12 = 1, 5-7/12 = 2, 8-10/12 = 3, 11-12/12 = 4
 - Labor: **Snowguard Install** ($5.00/ea)
