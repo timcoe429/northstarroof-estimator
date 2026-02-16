@@ -269,8 +269,16 @@ export const useEstimateCalculation = ({
       const isVendorItem = item.isVendorItem === true;
       const isCustomItem = item.isCustomItem === true;
       const baseQty = itemQuantities[id] ?? 0;
-      // Check if item is optional (skylights)
-      const isOptional = item.name.toLowerCase().includes('skylight');
+      // Check if item is optional (accessories that should be excluded from quote total)
+      const itemNameLower = item.name.toLowerCase();
+      const isOptional = 
+        itemNameLower.includes('skylight') ||
+        itemNameLower.includes('heat tape') ||
+        itemNameLower.includes('snow guard') ||
+        itemNameLower.includes('snowguard') ||
+        itemNameLower.includes('snow fence') ||
+        itemNameLower.includes('snowfence') ||
+        itemNameLower.includes('colorgard');
       // Apply waste factor only to non-vendor materials (and not optional items)
       const isMaterialCategory = item.category === 'materials' || item.category === 'schafer';
       const qty = !isVendorItem && isMaterialCategory && !isOptional ? Math.ceil(baseQty * wasteFactor) : baseQty;

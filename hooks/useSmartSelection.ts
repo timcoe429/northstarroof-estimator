@@ -158,16 +158,41 @@ RULES:
 2. PRODUCT LINES: Only select ONE system (Brava OR DaVinci, never both)
 3. LABOR: Only select ONE crew (Hugo/Alfredo/Chris/Sergio). Pick the right Hugo rate based on pitch if Hugo is chosen.
 4. SLOPE-AWARE: If pitch >= 8/12, use High Slope/Hinged H&R variants. If < 8/12, use regular H&R.
-5. TEAR-OFF: If mentioned, include Rolloff and OSB. Calculate OSB as (total_squares * 3) sheets.
-6. DELIVERY: If Brava selected, include Brava Delivery.
-7. UNDERLAYMENT: Select appropriate underlayment (Ice & Water for valleys/eaves, synthetic for field)
-8. ACCESSORIES/CONSUMABLES: Do NOT select items like caulk, sealant, spray paint, nails, screws unless they are:
+5. TEAR-OFF: If mentioned, include Landfill Charge (NOT "Rolloff") and OSB. Calculate OSB as (total_squares * 3) sheets. Landfill Charge quantity = Math.ceil(total_squares / 15).
+6. DELIVERY: If Brava selected, include Brava Delivery ($5,000 flat fee).
+7. UNDERLAYMENT — CRITICAL RULES:
+   a) OC Titanium PSU 30 — ALWAYS select on EVERY roof (metal and non-metal), no exceptions
+   b) For NON-METAL roofs (Brava, DaVinci, asphalt, cedar): ALSO select SolarHide Radiant Barrier IN ADDITION to PSU 30
+   c) For METAL roofs (with Schafer vendor quote): ALSO select GAF VersaShield IN ADDITION to PSU 30
+   d) NEVER select Sharkskin (replaced by SolarHide)
+   e) NEVER select Grace Ice & Water High Temp as primary underlayment (it is supplemental only for valleys/eaves)
+8. FLASHING — CRITICAL RULES:
+   a) For NON-METAL roofs (Brava, DaVinci, asphalt, cedar): DEFAULT to standard aluminum flashing (D-Style Eave, D-Style Rake, Valley, Step Flash, Headwall or Pitch Change, Flat Sheet, Hip & Ridge)
+   b) NEVER auto-select copper flashing UNLESS user explicitly says "copper" in job description
+   c) For METAL roofs (with Schafer vendor quote): Do NOT select ANY flashing from price list — all flashing comes from Schafer vendor quote
+9. FASTENERS — CRITICAL RULES:
+   a) Synthetic systems (Brava, DaVinci): select 1 3/4" ringshank nails (look for "1.75" or "1 3/4"" with "ringshank" or "RS" or "HDG")
+   b) Presidential asphalt: select 1 3/4" non-ringshank nails
+   c) Basic/standard asphalt: select 1 1/2" non-ringshank nails
+   d) Metal roofs (with Schafer vendor quote): Do NOT select nails from price list — fasteners come from Schafer vendor quote
+   e) ALL systems: select 1.25" Plasticap Pail for underlayment attachment
+10. EQUIPMENT & FEES — Use exact names:
+   a) Landfill Charge (NOT "Rolloff") — $750, quantity 1 per job
+   b) Porto Potty — $600, quantity 1 per job
+   c) Fuel Charge — $194, quantity 1 per job
+   d) Overnight Charge — $387/night, auto-include when Hugo or Sergio labor crew is selected
+11. OPTIONAL ITEMS — Do NOT auto-select these (user adds manually via Calculated Accessories):
+   a) Heat Tape (material and labor)
+   b) Snow Guards (material and install)
+   c) Snow Fence / ColorGard (material and install)
+   d) Skylights
+12. ACCESSORIES/CONSUMABLES: Do NOT select items like caulk, sealant, spray paint unless:
    a) Explicitly mentioned in job description (e.g., "need 5 tubes of sealant")
    b) Part of a vendor quote (vendor items always get selected)
-   These items are typically covered by the Sundries/Misc Materials percentage.
-9. ZERO QUANTITY RULE: Do NOT select any item that would result in 0 quantity. If you can't calculate a quantity for an item and it's not a flat-fee item (delivery, rolloff), don't select it.
-10. SPECIAL REQUESTS: If user mentions specific items (copper valleys, snowguards, skylights), select those.
-11. VENDOR ITEMS: Vendor items already have quantities from the quote. Do NOT infer quantities unless explicitly stated.
+   These are covered by the Sundries/Misc Materials percentage.
+13. ZERO QUANTITY RULE: Do NOT select any item that would result in 0 quantity. If you can't calculate a quantity for an item and it's not a flat-fee item (delivery, landfill), don't select it.
+14. SPECIAL REQUESTS: If user mentions specific items (copper valleys, specific accessories), select those even if they override defaults.
+15. VENDOR ITEMS: Vendor items already have quantities from the quote. Do NOT infer quantities unless explicitly stated.
 
 EXPLICIT QUANTITIES:
 If the job description specifies an exact quantity for an item, extract it in the "explicitQuantities" object.
