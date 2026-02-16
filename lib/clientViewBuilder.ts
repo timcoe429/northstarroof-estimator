@@ -20,17 +20,38 @@ export const buildClientViewSections = ({
   const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
   const effectiveMultiplier = rawTotal > 0 ? estimate.finalPrice / rawTotal : 1;
 
+  // Helper to check if item is optional (should not appear in main estimate)
+  const isOptionalItem = (itemName: string): boolean => {
+    const nameLower = itemName.toLowerCase();
+    return nameLower.includes('skylight') ||
+           nameLower.includes('heat tape') ||
+           nameLower.includes('snow guard') ||
+           nameLower.includes('snowguard') ||
+           nameLower.includes('snow fence') ||
+           nameLower.includes('snowfence') ||
+           nameLower.includes('colorgard');
+  };
+
   // Use actual item names from estimate (no AI organization)
   const vendorItemIds = new Set(vendorQuoteItems.map(item => item.id));
 
-  const nonVendorMaterials = estimate.byCategory.materials.filter(item => !vendorItemIds.has(item.id));
-  const nonVendorAccessories = estimate.byCategory.accessories.filter(item => !vendorItemIds.has(item.id));
+  const nonVendorMaterials = estimate.byCategory.materials
+    .filter(item => !vendorItemIds.has(item.id))
+    .filter(item => !isOptionalItem(item.name));
+  const nonVendorAccessories = estimate.byCategory.accessories
+    .filter(item => !vendorItemIds.has(item.id))
+    .filter(item => !isOptionalItem(item.name));
   const nonVendorEquipment = estimate.byCategory.equipment.filter(item => !vendorItemIds.has(item.id));
-  const nonVendorLabor = estimate.byCategory.labor.filter(item => !vendorItemIds.has(item.id));
+  const nonVendorLabor = estimate.byCategory.labor
+    .filter(item => !isOptionalItem(item.name));
 
   // Get INDIVIDUAL vendor items (not grouped) from materials and accessories
-  const vendorMaterials = estimate.byCategory.materials.filter(item => vendorItemIds.has(item.id));
-  const vendorAccessories = estimate.byCategory.accessories.filter(item => vendorItemIds.has(item.id));
+  const vendorMaterials = estimate.byCategory.materials
+    .filter(item => vendorItemIds.has(item.id))
+    .filter(item => !isOptionalItem(item.name));
+  const vendorAccessories = estimate.byCategory.accessories
+    .filter(item => vendorItemIds.has(item.id))
+    .filter(item => !isOptionalItem(item.name));
 
   // Get grouped equipment (equipment should stay grouped as before)
   const groupedEquipment = groupedVendorItems.filter(group => group.category === 'equipment');

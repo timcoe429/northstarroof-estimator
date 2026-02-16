@@ -180,7 +180,7 @@ RULES:
    a) Landfill Charge (NOT "Rolloff") — $750, quantity 1 per job
    b) Porto Potty — $600, quantity 1 per job
    c) Fuel Charge — $194, quantity 1 per job
-   d) Overnight Charge — $387/night, auto-include when Hugo or Sergio labor crew is selected
+   d) Overnight Charge — $387/night, quantity 1, auto-include when Hugo or Sergio labor crew is selected
 11. OPTIONAL ITEMS — Do NOT auto-select these (user adds manually via Calculated Accessories):
    a) Heat Tape (material and labor)
    b) Snow Guards (material and install)
