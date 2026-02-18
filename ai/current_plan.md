@@ -18,6 +18,9 @@
 - ✅ Structure detection wired into Setup step: `lastDetection` useEffect creates one BuildingCard per detected structure when multi-structure RoofScope is uploaded
 - ✅ Multi-structure AI summary moved from Build step to Setup step (compact panel above building cards)
 - ✅ Phase 3a: Build step shell components created (BuildingProgress, BuildingSection, JobLevelSection, BuildStep) — NEW FILES ONLY, not yet wired into RoofScopeEstimator
+- ✅ Phase 3b: BuildStep wired into RoofScopeEstimator — dual rendering: single-building keeps ReviewStep+EstimateBuilder; multi-building shows BuildStep with empty materials, job-level section, CalculatedAccessories
+- ✅ Phase 3c: Per-building smart selection — auto-runs sequentially when entering Build step with multiple buildings; each building gets materials/accessories/schafer (excludes labor/equipment); BuildingProgress shows live progress; buildingMaterials reads from buildings
+- ✅ Multi-building materials table fix: pass `calculateItemQuantities` into smart selection so coverage-based items get quantities; batch updates for buildings; ref guard against duplicate runs
 
 ## Known Issues (Minor — Not Blocking)
 - Hip & Ridge metal trim not always auto-selected (add to knowledge file if needed)

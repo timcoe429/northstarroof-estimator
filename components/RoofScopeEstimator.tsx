@@ -25,7 +25,8 @@ import { useUIState } from '@/hooks/useUIState';
 import { useCustomItems } from '@/hooks/useCustomItems';
 import { useProjectManager } from '@/hooks/useProjectManager';
 import { useBuildings } from '@/hooks/useBuildings';
-import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView, CalculatedAccessories, SetupStep } from '@/components/estimator';
+import { useMultiBuildingSmartSelection } from '@/hooks/useMultiBuildingSmartSelection';
+import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView, CalculatedAccessories, SetupStep, BuildStep } from '@/components/estimator';
 
 export default function RoofScopeEstimator() {
   const { user, companyId, signOut } = useAuth();
@@ -415,6 +416,16 @@ export default function RoofScopeEstimator() {
   });
 
   const calculateItemQuantities = calculateItemQuantitiesHook;
+
+  const multiBuildingSelection = useMultiBuildingSmartSelection({
+    buildings: buildingsHook.buildings,
+    allSelectableItems,
+    vendorQuoteItems: vendorQuotes.vendorQuoteItems ?? [],
+    vendorItemMap: vendorQuotes.vendorItemMap,
+    onUpdateBuilding: buildingsHook.updateBuilding,
+    onUpdateBuildingsBatch: buildingsHook.updateBuildingsBatch,
+    calculateItemQuantities,
+  });
 
   // Manual organization trigger with guard against concurrent calls
   const organizingRef = useRef(false);
@@ -927,6 +938,71 @@ export default function RoofScopeEstimator() {
     }
   }, [uiState.showSavedQuotes]);
 
+  useEffect(() => {
+    if (step !== 'build' || buildingsHook.buildings.length <= 1) return;
+    if (multiBuildingSelection.progress.isRunning) return;
+    const anyComplete = buildingsHook.buildings.some((b) => b.smartSelectionComplete);
+    if (!anyComplete) {
+      multiBuildingSelection.runAllBuildingSelections();
+    }
+  }, [step, buildingsHook.buildings.length, buildingsHook.buildings, multiBuildingSelection.progress.isRunning, multiBuildingSelection.runAllBuildingSelections]);
+
+  // Per-building materials for BuildStep (multi-building path)
+  const buildingMaterials: Record<string, {
+    selectedItems: string[];
+    itemQuantities: Record<string, number>;
+    materialsSubtotal: number;
+    aiReasoning?: string;
+    warnings?: string[];
+  }> = {};
+  buildingsHook.buildings.forEach((building) => {
+    const selectedIds = building.selectedItems?.map((item) => item.id) ?? [];
+    const quantities = building.itemQuantities ?? {};
+    const subtotal = (building.selectedItems ?? []).reduce((sum, item) => {
+      const qty = quantities[item.id] ?? 0;
+      return sum + item.price * qty;
+    }, 0);
+    buildingMaterials[building.id] = {
+      selectedItems: selectedIds,
+      itemQuantities: quantities,
+      materialsSubtotal: subtotal,
+      aiReasoning: building.aiReasoning,
+      warnings: building.warnings ?? [],
+    };
+  });
+
+  const jobLevelProps = {
+    totalSquares: buildingsHook.getTotalSquares(),
+    laborRate: 650,
+    laborTotal: buildingsHook.getTotalSquares() * 650,
+    equipmentItems: [] as { name: string; quantity: number; unitPrice: number; total: number; isAutoCalculated: boolean }[],
+    onEquipmentQuantityChange: (_itemName: string, _qty: number) => { /* Phase 4 */ },
+    vendorQuoteItems: vendorQuotes.vendorQuoteItems ?? [],
+    vendorTotal: vendorQuotes.vendorTaxFeesTotal ?? 0,
+    accessoriesTotal: 0,
+    accessoriesComponent: measurements ? (
+      <CalculatedAccessories
+        measurements={measurements}
+        isMetalRoof={isMetalRoof}
+        priceItems={priceItems.priceItems}
+        selectedItems={selectedItems}
+        onAddToEstimate={(materialId, laborId, materialQty, laborQty) => {
+          setSelectedItems((prev) => Array.from(new Set([...prev, materialId, laborId])));
+          setItemQuantities((prev) => ({ ...prev, [materialId]: materialQty, [laborId]: laborQty }));
+        }}
+        skylightCount={skylightCount}
+        onAddSkylight={() => setSkylightCount((p) => p + 1)}
+        onRemoveSkylight={() => setSkylightCount((p) => Math.max(0, p - 1))}
+        onAddSkylightsToEstimate={(itemId, qty) => {
+          setSelectedItems((prev) => Array.from(new Set([...prev, itemId])));
+          setItemQuantities((prev) => ({ ...prev, [itemId]: qty }));
+        }}
+        onMissingItemsChange={setMissingAccessoryItems}
+      />
+    ) : undefined,
+    optionalItems: [] as unknown[],
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -1297,6 +1373,23 @@ export default function RoofScopeEstimator() {
 
         {/* Review & Build Estimate */}
         {step === 'build' && measurements && (
+          <>
+            {buildingsHook.buildings.length > 1 ? (
+              <BuildStep
+                buildings={buildingsHook.buildings}
+                onToggleBuildingExpanded={buildingsHook.toggleBuildingCollapsed}
+                smartSelectionProgress={multiBuildingSelection.progress}
+                buildingMaterials={buildingMaterials}
+                allSelectableItems={allSelectableItems}
+                onToggleSelection={() => {}}
+                onQuantityChange={() => {}}
+                onUpdateItem={() => {}}
+                onRegenerateBuildingSelection={() => {}}
+                jobLevelProps={jobLevelProps}
+                onGenerateEstimate={calculateEstimate}
+                isCalculating={false}
+              />
+            ) : (
           <div className="space-y-4 md:space-y-6">
             {/* Structure Detection Loading */}
             {projectManager.isLoading && structuresForValidation.length === 0 && (
@@ -1472,6 +1565,8 @@ export default function RoofScopeEstimator() {
               )}
             </div>
           </div>
+            )}
+          </>
         )}
 
         {/* Final Estimate */}

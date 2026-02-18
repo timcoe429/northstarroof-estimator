@@ -27,6 +27,8 @@ export interface BuildingEstimate {
   aiReasoning?: string;
   smartSelectionComplete: boolean;
   isCollapsed: boolean;
+  itemQuantities?: Record<string, number>;
+  warnings?: string[];
 }
 
 export const ROOF_SYSTEM_LABELS: Record<RoofSystemType, string> = {

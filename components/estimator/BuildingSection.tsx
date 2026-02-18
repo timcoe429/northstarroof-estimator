@@ -57,14 +57,14 @@ export function BuildingSection({
   const materialsHeader = sectionHeaders?.materials ?? 'MATERIALS';
 
   const itemMap = new Map(allSelectableItems.map((i) => [i.id, i]));
-  const materialsItems = selectedItems
+  const tableItems = selectedItems
     .map((id) => itemMap.get(id))
-    .filter((i): i is SelectableItem => i != null && i.category === 'materials');
+    .filter((i): i is SelectableItem => i != null);
+
 
   const headerContent = (
     <div
       className={`flex items-center gap-2 cursor-pointer select-none ${showCollapsibleHeader ? 'py-3 px-4' : ''}`}
-      onClick={() => showCollapsibleHeader && onToggleExpanded(building.id)}
     >
       {showCollapsibleHeader && (
         isExpanded ? (
@@ -136,7 +136,7 @@ export function BuildingSection({
               </tr>
             </thead>
             <tbody>
-              {materialsItems.map((item) => {
+              {tableItems.map((item) => {
                 const qty = itemQuantities[item.id] ?? 0;
                 const total = qty * item.price;
                 return (

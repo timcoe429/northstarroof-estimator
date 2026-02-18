@@ -64,6 +64,18 @@ export function useBuildings() {
     []
   );
 
+  const updateBuildingsBatch = useCallback(
+    (updatesByBuildingId: Record<string, Partial<BuildingEstimateState>>) => {
+      setBuildings((prev) =>
+        prev.map((b) => {
+          const updates = updatesByBuildingId[b.id];
+          return updates ? { ...b, ...updates } : b;
+        })
+      );
+    },
+    []
+  );
+
   const updateBuildingRoofSystem = useCallback(
     (id: string, roofSystem: RoofSystemType) => {
       updateBuilding(id, { roofSystem });
@@ -170,6 +182,7 @@ export function useBuildings() {
     addBuilding,
     removeBuilding,
     updateBuilding,
+    updateBuildingsBatch,
     updateBuildingRoofSystem,
     updateBuildingQuickOption,
     updateBuildingMeasurements,
