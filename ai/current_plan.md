@@ -1,4 +1,4 @@
-# Current Plan — Updated 2/16/2026
+# Current Plan — Updated 2/18/2026
 
 ## What's Complete (Track 1: Single-Building)
 - ✅ PDF deterministic — no AI organizer, individual items, first click every time
@@ -13,6 +13,10 @@
 - ✅ Cover letter AI mentions specific roof system
 - ✅ Track isolation architecture with guardrails in CLAUDE.md
 - ✅ Backup branch preserved: backup-multi-building-work
+
+## What's Complete (Track 2: Multi-Building) — 2/18/2026
+- ✅ Structure detection wired into Setup step: `lastDetection` useEffect creates one BuildingCard per detected structure when multi-structure RoofScope is uploaded
+- ✅ Multi-structure AI summary moved from Build step to Setup step (compact panel above building cards)
 
 ## Known Issues (Minor — Not Blocking)
 - Hip & Ridge metal trim not always auto-selected (add to knowledge file if needed)

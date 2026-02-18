@@ -24,7 +24,8 @@ import { useFinancialControls } from '@/hooks/useFinancialControls';
 import { useUIState } from '@/hooks/useUIState';
 import { useCustomItems } from '@/hooks/useCustomItems';
 import { useProjectManager } from '@/hooks/useProjectManager';
-import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView, CalculatedAccessories } from '@/components/estimator';
+import { useBuildings } from '@/hooks/useBuildings';
+import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView, CalculatedAccessories, SetupStep } from '@/components/estimator';
 
 export default function RoofScopeEstimator() {
   const { user, companyId, signOut } = useAuth();
@@ -35,7 +36,10 @@ export default function RoofScopeEstimator() {
   }, [companyId]);
 
   // Core state that must remain in main component
-  const [step, setStep] = useState('upload');
+  const [step, setStep] = useState<'setup' | 'build' | 'review'>('setup');
+
+  // Buildings hook for multi-building Setup step
+  const buildingsHook = useBuildings();
   const [measurements, setMeasurements] = useState<Measurements | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -267,14 +271,88 @@ export default function RoofScopeEstimator() {
     [roofScopeImages, savedEstimateId, projectManager, lastDetection?.structures.length]
   );
 
+  // Map legacy step names from hooks to new step flow (setup/build/review)
+  // When extraction completes ('extracted'), stay on setup so user sees building card and selects roof system
+  const setStepFromHook = useCallback((s: string) => {
+    if (s === 'extracted') setStep('setup'); // Stay on setup; user clicks "Build Estimate" to advance
+    else if (s === 'upload') setStep('setup');
+    else if (s === 'estimate') setStep('review');
+    else setStep(s as 'setup' | 'build' | 'review');
+  }, []);
+
+  // Wrap setMeasurements to add building when RoofScope extraction provides first measurements
+  const handleSetMeasurements = useCallback(
+    (mOrUpdater: Measurements | null | ((prev: Measurements | null) => Measurements | null)) => {
+      if (typeof mOrUpdater === 'function') {
+        setMeasurements((prev) => {
+          const next = mOrUpdater(prev);
+          if (!prev && next && buildingsHook.buildings.length === 0) {
+            buildingsHook.addBuilding('Structure 1', next);
+          }
+          return next;
+        });
+      } else {
+        if (mOrUpdater && buildingsHook.buildings.length === 0) {
+          buildingsHook.addBuilding('Structure 1', mOrUpdater);
+        }
+        setMeasurements(mOrUpdater);
+      }
+    },
+    [buildingsHook]
+  );
+
+  // When structure detection completes with multiple structures, replace the single building
+  // with one building per detected structure. Structure detection is async and runs after extraction.
+  useEffect(() => {
+    if (!lastDetection || lastDetection.structures.length <= 1) return;
+    const structures = lastDetection.structures;
+    // Clear existing buildings (from handleSetMeasurements)
+    buildingsHook.buildings.forEach((b) => buildingsHook.removeBuilding(b.id));
+    // Add one building per structure
+    structures.forEach((s) => buildingsHook.addBuilding(s.name, s.measurements));
+    // Update top-level measurements to combined for backward compatibility (Build step uses it)
+    const combined = structures.reduce(
+      (acc, s) => ({
+        total_squares: acc.total_squares + (s.measurements.total_squares ?? 0),
+        ridge_length: acc.ridge_length + (s.measurements.ridge_length ?? 0),
+        hip_length: acc.hip_length + (s.measurements.hip_length ?? 0),
+        valley_length: acc.valley_length + (s.measurements.valley_length ?? 0),
+        eave_length: acc.eave_length + (s.measurements.eave_length ?? 0),
+        rake_length: acc.rake_length + (s.measurements.rake_length ?? 0),
+        penetrations: acc.penetrations + (s.measurements.penetrations ?? 0),
+        skylights: acc.skylights + (s.measurements.skylights ?? 0),
+        chimneys: acc.chimneys + (s.measurements.chimneys ?? 0),
+      }),
+      {
+        total_squares: 0,
+        ridge_length: 0,
+        hip_length: 0,
+        valley_length: 0,
+        eave_length: 0,
+        rake_length: 0,
+        penetrations: 0,
+        skylights: 0,
+        chimneys: 0,
+      }
+    );
+    const first = structures[0].measurements;
+    setMeasurements({
+      ...first,
+      ...combined,
+      predominant_pitch: first.predominant_pitch ?? '',
+      complexity: first.complexity ?? '',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- buildingsHook is stable; we intentionally run only when lastDetection changes
+  }, [lastDetection]);
+
   // Initialize image extraction hook
   const imageExtraction = useImageExtraction({
     measurements,
     uploadedImages,
-    onSetMeasurements: setMeasurements,
+    onSetMeasurements: handleSetMeasurements,
     onSetCustomerInfo: setCustomerInfo,
     onSetUploadedImages: setUploadedImages,
-    onSetStep: setStep,
+    onSetStep: setStepFromHook,
     onSetExtractedItems: priceItems.setExtractedItems,
     onSetPriceSheetProcessing: priceItems.setPriceSheetProcessing,
     onAnalyzeJobForQuickSelections: smartSelection.analyzeJobForQuickSelections,
@@ -381,7 +459,7 @@ export default function RoofScopeEstimator() {
       };
       setEstimate(updatedEstimate);
       setValidationWarnings(calcValidationWarnings);
-      setStep('estimate');
+      setStep('review');
       // Trigger organization after estimate is calculated
       if (updatedEstimate) {
         triggerOrganization(updatedEstimate);
@@ -461,7 +539,7 @@ export default function RoofScopeEstimator() {
         setNameOverrides(names);
       }
     },
-    onSetStep: setStep,
+    onSetStep: setStepFromHook,
     onSetShowVendorBreakdown: vendorQuotes.setShowVendorBreakdown,
     onAnalyzeJobForQuickSelections: smartSelection.analyzeJobForQuickSelections,
     onCalculateEstimate: calculateEstimate,
@@ -496,7 +574,7 @@ export default function RoofScopeEstimator() {
         }));
         setOrganizedProposal(null); // Invalidate organization when items change
         // Trigger recalculation for price changes
-        if (estimate && step === 'estimate') {
+        if (estimate && step === 'review') {
           setTimeout(() => calculateEstimate(), 100);
         }
       }
@@ -517,12 +595,12 @@ export default function RoofScopeEstimator() {
       }));
       setOrganizedProposal(null); // Invalidate organization when items change
       // Trigger recalculation for unit changes
-      if (estimate && step === 'estimate') {
+      if (estimate && step === 'review') {
         setTimeout(() => calculateEstimate(), 100);
       }
     }
     // Trigger recalculation for quantity changes
-    if (field === 'quantity' && estimate && step === 'estimate') {
+    if (field === 'quantity' && estimate && step === 'review') {
       setTimeout(() => calculateEstimate(), 100);
     }
   }, [allSelectableItems, vendorQuotes, estimate, step, calculateEstimate]);
@@ -548,7 +626,7 @@ export default function RoofScopeEstimator() {
         return updated;
       });
       // Trigger recalculation to restore original price
-      if (estimate && step === 'estimate') {
+      if (estimate && step === 'review') {
         setTimeout(() => calculateEstimate(), 100);
       }
     } else if (field === 'name') {
@@ -563,7 +641,7 @@ export default function RoofScopeEstimator() {
       const calculatedQtys = calculateItemQuantities(measurements);
       setItemQuantities(prev => ({ ...prev, [itemId]: calculatedQtys[itemId] ?? 0 }));
       // Trigger recalculation
-      if (estimate && step === 'estimate') {
+      if (estimate && step === 'review') {
         setTimeout(() => calculateEstimate(), 100);
       }
     }
@@ -583,7 +661,7 @@ export default function RoofScopeEstimator() {
 
   // Auto-recalculate estimate when financial controls change (if estimate already exists)
   useEffect(() => {
-    if (estimate && step === 'estimate' && measurements && selectedItems.length > 0) {
+    if (estimate && step === 'review' && measurements && selectedItems.length > 0) {
       calculateEstimate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -638,7 +716,7 @@ export default function RoofScopeEstimator() {
           const file = item.getAsFile();
           if (!file) return;
 
-          if (step === 'upload' || step === 'extracted') {
+          if (step === 'setup' || step === 'build') {
             imageExtraction.extractFromImage(file);
           }
           break;
@@ -651,8 +729,8 @@ export default function RoofScopeEstimator() {
 
           if (uiState.showPrices) {
             imageExtraction.extractPricesFromImage(file);
-          } else if (step === 'upload' || step === 'extracted') {
-            // Allow pasting in 'extracted' step to add analysis image
+          } else if (step === 'setup' || step === 'build') {
+            // Allow pasting in build step to add analysis image
             imageExtraction.extractFromImage(file);
           }
           break;
@@ -695,7 +773,7 @@ export default function RoofScopeEstimator() {
 
   // Reset estimator
   const resetEstimator = () => {
-    setStep('upload');
+    setStep('setup');
     setMeasurements(null);
     setEstimate(null);
     setCustomerInfo({ name: '', address: '', phone: '' });
@@ -1152,7 +1230,7 @@ export default function RoofScopeEstimator() {
       {/* Main Content */}
       <div className="max-w-5xl mx-auto px-4 py-6 md:py-8">
         {/* AI Validation Warnings */}
-        {(step === 'extracted' || step === 'estimate') && projectManager.aiContext && projectManager.aiContext.warnings.filter((w) => !w.dismissed).length > 0 && (
+        {(step === 'build' || step === 'review') && projectManager.aiContext && projectManager.aiContext.warnings.filter((w) => !w.dismissed).length > 0 && (
           <div className="mb-4 space-y-2">
             <h3 className="text-sm font-semibold text-gray-700">AI Validation Warnings</h3>
             {projectManager.aiContext.warnings
@@ -1187,22 +1265,38 @@ export default function RoofScopeEstimator() {
           </div>
         )}
 
-        {/* Upload Step */}
-        {(step === 'upload' || imageExtraction.isProcessing) && (
-          <UploadStep
+        {/* Setup Step */}
+        {(step === 'setup' || imageExtraction.isProcessing) && (
+          <SetupStep
+            lastDetection={lastDetection}
+            onUploadRoofScope={(fileOrUrl) => {
+              if (fileOrUrl instanceof File) {
+                imageExtraction.extractFromImage(fileOrUrl);
+              }
+            }}
+            isProcessingRoofScope={imageExtraction.isProcessing}
+            buildings={buildingsHook.buildings}
+            onUpdateRoofSystem={buildingsHook.updateBuildingRoofSystem}
+            onUpdateQuickOption={buildingsHook.updateBuildingQuickOption}
+            onUpdateMeasurements={buildingsHook.updateBuildingMeasurements}
+            onRemoveBuilding={buildingsHook.removeBuilding}
+            onAddAnotherRoofScope={() => {
+              document.getElementById('setup-roofscope-upload')?.click();
+            }}
+            onUploadVendorQuote={(file) => {
+              const fakeEvent = { target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>;
+              vendorQuotes.handleVendorQuoteUpload(fakeEvent);
+            }}
             vendorQuotes={vendorQuotes.vendorQuotes}
-            vendorQuoteItems={vendorQuotes.vendorQuoteItems}
-            isExtractingVendorQuote={vendorQuotes.isExtractingVendorQuote}
-            isProcessing={imageExtraction.isProcessing}
-            onFileUpload={imageExtraction.handleFileUpload}
-            onDrop={imageExtraction.handleDrop}
-            onVendorQuoteUpload={vendorQuotes.handleVendorQuoteUpload}
-            onRemoveVendorQuote={vendorQuotes.removeVendorQuoteFromState}
+            customerInfo={customerInfo}
+            onUpdateCustomerInfo={(info) => setCustomerInfo(info)}
+            allBuildingsReady={buildingsHook.allBuildingsHaveRoofSystem()}
+            onProceedToBuild={() => setStep('build')}
           />
         )}
 
         {/* Review & Build Estimate */}
-        {step === 'extracted' && measurements && (
+        {step === 'build' && measurements && (
           <div className="space-y-4 md:space-y-6">
             {/* Structure Detection Loading */}
             {projectManager.isLoading && structuresForValidation.length === 0 && (
@@ -1229,83 +1323,6 @@ export default function RoofScopeEstimator() {
                   </div>
                 </div>
               )}
-
-            {/* Multi-Structure Overview Panel */}
-            {structuresForValidation.length > 1 && (
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                  Multi-Structure Property Detected
-                </h3>
-                <p className="text-sm text-gray-700 mb-4">
-                  AI detected {structuresForValidation.length} structures. Review each building below.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {structuresForValidation.map((structure) => (
-                    <div
-                      key={structure.id}
-                      className="p-3 bg-white border border-gray-200 rounded-lg"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <h4 className="font-semibold text-gray-900">{structure.name}</h4>
-                          <p className="text-sm text-gray-600">
-                            Type: {structure.type} • {structure.measurements.total_squares.toFixed(1)} SQ
-                          </p>
-                        </div>
-                        <span
-                          className={`px-2 py-1 text-xs font-medium rounded ${
-                            structure.hasAnalysisPage ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                          }`}
-                        >
-                          {structure.hasAnalysisPage ? 'Detailed' : 'Estimated'}
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-500 space-y-1">
-                        <div>Pitch: {structure.measurements.predominant_pitch || 'N/A'}</div>
-                        <div>Eave: {structure.measurements.eave_length} LF</div>
-                        <div>Valley: {structure.measurements.valley_length} LF</div>
-                        {!structure.hasAnalysisPage && (
-                          <p className="text-yellow-700 mt-2">
-                            No analysis page - measurements estimated
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 p-3 bg-white border border-gray-300 rounded">
-                  <p className="text-sm text-gray-700">
-                    <strong>Total Combined:</strong>{' '}
-                    {structuresForValidation
-                      .reduce((sum, s) => sum + s.measurements.total_squares, 0)
-                      .toFixed(1)}{' '}
-                    SQ across {structuresForValidation.length} buildings
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* AI Detection Confidence */}
-            {lastDetection && (
-              <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded">
-                <p className="text-sm text-gray-700">
-                  <strong>AI Detection Summary:</strong> {lastDetection.summary}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Confidence:{' '}
-                  {lastDetection.confidence === 'high'
-                    ? 'High'
-                    : lastDetection.confidence === 'medium'
-                      ? 'Medium'
-                      : 'Low'}
-                </p>
-                {lastDetection.confidence === 'low' && (
-                  <p className="text-xs text-yellow-700 mt-1">
-                    Low confidence - recommend uploading analysis pages for accurate measurements
-                  </p>
-                )}
-              </div>
-            )}
 
             <ReviewStep
               measurements={measurements}
@@ -1458,7 +1475,7 @@ export default function RoofScopeEstimator() {
         )}
 
         {/* Final Estimate */}
-        {step === 'estimate' && estimate && (
+        {step === 'review' && estimate && (
           <EstimateView
             estimate={estimate}
             validationWarnings={validationWarnings}
@@ -1477,7 +1494,7 @@ export default function RoofScopeEstimator() {
             onToggleSection={toggleSection}
             onToggleVendorBreakdown={() => vendorQuotes.setShowVendorBreakdown(prev => !prev)}
             onEditEstimate={() => {
-              setStep('extracted');
+              setStep('build');
               setValidationWarnings([]);
             }}
             onSaveQuote={async () => {
@@ -1526,7 +1543,7 @@ export default function RoofScopeEstimator() {
                   return updated;
                 });
                 // Trigger recalculation
-                if (estimate && step === 'estimate') {
+                if (estimate && step === 'review') {
                   setTimeout(() => calculateEstimate(), 100);
                 }
               }
