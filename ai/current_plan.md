@@ -17,6 +17,7 @@
 ## What's Complete (Track 2: Multi-Building) — 2/18/2026
 - ✅ Structure detection wired into Setup step: `lastDetection` useEffect creates one BuildingCard per detected structure when multi-structure RoofScope is uploaded
 - ✅ Multi-structure AI summary moved from Build step to Setup step (compact panel above building cards)
+- ✅ Phase 3a: Build step shell components created (BuildingProgress, BuildingSection, JobLevelSection, BuildStep) — NEW FILES ONLY, not yet wired into RoofScopeEstimator
 
 ## Known Issues (Minor — Not Blocking)
 - Hip & Ridge metal trim not always auto-selected (add to knowledge file if needed)
