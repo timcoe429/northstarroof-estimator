@@ -46,3 +46,4 @@ Every session must end with context file updates. No exceptions.
 - PREFERRED: Use `npm run dev:clean` instead of `npm run dev` — it kills stale servers, clears cache, and starts fresh
 - NEVER let ports stack (3001, 3002, etc.) — if port 3000 is taken, kill it, don't increment
 - After making changes that affect build, always run `npm run build` to verify before testing in dev
+- After completing any task, ALWAYS leave the dev server running on port 3000. Your final step should be: `npm run dev:clean`. Do NOT kill the server after verification. The developer needs to see the app in the browser when you're done.
