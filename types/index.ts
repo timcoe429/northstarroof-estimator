@@ -225,3 +225,10 @@ export interface AIValidationResult {
   suggestions: string[];
   completeness: number;
 }
+
+// =============================================================================
+// Multi-Building Types (Phase 1)
+// =============================================================================
+
+export * from './building';
+export * from './equipment';

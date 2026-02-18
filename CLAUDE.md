@@ -39,3 +39,10 @@ STOP. Do not try to fix forward with more changes. Tell Tim. Let him revert.
 
 ### Context File Updates
 Every session must end with context file updates. No exceptions.
+
+### Local Development Rules
+- ALWAYS use port 3000 for local dev
+- BEFORE running `npm run dev`, run `npx kill-port 3000` to kill any existing server
+- PREFERRED: Use `npm run dev:clean` instead of `npm run dev` — it kills stale servers, clears cache, and starts fresh
+- NEVER let ports stack (3001, 3002, etc.) — if port 3000 is taken, kill it, don't increment
+- After making changes that affect build, always run `npm run build` to verify before testing in dev
