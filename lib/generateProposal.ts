@@ -96,7 +96,15 @@ interface SimpleIntro {
 }
 
 function parseIntroLetter(text: string): SimpleIntro {
-  const trimmed = text.trim();
+  // Convert literal escape sequences to real newlines (handles \n, \r\n, \r, and double-encoded \\n)
+  let bodyText = text;
+  while (bodyText.includes('\\n') || bodyText.includes('\\r')) {
+    bodyText = bodyText
+      .replace(/\\r\\n/g, '\n')
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '\n');
+  }
+  const trimmed = bodyText.trim();
   const lines = trimmed.split(/\n/).map((l) => l.trim());
   const greeting = lines[0]?.toLowerCase().includes('dear') ? lines[0] : 'Dear Homeowner,';
   const bodyStart = lines[0]?.toLowerCase().includes('dear') ? 1 : 0;
