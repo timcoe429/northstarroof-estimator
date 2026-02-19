@@ -281,15 +281,7 @@ async function generateIntroductionPage(intro: SimpleIntro): Promise<PDFDocument
   // Start from top of content area — page feels full, not centered/floating
   let y = CONTENT_Y_END - 36; // 0.5 inch from top
 
-  // Greeting
-  const greetingLines = wordWrap(intro.greeting, font, INTRO_FONT_SIZE, maxLineWidth);
-  for (const line of greetingLines) {
-    page.drawText(line, { x: textX, y, size: INTRO_FONT_SIZE, font, color: rgb(0, 0, 0) });
-    y -= INTRO_LINE_HEIGHT;
-  }
-  y -= INTRO_PARAGRAPH_GAP;
-
-  // Body paragraphs
+  // Body paragraphs (letter body from CSV opens with its own first sentence — no greeting)
   for (const para of intro.bodyParagraphs) {
     const paraLines = wordWrap(para, font, INTRO_FONT_SIZE, maxLineWidth);
     for (const line of paraLines) {
