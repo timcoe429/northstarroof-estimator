@@ -272,7 +272,7 @@ const INTRO_FONT_SIZE = 11;
 const INTRO_LINE_HEIGHT = 15;   // 11pt + 4pt leading
 const INTRO_PARAGRAPH_GAP = 18; // space between paragraphs
 const INTRO_BULLET_GAP = 10;    // space between bullet items
-const INTRO_BODY_TO_SIGNATURE_GAP = 40; // minimum gap between letter body and signature block
+const INTRO_BODY_TO_SIGNATURE_GAP = 20; // minimum gap between letter body and signature block
 
 // Generate introduction page — professional letter layout with paragraphs and bullets
 async function generateIntroductionPage(intro: SimpleIntro): Promise<PDFDocument> {
@@ -315,7 +315,7 @@ async function generateIntroductionPage(intro: SimpleIntro): Promise<PDFDocument
     y -= INTRO_BULLET_GAP;
   }
 
-  // Minimum 40pt gap between letter body and signature block
+  // Minimum 20pt gap between letter body and signature block
   y -= INTRO_BODY_TO_SIGNATURE_GAP;
 
   // Signature block — unchanged
