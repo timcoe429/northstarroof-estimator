@@ -88,172 +88,86 @@ function extractNotableItems(estimate: Estimate): string[] {
   return items;
 }
 
-// Parse structured AI response into sections
-interface StructuredIntro {
+// Intro letter format: greeting + body paragraphs (no bullets)
+interface SimpleIntro {
   greeting: string;
-  opening: string;
-  bodyPara1: string;
-  bodyPara2: string;
-  bullet1: string;
-  bullet2: string;
-  bullet3: string;
-  closingPara: string;
+  bodyParagraphs: string[];
 }
 
-function parseStructuredIntro(text: string, customerName: string): StructuredIntro {
-  const result: StructuredIntro = {
-    greeting: `Dear ${customerName},`,
-    opening: '',
-    bodyPara1: '',
-    bodyPara2: '',
-    bullet1: 'Detailed line item estimate breaking down all materials and labor',
-    bullet2: 'Important links including terms, exclusions, and warranty info',
-    bullet3: 'References from past clients',
-    closingPara: 'If you have any questions, please don\'t hesitate to reach out.',
-  };
-
-  // Try to extract structured sections
-  const greetingMatch = text.match(/GREETING[:\s]*([\s\S]+?)(?=\n(?:OPENING|BODY|BULLET|CLOSING)|$)/i);
-  const openingMatch = text.match(/OPENING[:\s]*([\s\S]+?)(?=\n(?:GREETING|BODY|BULLET|CLOSING)|$)/i);
-  const body1Match = text.match(/BODY_PARA_1[:\s]*([\s\S]+?)(?=\n(?:GREETING|OPENING|BODY_PARA_2|BULLET|CLOSING)|$)/i);
-  const body2Match = text.match(/BODY_PARA_2[:\s]*([\s\S]+?)(?=\n(?:GREETING|OPENING|BODY_PARA_1|BULLET|CLOSING)|$)/i);
-  const bullet1Match = text.match(/BULLET_1[:\s]*([\s\S]+?)(?=\n(?:GREETING|OPENING|BODY|BULLET_2|CLOSING)|$)/i);
-  const bullet2Match = text.match(/BULLET_2[:\s]*([\s\S]+?)(?=\n(?:GREETING|OPENING|BODY|BULLET_1|BULLET_3|CLOSING)|$)/i);
-  const bullet3Match = text.match(/BULLET_3[:\s]*([\s\S]+?)(?=\n(?:GREETING|OPENING|BODY|BULLET|CLOSING_PARA)|$)/i);
-  const closingMatch = text.match(/CLOSING_PARA[:\s]*([\s\S]+?)(?=\n(?:GREETING|OPENING|BODY|BULLET)|$)/i);
-
-  if (greetingMatch) result.greeting = greetingMatch[1].trim();
-  if (openingMatch) result.opening = openingMatch[1].trim();
-  if (body1Match) result.bodyPara1 = body1Match[1].trim();
-  if (body2Match) result.bodyPara2 = body2Match[1].trim();
-  if (bullet1Match) result.bullet1 = bullet1Match[1].trim();
-  if (bullet2Match) result.bullet2 = bullet2Match[1].trim();
-  if (bullet3Match) result.bullet3 = bullet3Match[1].trim();
-  if (closingMatch) result.closingPara = closingMatch[1].trim();
-
-  // Fallback: if no structured format found, try to parse as plain text
-  if (!openingMatch && !body1Match) {
-    const lines = text.split('\n').filter(l => l.trim());
-    let lineIndex = 0;
-    
-    // Skip greeting if found
-    if (lines[lineIndex]?.toLowerCase().includes('dear')) {
-      lineIndex++;
-    }
-    
-    // Try to find opening
-    if (lines[lineIndex]) {
-      result.opening = lines[lineIndex].trim();
-      lineIndex++;
-    }
-    
-    // Try to find body paragraphs
-    const bodyLines: string[] = [];
-    while (lineIndex < lines.length && !lines[lineIndex].toLowerCase().includes('included') && !lines[lineIndex].toLowerCase().includes('bullet')) {
-      if (lines[lineIndex].trim()) {
-        bodyLines.push(lines[lineIndex].trim());
-      }
-      lineIndex++;
-    }
-    if (bodyLines.length > 0) {
-      result.bodyPara1 = bodyLines.slice(0, Math.ceil(bodyLines.length / 2)).join(' ');
-      result.bodyPara2 = bodyLines.slice(Math.ceil(bodyLines.length / 2)).join(' ');
-    }
+function parseIntroLetter(text: string): SimpleIntro {
+  const trimmed = text.trim();
+  const lines = trimmed.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const greeting = lines[0]?.toLowerCase().includes('dear') ? lines[0] : 'Dear Homeowner,';
+  const bodyStart = lines[0]?.toLowerCase().includes('dear') ? 1 : 0;
+  const bodyLines: string[] = [];
+  for (let i = bodyStart; i < lines.length; i++) {
+    if (lines[i].toLowerCase().includes('kind regards') || lines[i].toLowerCase().includes('omiah travis')) break;
+    bodyLines.push(lines[i]);
   }
-
-  return result;
+  const bodyText = bodyLines.join(' ').trim();
+  const bodyParagraphs = bodyText ? bodyText.split(/\s{2,}/).filter(Boolean) : [];
+  if (bodyParagraphs.length === 0 && bodyText) bodyParagraphs.push(bodyText);
+  return { greeting, bodyParagraphs };
 }
 
-// Generate introduction letter using AI
-async function generateIntroductionLetter(
-  customerName: string,
-  customerAddress: string,
-  projectItems: string[],
-  aiSuggestions?: string
-): Promise<StructuredIntro> {
-  const prompt = `You are Omiah Travis, owner of Northstar Roofing in Aspen, Colorado. Write a sincere, professional introduction letter for a roofing proposal.
+// Generate introduction letter using AI — new format: Dear Homeowner, 2-3 paragraphs, no bullets, under 200 words
+async function generateIntroductionLetter(estimate: Estimate): Promise<SimpleIntro> {
+  const address = estimate.customerInfo?.address || 'Your property';
+  const notableItems = extractNotableItems(estimate);
+  const material = notableItems.find((n) =>
+    /brava|davinci|shake|tile|asphalt|metal|cedar/i.test(n)
+  ) || notableItems[0] || 'roofing materials';
+  const scopeItems = notableItems.length > 0 ? notableItems.join(', ') : 'standard roofing materials';
+  const pitch = estimate.measurements?.predominant_pitch || 'Not specified';
+  const totalSquares = estimate.measurements?.total_squares ?? 0;
+  const totalSquaresStr = totalSquares > 0 ? String(totalSquares) : 'Not specified';
 
-CUSTOMER NAME: ${customerName}
-PROJECT ADDRESS: ${customerAddress}
+  const prompt = `Write a personalized introduction letter for a roofing proposal.
 
-PROJECT ITEMS:
-${projectItems.length > 0 ? projectItems.map(item => `- ${item}`).join('\n') : '- Standard roofing materials'}
-${aiSuggestions ? `\nSTRUCTURE INFORMATION (mention in opening/body to personalize for multi-structure properties):\n${aiSuggestions}\n` : ''}
+JOB DETAILS:
+- Property address: ${address}
+- Material: ${material}
+- Key scope items: ${scopeItems}
+- Roof pitch: ${pitch}
+- Total squares: ${totalSquaresStr}
 
-Write a warm, personalized thank you letter that:
-- Addresses the customer by name
-- References the property location/address naturally (e.g., "your beautiful home on [street]" or "your property at [address]")
-- Mentions the specific roofing system and notable features being installed
-- Sounds genuinely appreciative, not generic or salesy
-- Emphasizes Northstar's commitment to quality craftsmanship
+RULES:
+- Open with "Dear Homeowner,"
+- 2-3 short paragraphs, no bullet points
+- Warm, professional, elevated tone — written for a high-end Aspen client
+- Reference the specific material and scope naturally
+- Weave in Aspen/mountain context where it fits naturally, not forced
+- Never use generic phrases like "we treat every home like our own"
+- Never list services as bullets
+- Under 200 words total
+- Close with:
+  Kind regards,
+  Omiah Travis
+  Northstar Roofing
+  omiah@northstarroof.com
+  720-333-7270
 
-Return the letter content in this EXACT structure with labeled sections. NO markdown, NO asterisks, NO formatting characters. Plain text only.
-
-GREETING
-Dear ${customerName},
-
-OPENING
-[One warm sentence thanking them sincerely, can reference the property location]
-
-BODY_PARA_1
-[2-3 sentences about the project, mention the roofing system, notable features, and how it will benefit their specific property]
-
-BODY_PARA_2
-[1-2 sentences about Northstar's commitment to quality and treating every project like their own home]
-
-BULLET_1
-Detailed line item estimate breaking down all materials and labor
-
-BULLET_2
-Important links including terms, exclusions, and warranty info
-
-BULLET_3
-References from past clients
-
-CLOSING_PARA
-[One sentence inviting questions]
-
-TONE: Very sincere, professional, appreciative - like a personal note from Omiah thanking them for the opportunity. Not salesy or generic.
-
-Return ONLY the structured content with section labels, no other text.`;
+Return ONLY the letter text. No other text.`;
 
   try {
     const response = await fetch('/api/extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt,
-        max_tokens: 2000,
-      }),
+      body: JSON.stringify({ prompt, max_tokens: 1000 }),
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to generate introduction letter');
-    }
-
+    if (!response.ok) throw new Error('Failed to generate introduction letter');
     const data = await response.json();
-    const text = data.content?.[0]?.text || '';
-    const intro = parseStructuredIntro(text.trim(), customerName);
-    if (aiSuggestions && intro.opening) {
-      intro.opening = `Thank you for the opportunity to provide an estimate for your property. ${aiSuggestions}`;
-    }
-    return intro;
+    const text = (data.content?.[0]?.text || '').trim();
+    return parseIntroLetter(text);
   } catch (error) {
     console.error('Error generating introduction:', error);
-    // Fallback
-    const fallback: StructuredIntro = {
-      greeting: `Dear ${customerName},`,
-      opening: aiSuggestions
-        ? `Thank you for the opportunity to provide an estimate for your property. ${aiSuggestions}`
-        : 'Thank you for giving Northstar Roofing the opportunity to provide an estimate for your roofing project.',
-      bodyPara1: 'This proposal includes a detailed breakdown of materials, labor, and equipment for your project. We\'ve carefully selected quality materials and components to ensure a durable, professional installation.',
-      bodyPara2: 'We take pride in our workmanship and attention to detail.',
-      bullet1: 'Detailed line item estimate breaking down all materials and labor',
-      bullet2: 'Important links including terms, exclusions, and warranty info',
-      bullet3: 'References from past clients',
-      closingPara: 'If you have any questions, please don\'t hesitate to reach out.',
+    return {
+      greeting: 'Dear Homeowner,',
+      bodyParagraphs: [
+        'Thank you for the opportunity to provide an estimate for your roofing project. This proposal includes a detailed breakdown of materials, labor, and equipment.',
+        'We have carefully selected quality components to ensure a durable, professional installation suited to our mountain environment.',
+      ],
     };
-    return fallback;
   }
 }
 
@@ -313,11 +227,10 @@ function formatCurrency(amount: number): string {
 }
 
 // Generate introduction page
-async function generateIntroductionPage(intro: StructuredIntro): Promise<PDFDocument> {
+async function generateIntroductionPage(intro: SimpleIntro): Promise<PDFDocument> {
   const template = await loadPDFTemplate('/templates/thank-you.pdf');
   const pages = template.getPages();
   const page = pages[0];
-  const { height } = page.getSize();
   
   const font = await template.embedFont(StandardFonts.Helvetica);
   const boldFont = await template.embedFont(StandardFonts.HelveticaBold);
@@ -325,207 +238,46 @@ async function generateIntroductionPage(intro: StructuredIntro): Promise<PDFDocu
   const maxLineWidth = 500;
   const textX = CONTENT_X_START + 50; // Start a bit indented
   
-  // PASS 1: Calculate total content height
+  // Calculate total content height (greeting + body paragraphs + signature)
   let totalHeight = 0;
-  
-  // GREETING
   const greetingLines = wordWrap(intro.greeting, font, 11, maxLineWidth);
-  totalHeight += greetingLines.length * (11 + 2); // Line height + spacing
-  totalHeight += 20; // After greeting spacing
-  
-  // OPENING
-  const openingLines = wordWrap(intro.opening, boldFont, 14, maxLineWidth);
-  totalHeight += openingLines.length * (14 + 2);
-  totalHeight += 15; // After opening spacing
-  
-  // BODY_PARA_1
-  let body1Lines: string[] = [];
-  if (intro.bodyPara1) {
-    body1Lines = wordWrap(intro.bodyPara1, font, 11, maxLineWidth);
-    totalHeight += body1Lines.length * (11 + 2);
-    totalHeight += 12; // Between paragraphs spacing
+  totalHeight += greetingLines.length * (11 + 2) + 20;
+  for (const para of intro.bodyParagraphs) {
+    const paraLines = wordWrap(para, font, 11, maxLineWidth);
+    totalHeight += paraLines.length * (11 + 2) + 12;
   }
+  totalHeight += 20;
+  totalHeight += 11 + 8; // "Kind regards,"
+  totalHeight += 11 + 2 + 11 + 12 + 10 + 4 + 10;
   
-  // BODY_PARA_2
-  let body2Lines: string[] = [];
-  if (intro.bodyPara2) {
-    body2Lines = wordWrap(intro.bodyPara2, font, 11, maxLineWidth);
-    totalHeight += body2Lines.length * (11 + 2);
-    totalHeight += 15; // Before "What's Included" spacing
-  }
-  
-  // "What's Included" header
-  totalHeight += 11 + 8; // Header + spacing
-  
-  // Bullets
-  const bullets = [intro.bullet1, intro.bullet2, intro.bullet3];
-  for (const bullet of bullets) {
-    const bulletText = `• ${bullet}`;
-    const bulletLines = wordWrap(bulletText, font, 11, maxLineWidth);
-    totalHeight += bulletLines.length * (11 + 2);
-    totalHeight += 6; // Between bullets spacing
-  }
-  totalHeight -= 6; // Remove last bullet spacing
-  totalHeight += 15; // After last bullet spacing
-  
-  // CLOSING_PARA
-  const closingLines = wordWrap(intro.closingPara, font, 11, maxLineWidth);
-  totalHeight += closingLines.length * (11 + 2);
-  totalHeight += 20; // Before "Best regards," spacing
-  
-  // Signature block
-  totalHeight += 11 + 8; // "Best regards,"
-  totalHeight += 11 + 2; // "Omiah Travis"
-  totalHeight += 11 + 12; // "Northstar Roofing"
-  totalHeight += 10 + 4; // Email
-  totalHeight += 10; // Phone (last item, no spacing after)
-  
-  // Calculate available height and center content
   const availableHeight = CONTENT_Y_END - CONTENT_Y_START;
-  const startY = CONTENT_Y_END - ((availableHeight - totalHeight) / 2);
+  let y = CONTENT_Y_END - ((availableHeight - totalHeight) / 2);
   
-  // PASS 2: Draw content starting from centered position
-  let y = startY;
-  
-  // GREETING: Helvetica, 11pt, #000000
   for (const line of greetingLines) {
-    page.drawText(line, {
-      x: textX,
-      y,
-      size: 11,
-      font,
-      color: rgb(0, 0, 0),
-    });
-    y -= 11 + 2; // Line height + spacing
-  }
-  y -= 20 - 2; // After greeting: 20 points
-  
-  // OPENING: Helvetica Bold, 14pt, #00293f
-  for (const line of openingLines) {
-    page.drawText(line, {
-      x: textX,
-      y,
-      size: 14,
-      font: boldFont,
-      color: rgb(0, 0.16, 0.25), // #00293f
-    });
-    y -= 14 + 2;
-  }
-  y -= 15 - 2; // After opening: 15 points
-  
-  // BODY_PARA_1: Helvetica, 11pt, #000000
-  if (intro.bodyPara1 && body1Lines.length > 0) {
-    for (const line of body1Lines) {
-      page.drawText(line, {
-        x: textX,
-        y,
-        size: 11,
-        font,
-        color: rgb(0, 0, 0),
-      });
-      y -= 11 + 2;
-    }
-    y -= 12 - 2; // Between paragraphs: 12 points
-  }
-  
-  // BODY_PARA_2: Helvetica, 11pt, #000000
-  if (intro.bodyPara2 && body2Lines.length > 0) {
-    for (const line of body2Lines) {
-      page.drawText(line, {
-        x: textX,
-        y,
-        size: 11,
-        font,
-        color: rgb(0, 0, 0),
-      });
-      y -= 11 + 2;
-    }
-    y -= 15 - 2; // Before "What's Included": 15 points
-  }
-  
-  // "What's Included" header: Helvetica Bold, 11pt, #000000
-  const includedHeader = 'What\'s Included in This Proposal:';
-  page.drawText(includedHeader, {
-    x: textX,
-    y,
-    size: 11,
-    font: boldFont,
-    color: rgb(0, 0, 0),
-  });
-  y -= 11 + 8; // After header: 8 points
-  
-  // Bullets: Helvetica, 11pt, #000000, use • character
-  for (const bullet of bullets) {
-    const bulletText = `• ${bullet}`;
-    const bulletLines = wordWrap(bulletText, font, 11, maxLineWidth);
-    for (const line of bulletLines) {
-      page.drawText(line, {
-        x: textX,
-        y,
-        size: 11,
-        font,
-        color: rgb(0, 0, 0),
-      });
-      y -= 11 + 2;
-    }
-    y -= 6 - 2; // Between bullets: 6 points
-  }
-  y -= 15 - 6; // After last bullet: 15 points
-  
-  // CLOSING_PARA: Helvetica, 11pt, #000000
-  for (const line of closingLines) {
-    page.drawText(line, {
-      x: textX,
-      y,
-      size: 11,
-      font,
-      color: rgb(0, 0, 0),
-    });
+    page.drawText(line, { x: textX, y, size: 11, font, color: rgb(0, 0, 0) });
     y -= 11 + 2;
   }
-  y -= 20 - 2; // Before "Best regards,": 20 points
+  y -= 20 - 2;
   
-  // "Best regards,": Helvetica, 11pt, #000000
-  page.drawText('Best regards,', {
-    x: textX,
-    y,
-    size: 11,
-    font,
-    color: rgb(0, 0, 0),
-  });
-  y -= 11 + 8; // After "Best regards,": 8 points
+  for (const para of intro.bodyParagraphs) {
+    const paraLines = wordWrap(para, font, 11, maxLineWidth);
+    for (const line of paraLines) {
+      page.drawText(line, { x: textX, y, size: 11, font, color: rgb(0, 0, 0) });
+      y -= 11 + 2;
+    }
+    y -= 12 - 2;
+  }
+  y -= 20 - 2;
   
-  // "Omiah Travis": Helvetica Bold, 11pt, #000000
-  page.drawText('Omiah Travis', {
-    x: textX,
-    y,
-    size: 11,
-    font: boldFont,
-    color: rgb(0, 0, 0),
-  });
-  y -= 11 + 2; // After "Omiah Travis": 2 points
-  
-  // "Northstar Roofing": Helvetica, 11pt, #000000
-  page.drawText('Northstar Roofing', {
-    x: textX,
-    y,
-    size: 11,
-    font,
-    color: rgb(0, 0, 0),
-  });
-  y -= 11 + 12; // After "Northstar Roofing": 12 points
-  
-  // Contact info: Helvetica, 10pt, #000000
-  page.drawText('Email: omiah@northstarroof.com', {
-    x: textX,
-    y,
-    size: 10,
-    font,
-    color: rgb(0, 0, 0),
-  });
-  y -= 10 + 4; // Between email and phone: 4 points
-  
-  page.drawText('Phone: 720-333-7270', {
+  page.drawText('Kind regards,', { x: textX, y, size: 11, font, color: rgb(0, 0, 0) });
+  y -= 11 + 8;
+  page.drawText('Omiah Travis', { x: textX, y, size: 11, font: boldFont, color: rgb(0, 0, 0) });
+  y -= 11 + 2;
+  page.drawText('Northstar Roofing', { x: textX, y, size: 11, font, color: rgb(0, 0, 0) });
+  y -= 11 + 12;
+  page.drawText('omiah@northstarroof.com', { x: textX, y, size: 10, font, color: rgb(0, 0, 0) });
+  y -= 10 + 4;
+  page.drawText('720-333-7270', {
     x: textX,
     y,
     size: 10,
@@ -620,7 +372,7 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     const { item, section } = allItems[i];
     const sectionChanged = currentSection !== section;
     
-    const description = item.name;
+    const description = (item as LineItem & { proposalDescription?: string }).proposalDescription ?? item.name;
     const maxDescWidth = DESC_COLUMN_WIDTH - ROW_PADDING * 2;
     const sectionHeaderHeight = sectionChanged ? 12 + SECTION_GAP_ABOVE + SECTION_GAP_BELOW : 0;
     const itemHeight = calculateRowHeight(description, font, 11, maxDescWidth, (item as { subtitle?: string }).subtitle);
@@ -709,7 +461,7 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
         lastSection = contentItem.section;
       }
       
-      const description = contentItem.item.name;
+      const description = (contentItem.item as LineItem & { proposalDescription?: string }).proposalDescription ?? contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
       const subtitle = (contentItem.item as any).subtitle;
       const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false, subtitle, idx);
@@ -744,7 +496,7 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
         lastSection = contentItem.section;
       }
       
-      const description = contentItem.item.name;
+      const description = (contentItem.item as LineItem & { proposalDescription?: string }).proposalDescription ?? contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
       const subtitle = (contentItem.item as any).subtitle;
       const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false, subtitle, idx);
@@ -996,10 +748,7 @@ export async function generateProposalPDF(estimate: Estimate, aiSuggestions?: st
   const referencesPDF = await loadPDFTemplate('/templates/references.pdf');
   
   // Generate introduction page
-  const customerName = estimate.customerInfo.name || 'Valued Customer';
-  const customerAddress = estimate.customerInfo.address || '';
-  const projectItems = extractNotableItems(estimate);
-  const intro = await generateIntroductionLetter(customerName, customerAddress, projectItems, aiSuggestions);
+  const intro = await generateIntroductionLetter(estimate);
   const introPDF = await generateIntroductionPage(intro);
   
   // Generate line item pages (effective multiplier calculated inside)

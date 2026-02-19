@@ -23,6 +23,11 @@ Tag this deployment in Vercel as stable.
 1. Multi-building (Track 2) — feature branch only, additive code, does not touch Track 1
 3. Decimal cleanup on PDF prices
 
+## Completed 2/19/2026: Proposal Description and Introduction Letter Updates
+- **Proposal descriptions**: descriptionMap in constants.ts used as lookup; AI generates for unmatched items via batch /api/extract; PDF line items show generic "Name — Sentence" format
+- **Introduction letter**: New format — Dear Homeowner, 2–3 paragraphs (no bullets), under 200 words; job details (address, material, scope, pitch, squares) from estimate; Kind regards signature block
+- **Files changed**: lib/generateProposal.ts, lib/constants.ts (D-Style Eave, RMSG Yeti Snowguard, Airhawk updated to new format)
+
 ## Completed 2/19/2026: Shareable Review Page Links (24-Hour Expiration)
 - **share_tokens** table: estimate_id, token, expires_at, accessed_at; 24hr expiry
 - POST /api/share: saves estimate + creates share_token; requires auth (Bearer token)
