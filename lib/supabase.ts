@@ -605,7 +605,9 @@ export async function createShareableLink(
 
   if (error) throw new Error(`Failed to create share link: ${error.message}`);
 
-  const baseUrl = process.env.NEXT_PUBLIC_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  // NEXT_PUBLIC_URL must be set in Vercel env (e.g. https://estimator.northstarroof.com) for full share URLs.
+  // This function runs server-side where window is undefined.
+  const baseUrl = process.env.NEXT_PUBLIC_URL || 'https://estimator.northstarroof.com';
   return {
     shareUrl: `${baseUrl}/share/${token}`,
     expiresAt: expiresAt.toISOString(),

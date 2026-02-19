@@ -258,3 +258,7 @@
 - Client sends Authorization: Bearer <session.access_token> for RLS
 - Share page (/share/[token]): interactive review with sliders, collapsible sections, FinancialSummary; no Re-upload/Download PDF
 - 410 for expired → ExpiredLinkPage; 404 → NotFoundPage
+
+## 2/20/2026 - Share Link Bug Fixes
+- **Bug 1 (path-only URL):** createShareableLink ran server-side where window was undefined; baseUrl fell back to ''. Fixed: use NEXT_PUBLIC_URL with fallback to https://estimator.northstarroof.com. NEXT_PUBLIC_URL must be set in Vercel.
+- **Bug 2 (Estimate Not Found):** estimates RLS blocked anon reads. Added policy estimates_select_via_share_token allowing SELECT when valid non-expired share_tokens row exists (migration 20260220).
