@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { Upload, FileText, AlertTriangle } from 'lucide-react';
+import { Upload, FileText, AlertTriangle, Share2, Copy, Check } from 'lucide-react';
 import { Package, Users, Truck, Wrench } from 'lucide-react';
 import { parseEstimateCSV, downloadCSVTemplate } from '@/lib/csvParser';
 import { validateEstimate } from '@/lib/estimateValidator';
@@ -52,7 +52,7 @@ const SLIDER_CONFIGS = [
 ];
 
 export default function EstimatePage() {
-  const { user, loading } = useAuth();
+  const { user, loading, session, companyId } = useAuth();
   const router = useRouter();
 
   const [uploadedEstimate, setUploadedEstimate] = useState<Estimate | null>(null);
@@ -66,7 +66,21 @@ export default function EstimatePage() {
   const [currentOffice, setCurrentOffice] = useState(10);
   const [currentTax, setCurrentTax] = useState(10);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [sectionHeaders, setSectionHeaders] = useState({
+    materials: 'Materials',
+    consumables: 'Consumables & Hardware',
+    accessories: 'Accessories',
+    labor: 'Labor',
+    equipment: 'Equipment & Fees',
+    schafer: 'Vendor Quote',
+  });
 
   useEffect(() => {
     if (!loading && !user) {
@@ -125,6 +139,7 @@ export default function EstimatePage() {
     setRecalculatedEstimate(null);
     setValidationResult(null);
     setParseErrors([]);
+    setSectionHeaders({ materials: 'Materials', consumables: 'Consumables & Hardware', accessories: 'Accessories', labor: 'Labor', equipment: 'Equipment & Fees', schafer: 'Vendor Quote' });
     setCurrentMargin(40);
     setCurrentWaste(10);
     setCurrentOffice(10);
@@ -135,7 +150,8 @@ export default function EstimatePage() {
     if (!recalculatedEstimate || !validationResult?.isValid) return;
     setIsGeneratingPDF(true);
     try {
-      const blob = await generateProposalPDF(recalculatedEstimate);
+      const estimateWithHeaders = { ...recalculatedEstimate, sectionHeaders };
+      const blob = await generateProposalPDF(estimateWithHeaders);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -157,6 +173,44 @@ export default function EstimatePage() {
     }
   };
 
+  const handleShare = async () => {
+    if (!recalculatedEstimate || !validationResult?.isValid || !user?.id || !companyId || !session?.access_token) {
+      setShareError('Unable to share: please ensure you are logged in.');
+      return;
+    }
+    setIsSharing(true);
+    setShareError(null);
+    try {
+      const estimateWithHeaders = { ...recalculatedEstimate, sectionHeaders };
+      const res = await fetch('/api/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          estimate: estimateWithHeaders,
+          userId: user.id,
+          companyId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create share link');
+      setShareUrl(data.shareUrl);
+      setShareExpiresAt(data.expiresAt);
+      setShowShareModal(true);
+    } catch (err) {
+      setShareError(err instanceof Error ? err.message : 'Failed to create share link');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const handleCopyShareLink = () => {
+    if (!shareUrl) return;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
   const toggleSection = (key: string) => {
     setCollapsedSections((prev) => {
       const next = new Set(prev);
@@ -168,8 +222,8 @@ export default function EstimatePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00293f]" />
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFB]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0066CC]" />
       </div>
     );
   }
@@ -182,17 +236,17 @@ export default function EstimatePage() {
   const hasWarnings = (validationResult?.warnings?.length ?? 0) > 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-[#00293f] mb-6">
+    <div className="min-h-screen bg-[#F8FAFB]">
+      <div className="max-w-5xl mx-auto px-6 py-12">
+        <h1 className="text-2xl md:text-3xl font-bold text-[#1F2937] mb-8">
           New Roofing Estimate
         </h1>
 
         {/* Upload Section */}
         {!uploadedEstimate && (
           <div
-            className={`border-2 border-dashed rounded-xl p-8 md:p-12 text-center transition-colors ${
-              dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white'
+            className={`border-2 border-dashed rounded-xl p-8 md:p-12 text-center transition-colors bg-white ${
+              dragActive ? 'border-[#0066CC] bg-blue-50' : 'border-[#E5E7EB]'
             }`}
             onDragOver={(e) => {
               e.preventDefault();
@@ -219,28 +273,28 @@ export default function EstimatePage() {
             />
             {isParsing ? (
               <div className="flex flex-col items-center gap-3">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#00293f]" />
-                <p className="text-gray-600">Parsing CSV...</p>
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#0066CC]" />
+                <p className="text-[#6B7280]">Parsing CSV...</p>
               </div>
             ) : (
               <>
-                <Upload className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                <p className="text-gray-700 mb-2">
-                  Drag & drop your CSV file here, or
+                <Upload className="w-12 h-12 mx-auto text-[#6B7280] mb-4" />
+                <p className="text-[#1F2937] mb-2">
+                  Drag &amp; drop your CSV file here, or
                 </p>
                 <label
                   htmlFor="csv-upload"
-                  className="inline-block px-4 py-2 bg-[#00293f] text-white rounded-lg cursor-pointer hover:bg-[#003d5c]"
+                  className="inline-block px-4 py-2 bg-[#003366] text-white rounded-lg cursor-pointer hover:bg-[#003366]/90 transition-colors font-medium"
                 >
                   Choose File
                 </label>
-                <p className="text-sm text-gray-500 mt-4">
+                <p className="text-sm text-[#6B7280] mt-4">
                   File must be .csv with columns: Name, Address, Description, Quantity, Unit, Unit Price, Total, Category, Notes
                 </p>
                 <button
                   type="button"
                   onClick={downloadCSVTemplate}
-                  className="mt-2 text-sm text-[#00293f] underline hover:no-underline"
+                  className="mt-2 text-sm text-[#0066CC] underline hover:no-underline font-medium"
                 >
                   Download CSV template
                 </button>
@@ -281,16 +335,26 @@ export default function EstimatePage() {
             {showReview && recalculatedEstimate && (
               <>
                 {/* Header */}
-                <div className="bg-white rounded-xl p-6 border border-gray-200">
-                  <p className="text-lg font-semibold text-gray-900">
-                    {recalculatedEstimate.customerInfo.name || 'Customer'} — {recalculatedEstimate.customerInfo.address || 'No address'}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Estimate Date: {recalculatedEstimate.generatedAt}
-                  </p>
-                  <p className="text-2xl font-bold text-[#00293f] mt-4 text-right">
-                    Quote to Customer: {formatCurrency(recalculatedEstimate.finalPrice)}
-                  </p>
+                <div className="mb-12">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
+                    <div>
+                      <h2 className="text-3xl font-bold text-[#1F2937]">
+                        {recalculatedEstimate.customerInfo.name || 'Customer'}
+                      </h2>
+                      <p className="text-lg text-[#6B7280] mt-1">
+                        {recalculatedEstimate.customerInfo.address || 'No address'}
+                      </p>
+                      <p className="text-sm text-[#6B7280] mt-3">
+                        Estimate Date: {recalculatedEstimate.generatedAt}
+                      </p>
+                    </div>
+                    <div className="text-left sm:text-right flex-shrink-0">
+                      <p className="text-sm font-semibold text-[#6B7280]">Quote to Customer</p>
+                      <p className="text-4xl font-bold text-[#0066CC] mt-2">
+                        {formatCurrency(recalculatedEstimate.finalPrice)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {hasWarnings && (
@@ -304,146 +368,225 @@ export default function EstimatePage() {
                   </div>
                 )}
 
-                {/* Collapsible Categories */}
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <div className="p-4 border-b border-gray-200 bg-gray-50">
-                    <h2 className="text-lg font-bold text-[#00293f]">Line Items by Category</h2>
-                  </div>
-                  <div className="divide-y divide-gray-200">
-                    {(['materials', 'consumables', 'accessories', 'labor', 'equipment', 'schafer'] as const).map((cat) => {
-                      const items = recalculatedEstimate.byCategory[cat] ?? [];
-                      if (items.length === 0) return null;
-                      const label = CATEGORIES[cat]?.label ?? cat;
-                      const total =
-                        cat === 'materials'
-                          ? recalculatedEstimate.totals.materials
-                          : cat === 'consumables'
-                            ? (recalculatedEstimate.totals.consumables ?? recalculatedEstimate.sundriesAmount ?? 0)
-                            : cat === 'labor'
-                              ? recalculatedEstimate.totals.labor
-                              : cat === 'equipment'
-                                ? recalculatedEstimate.totals.equipment
-                                : cat === 'accessories'
-                                  ? recalculatedEstimate.totals.accessories
-                                  : recalculatedEstimate.totals.schafer;
-                      const count = items.length;
-                      const icon = CATEGORIES[cat]?.icon ?? Package;
-                      return (
-                        <div key={cat}>
-                          <CollapsibleSection
-                            sectionKey={cat}
-                            label={label}
-                            icon={icon}
-                            itemCount={count}
-                            isCollapsed={collapsedSections.has(cat)}
-                            onToggle={toggleSection}
-                            subtotal={total}
-                          />
-                          {!collapsedSections.has(cat) && (
-                            <div className="px-4 pb-4 space-y-2">
-                              {(cat === 'accessories' ? groupItemsIntoKits(items) : items).map((item) => (
-                                <div
-                                  key={item.id}
-                                  className="flex flex-col py-1 border-b border-gray-100 last:border-0"
-                                >
-                                  <div className="flex justify-between text-sm">
-                                    <span className="text-gray-800">{item.name}</span>
-                                    <span className="font-medium">{formatCurrency(item.total)}</span>
-                                  </div>
-                                  {(item as { subtitle?: string }).subtitle && (
-                                    <span className="text-xs text-gray-500 mt-0.5 pl-2">
-                                      {(item as { subtitle?: string }).subtitle}
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {recalculatedEstimate.optionalItems.length > 0 && (
-                      <div>
-                        <CollapsibleSection
-                          sectionKey="optional"
-                          label="Optional Items (Not Included)"
-                          icon={FileText}
-                          itemCount={recalculatedEstimate.optionalItems.length}
-                          isCollapsed={collapsedSections.has('optional')}
-                          onToggle={toggleSection}
-                          subtotal={recalculatedEstimate.optionalItems.reduce((s, i) => s + i.total, 0)}
+                {/* PDF Section Headers */}
+                <div className="my-10 p-6 bg-white border border-[#E5E7EB] rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+                  <h3 className="text-lg font-bold text-[#1F2937] mb-2">PDF Section Headers</h3>
+                  <p className="text-sm text-[#6B7280] mb-6">
+                    Customize section titles in the PDF (e.g., &quot;MATERIALS - GAF Shingles&quot;)
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                    {(['materials', 'consumables', 'accessories', 'labor', 'equipment', 'schafer'] as const).map((key) => (
+                      <div key={key}>
+                        <label className="block text-sm font-semibold text-[#374151] mb-2 capitalize">
+                          {key === 'schafer' ? 'Vendor Quote' : key}
+                        </label>
+                        <input
+                          type="text"
+                          value={sectionHeaders[key]}
+                          onChange={(e) => setSectionHeaders((prev) => ({ ...prev, [key]: e.target.value }))}
+                          className="w-full px-4 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0066CC] focus:border-transparent text-sm"
+                          placeholder={key === 'materials' ? 'Materials' : key === 'consumables' ? 'Consumables & Hardware' : key === 'labor' ? 'Labor' : key === 'equipment' ? 'Equipment & Fees' : key === 'accessories' ? 'Accessories' : 'Vendor Quote'}
                         />
-                        {!collapsedSections.has('optional') && (
-                          <div className="px-4 pb-4 space-y-2">
-                            {recalculatedEstimate.optionalItems.map((item) => (
-                              <div
-                                key={item.id}
-                                className="flex justify-between text-sm py-1 text-gray-500"
-                              >
-                                <span>{item.name}</span>
-                                <span>{formatCurrency(item.total)}</span>
-                              </div>
-                            ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Line Items by Category */}
+                <div className="space-y-4 mb-10">
+                  <h2 className="text-lg font-bold text-[#1F2937]">Line Items by Category</h2>
+                  {(['materials', 'consumables', 'accessories', 'labor', 'equipment', 'schafer'] as const).map((cat) => {
+                    const items = recalculatedEstimate.byCategory[cat] ?? [];
+                    if (items.length === 0) return null;
+                    const label = sectionHeaders[cat] || (CATEGORIES[cat]?.label ?? cat);
+                    const total =
+                      cat === 'materials'
+                        ? recalculatedEstimate.totals.materials
+                        : cat === 'consumables'
+                          ? (recalculatedEstimate.totals.consumables ?? recalculatedEstimate.sundriesAmount ?? 0)
+                          : cat === 'labor'
+                            ? recalculatedEstimate.totals.labor
+                            : cat === 'equipment'
+                              ? recalculatedEstimate.totals.equipment
+                              : cat === 'accessories'
+                                ? recalculatedEstimate.totals.accessories
+                                : recalculatedEstimate.totals.schafer;
+                    const icon = CATEGORIES[cat]?.icon ?? Package;
+                    const displayItems = cat === 'accessories' ? groupItemsIntoKits(items) : items;
+                    return (
+                      <div key={cat} className="mb-10">
+                        <CollapsibleSection
+                          sectionKey={cat}
+                          label={label}
+                          icon={icon}
+                          itemCount={items.length}
+                          isCollapsed={collapsedSections.has(cat)}
+                          onToggle={toggleSection}
+                          subtotal={total}
+                          onLabelChange={(value) => setSectionHeaders((prev) => ({ ...prev, [cat]: value }))}
+                        />
+                        {!collapsedSections.has(cat) && (
+                          <div className="mt-2 rounded-lg border border-[#E5E7EB] overflow-hidden bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+                            <table className="w-full">
+                              <tbody className="divide-y divide-[#E5E7EB]">
+                                {displayItems.map((item, idx) => (
+                                  <tr
+                                    key={item.id}
+                                    className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFB]'}
+                                  >
+                                    <td className="px-6 py-4 text-sm font-medium text-[#1F2937]">
+                                      {item.name}
+                                      {(item as { subtitle?: string }).subtitle && (
+                                        <p className="text-xs text-[#6B7280] font-normal mt-1">
+                                          {(item as { subtitle?: string }).subtitle}
+                                        </p>
+                                      )}
+                                    </td>
+                                    <td className="px-6 py-4 text-right text-sm font-semibold text-[#1F2937] whitespace-nowrap">
+                                      {formatCurrency(item.total)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         )}
                       </div>
-                    )}
+                    );
+                  })}
+                  {recalculatedEstimate.optionalItems.length > 0 && (
+                    <div className="mb-10">
+                      <CollapsibleSection
+                        sectionKey="optional"
+                        label="Optional Items (Not Included)"
+                        icon={FileText}
+                        itemCount={recalculatedEstimate.optionalItems.length}
+                        isCollapsed={collapsedSections.has('optional')}
+                        onToggle={toggleSection}
+                        subtotal={recalculatedEstimate.optionalItems.reduce((s, i) => s + i.total, 0)}
+                      />
+                      {!collapsedSections.has('optional') && (
+                        <div className="mt-2 rounded-lg border border-[#E5E7EB] overflow-hidden bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+                          <table className="w-full">
+                            <tbody className="divide-y divide-[#E5E7EB]">
+                              {recalculatedEstimate.optionalItems.map((item, idx) => (
+                                <tr
+                                  key={item.id}
+                                  className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFB]'}
+                                >
+                                  <td className="px-6 py-4 text-sm text-[#6B7280]">{item.name}</td>
+                                  <td className="px-6 py-4 text-right text-sm font-semibold text-[#6B7280] whitespace-nowrap">
+                                    {formatCurrency(item.total)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Key Metrics */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-6 my-10">
+                  <div className="p-6 bg-white border-2 border-[#E5E7EB] rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+                    <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide">Total Cost</p>
+                    <p className="text-3xl font-bold text-[#1F2937] mt-3">
+                      {formatCurrency(recalculatedEstimate.totalCost)}
+                    </p>
+                  </div>
+                  <div className="p-6 bg-white border-2 border-[#0066CC]/30 rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+                    <p className="text-xs font-semibold text-[#0066CC] uppercase tracking-wide">Sell Price</p>
+                    <p className="text-3xl font-bold text-[#0066CC] mt-3">
+                      {formatCurrency(recalculatedEstimate.sellPrice)}
+                    </p>
+                  </div>
+                  <div className="p-6 bg-[#4CAF50]/10 border-2 border-[#4CAF50]/40 rounded-lg col-span-2 md:col-span-1 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+                    <p className="text-xs font-semibold text-[#4CAF50] uppercase tracking-wide">Final Quote</p>
+                    <p className="text-3xl font-bold text-[#4CAF50] mt-3">
+                      {formatCurrency(recalculatedEstimate.finalPrice)}
+                    </p>
                   </div>
                 </div>
 
                 {/* Financial Breakdown */}
-                <div className="bg-white rounded-xl p-6 border border-gray-200 space-y-2">
-                  <h2 className="text-lg font-bold text-[#00293f] mb-4">Financial Breakdown</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
-                    <div>Materials Subtotal: <span className="font-medium">{formatCurrency(recalculatedEstimate.totals.materials)}</span></div>
-                    <div>Labor Subtotal: <span className="font-medium">{formatCurrency(recalculatedEstimate.totals.labor)}</span></div>
-                    <div>Equipment Subtotal: <span className="font-medium">{formatCurrency(recalculatedEstimate.totals.equipment)}</span></div>
-                    <div>Accessories Subtotal: <span className="font-medium">{formatCurrency(recalculatedEstimate.totals.accessories)}</span></div>
-                    <div>Sundries (10%): <span className="font-medium">{formatCurrency(recalculatedEstimate.sundriesAmount)}</span></div>
-                    <div>Base Cost: <span className="font-medium">{formatCurrency(recalculatedEstimate.baseCost)}</span></div>
-                    <div>Office ({currentOffice}%): <span className="font-medium">{formatCurrency(recalculatedEstimate.officeAllocation)}</span></div>
-                    <div>Total Cost: <span className="font-medium">{formatCurrency(recalculatedEstimate.totalCost)}</span></div>
-                    <div>Margin ({currentMargin}%): <span className="font-medium text-green-700">+{formatCurrency(recalculatedEstimate.sellPrice - recalculatedEstimate.totalCost)}</span></div>
-                    <div>Sell Price: <span className="font-medium">{formatCurrency(recalculatedEstimate.sellPrice)}</span></div>
-                    <div>Sales Tax ({currentTax}%): <span className="font-medium">+{formatCurrency(recalculatedEstimate.salesTaxAmount)}</span></div>
-                    <div className="col-span-2 md:col-span-3 pt-2 border-t font-bold text-lg">
-                      FINAL PRICE: {formatCurrency(recalculatedEstimate.finalPrice)}
+                <div className="p-8 bg-white border border-[#E5E7EB] rounded-lg space-y-4 my-10 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+                  <h3 className="font-bold text-[#1F2937] text-lg">Financial Breakdown</h3>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between py-2 border-b border-[#E5E7EB]">
+                      <span className="text-[#6B7280]">Materials Subtotal</span>
+                      <span className="font-semibold text-[#1F2937]">{formatCurrency(recalculatedEstimate.totals.materials)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-[#E5E7EB]">
+                      <span className="text-[#6B7280]">Labor Subtotal</span>
+                      <span className="font-semibold text-[#1F2937]">{formatCurrency(recalculatedEstimate.totals.labor)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-[#E5E7EB]">
+                      <span className="text-[#6B7280]">Equipment & Accessories</span>
+                      <span className="font-semibold text-[#1F2937]">{formatCurrency(recalculatedEstimate.totals.equipment + recalculatedEstimate.totals.accessories)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-[#E5E7EB]">
+                      <span className="text-[#6B7280]">Sundries (10%)</span>
+                      <span className="font-semibold text-[#1F2937]">{formatCurrency(recalculatedEstimate.sundriesAmount)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-[#E5E7EB]">
+                      <span className="text-[#6B7280]">Base Cost</span>
+                      <span className="font-semibold text-[#1F2937]">{formatCurrency(recalculatedEstimate.baseCost)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-[#E5E7EB]">
+                      <span className="text-[#6B7280]">Office ({currentOffice}%)</span>
+                      <span className="font-semibold text-[#1F2937]">{formatCurrency(recalculatedEstimate.officeAllocation)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-[#E5E7EB]">
+                      <span className="text-[#6B7280]">Gross Profit ({currentMargin}%)</span>
+                      <span className="font-semibold text-[#4CAF50]">{formatCurrency(recalculatedEstimate.sellPrice - recalculatedEstimate.totalCost)}</span>
+                    </div>
+                    <div className="flex justify-between py-2">
+                      <span className="text-[#6B7280]">Sales Tax ({currentTax}%)</span>
+                      <span className="font-semibold text-[#1F2937]">{formatCurrency(recalculatedEstimate.salesTaxAmount)}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Sliders */}
-                <div className="bg-white rounded-xl p-6 border border-gray-200 space-y-6">
-                  <h2 className="text-lg font-bold text-[#00293f]">Adjust Financials</h2>
-                  {SLIDER_CONFIGS.map((config) => {
-                    const value =
-                      config.key === 'margin' ? currentMargin
-                      : config.key === 'waste' ? currentWaste
-                      : config.key === 'office' ? currentOffice
-                      : currentTax;
-                    const setter =
-                      config.key === 'margin' ? setCurrentMargin
-                      : config.key === 'waste' ? setCurrentWaste
-                      : config.key === 'office' ? setCurrentOffice
-                      : setCurrentTax;
-                    return (
-                      <div key={config.key}>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="font-medium text-gray-800">{config.label}</label>
-                          <span className="text-sm text-gray-600">{value}%</span>
+                <div className="my-10 p-8 bg-gradient-to-br from-blue-50 to-white border-2 border-[#0066CC]/20 rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+                  <h3 className="text-lg font-bold text-[#1F2937] mb-8">Adjust Financials</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {SLIDER_CONFIGS.map((config) => {
+                      const value =
+                        config.key === 'margin' ? currentMargin
+                        : config.key === 'waste' ? currentWaste
+                        : config.key === 'office' ? currentOffice
+                        : currentTax;
+                      const setter =
+                        config.key === 'margin' ? setCurrentMargin
+                        : config.key === 'waste' ? setCurrentWaste
+                        : config.key === 'office' ? setCurrentOffice
+                        : setCurrentTax;
+                      return (
+                        <div key={config.key}>
+                          <div className="flex items-center justify-between mb-3">
+                            <label className="text-sm font-semibold text-[#374151]">{config.label}</label>
+                            <span className="text-2xl font-bold text-[#0066CC]">{value}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={config.min}
+                            max={config.max}
+                            value={value}
+                            onChange={(e) => setter(parseFloat(e.target.value))}
+                            className="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-[#0066CC]"
+                          />
+                          <div className="flex justify-between text-xs text-[#6B7280] mt-2">
+                            <span>{config.min}%</span>
+                            <span>{config.max}%</span>
+                          </div>
+                          <p className="text-xs text-[#6B7280] mt-1">{config.help}</p>
                         </div>
-                        <input
-                          type="range"
-                          min={config.min}
-                          max={config.max}
-                          value={value}
-                          onChange={(e) => setter(parseFloat(e.target.value))}
-                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#00293f]"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">{config.help}</p>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Profit Split */}
@@ -455,21 +598,61 @@ export default function EstimatePage() {
                 />
 
                 {/* Actions */}
-                <div className="flex gap-4">
+                <div className="my-12 flex flex-col sm:flex-row gap-4">
                   <button
                     onClick={handleReupload}
-                    className="px-6 py-3 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
+                    className="flex-1 px-6 py-3 bg-white border-2 border-[#E5E7EB] rounded-lg font-semibold text-[#374151] hover:bg-[#F8FAFB] transition-colors"
                   >
                     Re-upload CSV
                   </button>
                   <button
+                    onClick={handleShare}
+                    disabled={!validationResult?.isValid || isSharing}
+                    className="flex-1 px-6 py-3 bg-white border-2 border-[#0066CC] text-[#0066CC] rounded-lg font-semibold hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+                  >
+                    <Share2 className="w-5 h-5" />
+                    {isSharing ? 'Creating...' : 'Share with Owner'}
+                  </button>
+                  <button
                     onClick={handleDownloadPDF}
                     disabled={!validationResult?.isValid || isGeneratingPDF}
-                    className="px-6 py-3 bg-[#00293f] text-white rounded-lg font-medium hover:bg-[#003d5c] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 px-6 py-3 bg-[#003366] text-white rounded-lg font-semibold hover:bg-[#003366]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isGeneratingPDF ? 'Generating...' : 'Download PDF'}
                   </button>
                 </div>
+                {shareError && (
+                  <p className="text-sm text-red-600 mt-2">{shareError}</p>
+                )}
+                {showShareModal && shareUrl && shareExpiresAt && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowShareModal(false)}>
+                    <div className="bg-white rounded-xl p-6 max-w-lg w-full shadow-xl" onClick={(e) => e.stopPropagation()}>
+                      <h3 className="text-lg font-bold text-[#1F2937] mb-2">Share with Owner</h3>
+                      <p className="text-sm text-[#6B7280] mb-4">Owner can view &amp; adjust estimate for 24 hours. PDF is emailed separately.</p>
+                      <div className="flex gap-2 mb-4">
+                        <input
+                          readOnly
+                          value={shareUrl}
+                          className="flex-1 px-3 py-2 border border-[#E5E7EB] rounded-lg text-sm bg-[#F8FAFB]"
+                        />
+                        <button
+                          onClick={handleCopyShareLink}
+                          className="px-4 py-2 bg-[#0066CC] text-white rounded-lg font-medium hover:bg-[#0066CC]/90 flex items-center gap-2"
+                        >
+                          {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          {copied ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <p className="text-xs text-[#6B7280]">Expires in 24 hours</p>
+                      <button
+                        onClick={() => setShowShareModal(false)}
+                        className="mt-4 w-full py-2 border-2 border-[#E5E7EB] rounded-lg font-medium hover:bg-[#F8FAFB] transition-colors"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 

@@ -29,11 +29,14 @@ const DESC_COLUMN_RIGHT = DESC_COLUMN_LEFT + DESC_COLUMN_WIDTH; // 460
 const PRICE_COLUMN_LEFT = DESC_COLUMN_RIGHT;
 const PRICE_COLUMN_RIGHT = TABLE_RIGHT; // 550
 
-// Row dimensions
+// Row dimensions — increased for better readability
 const HEADER_HEIGHT = 28;
-const ROW_HEIGHT_SINGLE = 28; // For single-line items
-const ROW_PADDING = 15; // Padding inside cells
-const LINE_HEIGHT = 14; // For text wrapping calculation
+const ROW_HEIGHT_SINGLE = 32; // For single-line items (was 28)
+const ROW_PADDING = 18; // Padding inside cells (was 15)
+const ROW_PADDING_VERTICAL = 8; // Extra top/bottom padding
+const LINE_HEIGHT = 16; // For text wrapping (was 14)
+const SECTION_GAP_ABOVE = 20; // Margin above section header
+const SECTION_GAP_BELOW = 8;  // Margin below section header
 
 // Border styling
 const BORDER_WIDTH = 1.5; // 2px
@@ -294,10 +297,14 @@ function wordWrap(text: string, font: any, fontSize: number, maxWidth: number): 
 }
 
 // Calculate row height based on text wrapping
-function calculateRowHeight(text: string, font: any, fontSize: number, maxWidth: number): number {
+function calculateRowHeight(text: string, font: any, fontSize: number, maxWidth: number, subtitle?: string): number {
   const lines = wordWrap(text, font, fontSize, maxWidth);
-  const textHeight = lines.length * (fontSize + 4); // fontSize + line spacing
-  return Math.max(ROW_HEIGHT_SINGLE, textHeight + ROW_PADDING * 2);
+  let textHeight = lines.length * (fontSize + 5); // fontSize + line spacing (1.6 ratio)
+  if (subtitle) {
+    const subtitleLines = wordWrap(subtitle, font, 9, maxWidth);
+    textHeight += subtitleLines.length * (9 + 4) + 8;
+  }
+  return Math.max(ROW_HEIGHT_SINGLE, textHeight + ROW_PADDING_VERTICAL * 2);
 }
 
 // Format currency with commas
@@ -554,16 +561,16 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
   };
 
   // Get custom section headers or use defaults
-  const sectionHeaders = estimate.sectionHeaders || {
-    materials: 'Materials',
-    labor: 'Labor',
-    equipment: 'Equipment & Fees',
-    accessories: 'Accessories',
-    schafer: 'Vendor Quote',
+  const sectionHeaders = {
+    materials: estimate.sectionHeaders?.materials ?? 'Materials',
+    consumables: estimate.sectionHeaders?.consumables ?? 'Consumables & Hardware',
+    labor: estimate.sectionHeaders?.labor ?? 'Labor',
+    equipment: estimate.sectionHeaders?.equipment ?? 'Equipment & Fees',
+    accessories: estimate.sectionHeaders?.accessories ?? 'Accessories',
+    schafer: estimate.sectionHeaders?.schafer ?? 'Vendor Quote',
   };
 
   // Section order: MATERIALS, CONSUMABLES, ACCESSORIES, LABOR, EQUIPMENT, OPTIONAL
-  // Apply kit grouping to accessories
   const consumablesItems = estimate.byCategory.consumables || [];
   const accessoriesItems = groupItemsIntoKits(estimate.byCategory.accessories || []);
   const materialsItems = estimate.byCategory.materials;
@@ -573,12 +580,12 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
   const optionalItems = estimate.optionalItems || [];
 
   const allItems: Array<{ item: LineItem & { subtitle?: string }; section: string; isOptional?: boolean }> = [
-    ...materialsItems.map((item) => ({ item, section: sectionHeaders.materials.toUpperCase() })),
-    ...schaferItems.map((item) => ({ item, section: sectionHeaders.materials.toUpperCase() })),
-    ...consumablesItems.map((item) => ({ item, section: 'CONSUMABLES & HARDWARE' })),
-    ...accessoriesItems.map((item) => ({ item, section: sectionHeaders.accessories.toUpperCase() })),
-    ...laborItems.map((item) => ({ item, section: sectionHeaders.labor.toUpperCase() })),
-    ...equipmentItems.map((item) => ({ item, section: sectionHeaders.equipment.toUpperCase() })),
+    ...materialsItems.map((item) => ({ item, section: sectionHeaders.materials })),
+    ...schaferItems.map((item) => ({ item, section: sectionHeaders.materials })),
+    ...consumablesItems.map((item) => ({ item, section: sectionHeaders.consumables })),
+    ...accessoriesItems.map((item) => ({ item, section: sectionHeaders.accessories })),
+    ...laborItems.map((item) => ({ item, section: sectionHeaders.labor })),
+    ...equipmentItems.map((item) => ({ item, section: sectionHeaders.equipment })),
     ...optionalItems.map((item) => ({ item, section: 'OPTIONAL ITEMS (Not Included in Quote Total)', isOptional: true })),
   ];
 
@@ -613,12 +620,11 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     const { item, section } = allItems[i];
     const sectionChanged = currentSection !== section;
     
-    // Calculate space needed - use item name directly
     const description = item.name;
     const maxDescWidth = DESC_COLUMN_WIDTH - ROW_PADDING * 2;
-    const sectionHeaderSpace = sectionChanged ? ROW_HEIGHT_SINGLE : 0;
-    const itemHeight = calculateRowHeight(description, font, 10, maxDescWidth);
-    const spaceNeeded = sectionHeaderSpace + itemHeight;
+    const sectionHeaderHeight = sectionChanged ? 12 + SECTION_GAP_ABOVE + SECTION_GAP_BELOW : 0;
+    const itemHeight = calculateRowHeight(description, font, 11, maxDescWidth, (item as { subtitle?: string }).subtitle);
+    const spaceNeeded = sectionHeaderHeight + itemHeight;
     
     // Determine bottom margin: if this is the last item and would fit on current page,
     // use quote page margin (since it will be the last page). Otherwise use regular margin.
@@ -629,9 +635,15 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     const wouldBeLastPage = isLastItem && currentPageContent.items.length > 0;
     const bottomMargin = wouldBeLastPage ? QUOTE_PAGE_BOTTOM_MARGIN : REGULAR_PAGE_BOTTOM_MARGIN;
     const spaceAvailable = currentY - bottomMargin;
-    
-    // Only create new page when out of space (NOT on section change)
-    if (currentPageContent.items.length === 0 || spaceAvailable < spaceNeeded) {
+    const pageContentHeight = CONTENT_Y_END - bottomMargin;
+    const spaceUsedPercent = 1 - spaceAvailable / pageContentHeight;
+
+    // Smart page break: don't split Equipment section — if Equipment would start with <40% page left and has <4 items, push to next page
+    const isEquipmentStart = section === sectionHeaders.equipment && currentSection !== section;
+    const equipmentItemCount = equipmentItems.length;
+    const shouldBreakForEquipment = isEquipmentStart && equipmentItemCount < 4 && spaceUsedPercent > 0.6;
+
+    if (currentPageContent.items.length === 0 || spaceAvailable < spaceNeeded || shouldBreakForEquipment) {
       // Save previous page content if it exists
       if (currentPageContent.items.length > 0) {
         pageContents.push(currentPageContent);
@@ -652,25 +664,19 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
       }
     }
     
-    // Add section header if section changed (track space but don't store header separately)
-    if (sectionChanged && currentSection) {
-      currentY -= ROW_HEIGHT_SINGLE;
-    }
-    
     // Add item to current page content
-    // Optional items at cost (1.0); non-optional use cost-tier multiplier + scale to hit finalPrice
     const multiplier = allItems[i].isOptional ? 1 : tierMultipliers[i] * scaleFactor;
     const clientPrice = Math.round(item.total * multiplier * 100) / 100;
     currentPageContent.items.push({
       item,
       section,
-      descLines: wordWrap(description, font, 10, maxDescWidth),
+      descLines: wordWrap(description, font, 11, maxDescWidth),
       price: clientPrice,
       isOptional: allItems[i].isOptional || false,
     });
     
-    // Update Y position
-    currentY = currentY - itemHeight;
+    // Update Y position (section header when changed + item)
+    currentY = currentY - (sectionChanged ? sectionHeaderHeight : 0) - itemHeight;
     
     currentSection = section;
   }
@@ -695,25 +701,20 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     // Draw page content
     let lastSection = '';
     
-    for (const contentItem of pageContent.items) {
-      // Add section header if needed
+    for (let idx = 0; idx < pageContent.items.length; idx++) {
+      const contentItem = pageContent.items[idx];
       const isFirstInSection = contentItem.section !== lastSection;
       if (isFirstInSection) {
         yPos = drawSectionHeader(page, yPos, contentItem.section, pageBoldFont);
         lastSection = contentItem.section;
       }
       
-      // Draw item row - ensure we don't go below regular page bottom margin
       const description = contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
       const subtitle = (contentItem.item as any).subtitle;
-      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false, subtitle);
+      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false, subtitle, idx);
       
-      // Ensure we don't exceed the bottom margin
-      if (newYPos < REGULAR_PAGE_BOTTOM_MARGIN) {
-        // This shouldn't happen if PASS 1 logic is correct, but prevent overlap
-        break;
-      }
+      if (newYPos < REGULAR_PAGE_BOTTOM_MARGIN) break;
       yPos = newYPos;
     }
     
@@ -735,25 +736,20 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     // Draw page content
     let lastSection = '';
     
-    for (const contentItem of lastPageContent.items) {
-      // Add section header if needed
+    for (let idx = 0; idx < lastPageContent.items.length; idx++) {
+      const contentItem = lastPageContent.items[idx];
       const isFirstInSection = contentItem.section !== lastSection;
       if (isFirstInSection) {
         yPos = drawSectionHeader(page, yPos, contentItem.section, pageBoldFont);
         lastSection = contentItem.section;
       }
       
-      // Draw item row - ensure we don't go below quote page bottom margin
       const description = contentItem.item.name;
       const priceText = formatCurrency(contentItem.price);
       const subtitle = (contentItem.item as any).subtitle;
-      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false, subtitle);
+      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false, subtitle, idx);
       
-      // Ensure we don't exceed the bottom margin (quote page has larger margin for the box)
-      if (newYPos < QUOTE_PAGE_BOTTOM_MARGIN) {
-        // This shouldn't happen if PASS 1 logic is correct, but prevent overlap
-        break;
-      }
+      if (newYPos < QUOTE_PAGE_BOTTOM_MARGIN) break;
       yPos = newYPos;
     }
     
@@ -840,27 +836,36 @@ function drawLineItemRow(
   font: any, 
   isFirstInSection: boolean = false,
   isOptional: boolean = false,
-  subtitle?: string
+  subtitle?: string,
+  rowIndex: number = 0
 ): number {
   const maxDescWidth = DESC_COLUMN_WIDTH - ROW_PADDING * 2;
-  const fontSize = 10;
-  const subtitleFontSize = 8;
+  const fontSize = 11;
+  const subtitleFontSize = 9;
   
-  // Calculate row height based on text wrapping
   const lines = wordWrap(description, font, fontSize, maxDescWidth);
-  let textHeight = lines.length * (fontSize + 4);
+  let textHeight = lines.length * (fontSize + 5);
   
-  // Add subtitle height if present
   if (subtitle) {
     const subtitleLines = wordWrap(subtitle, font, subtitleFontSize, maxDescWidth);
-    textHeight += subtitleLines.length * (subtitleFontSize + 3) + 6; // Extra spacing between title and subtitle
+    textHeight += subtitleLines.length * (subtitleFontSize + 4) + 8;
   }
   
-  const rowHeight = Math.max(ROW_HEIGHT_SINGLE, textHeight + ROW_PADDING * 2);
+  const rowHeight = Math.max(ROW_HEIGHT_SINGLE, textHeight + ROW_PADDING_VERTICAL * 2);
   
   const rowBottom = y - rowHeight;
   
-  // If first item in section, draw TOP border
+  // Alternating row background (every other row light gray)
+  if (rowIndex % 2 === 1 && !isOptional) {
+    page.drawRectangle({
+      x: TABLE_LEFT,
+      y: rowBottom,
+      width: TABLE_WIDTH,
+      height: rowHeight,
+      color: rgb(0.976, 0.976, 0.976), // #f9f9f9
+    });
+  }
+  
   if (isFirstInSection) {
     page.drawRectangle({
       x: TABLE_LEFT,
@@ -909,11 +914,10 @@ function drawLineItemRow(
     color: BORDER_COLOR,
   });
   
-  // Description text - vertically centered
-  let totalTextHeight = lines.length * (fontSize + 4) - 4; // Subtract last line spacing
+  let totalTextHeight = lines.length * (fontSize + 5) - 5;
   if (subtitle) {
     const subtitleLines = wordWrap(subtitle, font, subtitleFontSize, maxDescWidth);
-    totalTextHeight += subtitleLines.length * (subtitleFontSize + 3) + 6;
+    totalTextHeight += subtitleLines.length * (subtitleFontSize + 4) + 8;
   }
   
   const centerY = rowBottom + (rowHeight / 2);
@@ -931,22 +935,21 @@ function drawLineItemRow(
       font: font,
       color: textColor,
     });
-    textY -= (fontSize + 4);
+    textY -= (fontSize + 5);
   }
   
-  // Draw subtitle if present
   if (subtitle) {
-    textY -= 6; // Extra spacing before subtitle
+    textY -= 8;
     const subtitleLines = wordWrap(subtitle, font, subtitleFontSize, maxDescWidth);
     for (const line of subtitleLines) {
       page.drawText(line, {
-        x: DESC_COLUMN_LEFT + ROW_PADDING + 10, // Indent subtitle slightly
+        x: DESC_COLUMN_LEFT + ROW_PADDING + 10,
         y: textY,
         size: subtitleFontSize,
         font: font,
-        color: rgb(0.5, 0.5, 0.5), // Gray color for subtitle
+        color: rgb(0.5, 0.5, 0.5),
       });
-      textY -= (subtitleFontSize + 3);
+      textY -= (subtitleFontSize + 4);
     }
   }
   
@@ -966,27 +969,23 @@ function drawLineItemRow(
   return rowBottom; // Return Y position for next row
 }
 
-// Helper function to draw section header row
+// Helper function to draw section header row — clean navy text, no background/padding/border
 function drawSectionHeader(page: any, y: number, sectionName: string, boldFont: any): number {
-  // Section headers are plain text with spacing: 20pt above, 10pt below
-  const spacingAbove = 20;
-  const spacingBelow = 10;
-  const fontSize = 13;
-  
-  // Calculate Y position: start from y, move up by spacing above
-  const headerY = y - spacingAbove;
-  
-  // Section name - bold, 13pt, left aligned, NO background, NO borders
+  const fontSize = 12;
+  const headerHeight = fontSize;
+  const headerBottom = y - SECTION_GAP_ABOVE - headerHeight - SECTION_GAP_BELOW;
+
+  // Section name — 12pt bold navy #003366, no background, no padding, no border
+  const textY = headerBottom + SECTION_GAP_BELOW;
   page.drawText(sectionName, {
-    x: TABLE_LEFT + ROW_PADDING,
-    y: headerY,
+    x: TABLE_LEFT,
+    y: textY,
     size: fontSize,
     font: boldFont,
-    color: rgb(0, 0, 0),
+    color: rgb(0, 0.2, 0.4), // #003366 navy
   });
-  
-  // Return Y position with space below for first item
-  return headerY - spacingBelow;
+
+  return headerBottom;
 }
 
 // Main function to generate proposal PDF

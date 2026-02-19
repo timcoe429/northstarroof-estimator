@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { SavedQuote, Estimate, Measurements, LineItem, CustomerInfo, PriceItem, VendorQuote, VendorQuoteItem } from '@/types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
@@ -7,8 +7,22 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholde
 // Create client (will fail gracefully at runtime if env vars not set)
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+/** Create Supabase client with user JWT for RLS (API routes) */
+export function createAuthenticatedClient(accessToken: string): SupabaseClient {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+  });
+}
+
 // Save quote to Supabase
-export async function saveQuote(estimate: Estimate, quoteName: string, userId: string | undefined, companyId: string | undefined, jobDescription?: string): Promise<SavedQuote> {
+export async function saveQuote(
+  estimate: Estimate,
+  quoteName: string,
+  userId: string | undefined,
+  companyId: string | undefined,
+  jobDescription?: string,
+  client?: SupabaseClient
+): Promise<SavedQuote> {
   // Debug logging
   console.log('saveQuote received userId:', userId);
   console.log('saveQuote received companyId:', companyId);
@@ -53,12 +67,20 @@ export async function saveQuote(estimate: Estimate, quoteName: string, userId: s
   if (estimate.sectionHeaders) {
     quoteData.section_headers = estimate.sectionHeaders;
   }
+  if (estimate.customerInfo) {
+    quoteData.customer_info = {
+      name: estimate.customerInfo.name || '',
+      address: estimate.customerInfo.address || '',
+      phone: estimate.customerInfo.phone || '',
+    };
+  }
 
   // Debug logging - log quoteData before insert
   console.log('saveQuote quoteData:', quoteData);
   console.log('saveQuote user_id value:', quoteData.user_id);
   
-  const { data, error } = await supabase
+  const db = client ?? supabase;
+  const { data, error } = await db
     .from('estimates')
     .insert(quoteData)
     .select()
@@ -487,8 +509,48 @@ export async function updateShareSettings(
   }
 }
 
-// Get estimate by share token (public, no auth required)
-export async function getEstimateByShareToken(token: string): Promise<SavedQuote | null> {
+export type ShareTokenResult =
+  | { kind: 'valid'; estimate: SavedQuote }
+  | { kind: 'expired' }
+  | { kind: 'not_found' };
+
+/** Resolve share token and optionally fetch estimate. Distinguishes expired vs not found. */
+export async function resolveShareToken(token: string): Promise<ShareTokenResult> {
+  const { data: shareToken, error: tokenError } = await supabase
+    .from('share_tokens')
+    .select('estimate_id, expires_at')
+    .eq('token', token)
+    .single();
+
+  if (!tokenError && shareToken) {
+    const expiresAt = new Date(shareToken.expires_at);
+    if (new Date() > expiresAt) {
+      return { kind: 'expired' };
+    }
+    // Update accessed_at
+    await supabase
+      .from('share_tokens')
+      .update({ accessed_at: new Date().toISOString() })
+      .eq('token', token);
+
+    const { data: estimate, error: estError } = await supabase
+      .from('estimates')
+      .select('*')
+      .eq('id', shareToken.estimate_id)
+      .single();
+
+    if (estError || !estimate) return { kind: 'not_found' };
+
+    // Update accessed_at
+    await supabase
+      .from('share_tokens')
+      .update({ accessed_at: new Date().toISOString() })
+      .eq('token', token);
+
+    return { kind: 'valid', estimate: estimate as SavedQuote };
+  }
+
+  // Fallback: legacy share_token on estimates
   const { data, error } = await supabase
     .from('estimates')
     .select('*')
@@ -496,9 +558,57 @@ export async function getEstimateByShareToken(token: string): Promise<SavedQuote
     .eq('share_enabled', true)
     .single();
 
-  if (error || !data) {
-    return null;
-  }
+  if (error || !data) return { kind: 'not_found' };
+  return { kind: 'valid', estimate: data as SavedQuote };
+}
 
-  return data as SavedQuote;
+// Get estimate by share token (public, no auth required)
+// Kept for backward compatibility; prefer resolveShareToken for new code
+export async function getEstimateByShareToken(token: string): Promise<SavedQuote | null> {
+  const result = await resolveShareToken(token);
+  return result.kind === 'valid' ? result.estimate : null;
+}
+
+/** Generate random token for share links */
+function generateRandomToken(length: number): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  const randomValues = new Uint8Array(length);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(randomValues);
+    for (let i = 0; i < length; i++) result += chars[randomValues[i] % chars.length];
+  } else {
+    for (let i = 0; i < length; i++) result += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return result;
+}
+
+/** Create shareable link: save estimate + create share_token, returns URL and expiry */
+export async function createShareableLink(
+  estimate: Estimate,
+  userId: string,
+  companyId: string,
+  accessToken?: string
+): Promise<{ shareUrl: string; expiresAt: string; estimateId: string }> {
+  const client = accessToken ? createAuthenticatedClient(accessToken) : supabase;
+  const quoteName = `${estimate.customerInfo?.name || 'Customer'} - ${estimate.customerInfo?.address || 'Estimate'}`.slice(0, 200);
+  const saved = await saveQuote(estimate, quoteName, userId, companyId, undefined, client);
+
+  const token = generateRandomToken(32);
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  const { error } = await client.from('share_tokens').insert({
+    estimate_id: saved.id,
+    token,
+    expires_at: expiresAt.toISOString(),
+  });
+
+  if (error) throw new Error(`Failed to create share link: ${error.message}`);
+
+  const baseUrl = process.env.NEXT_PUBLIC_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  return {
+    shareUrl: `${baseUrl}/share/${token}`,
+    expiresAt: expiresAt.toISOString(),
+    estimateId: saved.id,
+  };
 }

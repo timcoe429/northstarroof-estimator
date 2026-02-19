@@ -1,31 +1,24 @@
 'use client'
 
 import React from 'react';
-import { ChevronDown, ChevronRight, LucideIcon } from 'lucide-react';
+import { ChevronDown, LucideIcon } from 'lucide-react';
 import { formatCurrency } from '@/lib/estimatorUtils';
 
 interface CollapsibleSectionProps {
-  /** Unique identifier for the section */
   sectionKey: string;
-  /** Display label for the section */
   label: string;
-  /** Icon component from lucide-react */
   icon: LucideIcon;
-  /** Number of items in this section */
   itemCount: number;
-  /** Whether the section is currently collapsed */
   isCollapsed: boolean;
-  /** Callback when section header is clicked */
   onToggle: (sectionKey: string) => void;
-  /** Optional subtotal to display */
   subtotal?: number;
-  /** Optional className for the header container */
   className?: string;
+  /** When provided, label becomes editable */
+  onLabelChange?: (value: string) => void;
 }
 
 /**
- * Reusable collapsible section header with chevron, category icon, title, and item count.
- * Used in estimate builder for organizing items by category.
+ * Collapsible section header with modern styling: gradient bg, left accent, editable label.
  */
 export function CollapsibleSection({
   sectionKey,
@@ -36,26 +29,48 @@ export function CollapsibleSection({
   onToggle,
   subtotal,
   className = '',
+  onLabelChange,
 }: CollapsibleSectionProps) {
   return (
     <button
+      type="button"
       onClick={() => onToggle(sectionKey)}
-      className={`flex items-center gap-2 hover:opacity-80 transition-opacity ${className}`}
+      className={`w-full group text-left ${className}`}
     >
-      {isCollapsed ? (
-        <ChevronRight className="w-5 h-5 text-[#00293f]" />
-      ) : (
-        <ChevronDown className="w-5 h-5 text-[#00293f]" />
-      )}
-      <Icon className="w-5 h-5 text-[#00293f]" />
-      <h3 className="text-lg md:text-xl font-bold text-[#00293f] uppercase tracking-wide">
-        {label} ({itemCount})
-      </h3>
-      {subtotal !== undefined && (
-        <span className="ml-auto text-sm font-semibold text-gray-600">
-          {formatCurrency(subtotal)}
-        </span>
-      )}
+      <div
+        className="flex items-center justify-between px-4 py-4 bg-[#EBF5FF] border-l-[5px] border-[#0066CC] rounded-lg hover:bg-[#EBF5FF]/90 transition-colors"
+        style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}
+      >
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <Icon className="w-6 h-6 text-[#0066CC] flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            {onLabelChange ? (
+              <input
+                type="text"
+                value={label}
+                onChange={(e) => onLabelChange(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                className="text-[17px] font-bold text-[#003366] bg-transparent border-0 focus:outline-none focus:ring-2 focus:ring-[#0066CC] rounded px-2 py-1 -ml-2 w-full max-w-xs"
+              />
+            ) : (
+              <span className="text-[17px] font-bold text-[#003366]">{label}</span>
+            )}
+            <p className="text-xs text-[#6B7280] mt-1">
+              {itemCount} {itemCount === 1 ? 'item' : 'items'}
+            </p>
+          </div>
+          {subtotal !== undefined && (
+            <span className="text-[18px] font-bold text-[#003366] ml-4 flex-shrink-0">
+              {formatCurrency(subtotal)}
+            </span>
+          )}
+        </div>
+        <ChevronDown
+          className={`h-5 w-5 text-[#6B7280] transition-transform ml-4 flex-shrink-0 ${
+            isCollapsed ? '-rotate-90' : ''
+          }`}
+        />
+      </div>
     </button>
   );
 }

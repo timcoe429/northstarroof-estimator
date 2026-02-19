@@ -21,5 +21,13 @@ Tag this deployment in Vercel as stable.
 
 ## What's Next
 1. Multi-building (Track 2) — feature branch only, additive code, does not touch Track 1
-2. Share button on estimate page (save + share flow)
 3. Decimal cleanup on PDF prices
+
+## Completed 2/19/2026: Shareable Review Page Links (24-Hour Expiration)
+- **share_tokens** table: estimate_id, token, expires_at, accessed_at; 24hr expiry
+- POST /api/share: saves estimate + creates share_token; requires auth (Bearer token)
+- GET /api/share/[token]: returns estimate or 410 (expired) / 404 (not found)
+- "Share with Owner" button on estimate page → modal with copy-to-clipboard
+- Public share page (/share/[token]): interactive review with sliders, collapsible sections, financial breakdown
+- No Re-upload CSV or Download PDF on shared page; "Expires in 24 hours" banner
+- ExpiredLinkPage and NotFoundPage for invalid/expired links

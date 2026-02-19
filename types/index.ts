@@ -88,11 +88,12 @@ export interface Estimate {
   grossProfit: number;
   profitMargin: number;
   sectionHeaders?: {
-    materials: string;
-    labor: string;
-    equipment: string;
-    accessories: string;
-    schafer: string;
+    materials?: string;
+    consumables?: string;
+    labor?: string;
+    equipment?: string;
+    accessories?: string;
+    schafer?: string;
   };
   measurements: Measurements;
   customerInfo: CustomerInfo;
@@ -104,6 +105,7 @@ export interface SavedQuote {
   user_id: string; // For audit tracking (who created it)
   company_id: string; // For access control
   customer_id: string | null;
+  customer_info?: { name?: string; address?: string; phone?: string } | null;
   name: string;
   measurements: Measurements;
   line_items: LineItem[];
@@ -118,11 +120,12 @@ export interface SavedQuote {
   sales_tax_amount?: number;
   final_price?: number;
   section_headers?: {
-    materials: string;
-    labor: string;
-    equipment: string;
-    accessories: string;
-    schafer: string;
+    materials?: string;
+    consumables?: string;
+    labor?: string;
+    equipment?: string;
+    accessories?: string;
+    schafer?: string;
   };
   job_description?: string;
   total_cost: number;

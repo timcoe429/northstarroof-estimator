@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getEstimateByShareToken } from '@/lib/supabase';
+import { resolveShareToken } from '@/lib/supabase';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const { token } = params;
+    const { token } = await params;
 
     if (!token) {
       return NextResponse.json(
@@ -15,16 +15,23 @@ export async function GET(
       );
     }
 
-    const estimate = await getEstimateByShareToken(token);
+    const result = await resolveShareToken(token);
 
-    if (!estimate) {
+    if (result.kind === 'expired') {
       return NextResponse.json(
-        { error: 'Estimate not found or sharing is disabled' },
+        { error: 'Share link has expired', code: 'expired' },
+        { status: 410 }
+      );
+    }
+
+    if (result.kind === 'not_found') {
+      return NextResponse.json(
+        { error: 'Share link not found or invalid', code: 'not_found' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(estimate);
+    return NextResponse.json(result.estimate);
   } catch (error) {
     console.error('Share API error:', error);
     return NextResponse.json(

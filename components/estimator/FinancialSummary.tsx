@@ -35,66 +35,64 @@ export function FinancialSummary({
   return (
     <>
       {/* Profit Breakdown (Internal Only) */}
-      <div className="mt-4 md:mt-6 p-3 md:p-4 bg-amber-50 border border-amber-200 rounded-xl">
-        <div className="flex items-center gap-2 text-amber-800 mb-2">
+      <div className="mt-4 md:mt-6 p-4 md:p-5 bg-amber-50 border border-amber-200 rounded-lg">
+        <div className="flex items-center gap-2 text-amber-800 mb-3">
           <AlertCircle className="w-4 h-4" />
           <span className="font-semibold text-xs md:text-sm">Internal Only</span>
         </div>
-        <div className="grid grid-cols-3 gap-2 md:gap-4 text-xs md:text-sm">
+        <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
-            <span className="text-amber-700 block">Cost</span>
-            <span className="font-bold text-amber-900">{formatCurrency(totalCost)}</span>
+            <span className="text-amber-700 block text-xs font-medium">Cost</span>
+            <span className="font-bold text-[#1F2937]">{formatCurrency(totalCost)}</span>
           </div>
           <div>
-            <span className="text-amber-700 block">Profit</span>
-            <span className="font-bold text-green-700">{formatCurrency(grossProfit)}</span>
+            <span className="text-amber-700 block text-xs font-medium">Profit</span>
+            <span className="font-bold text-[#4CAF50]">{formatCurrency(grossProfit)}</span>
           </div>
           <div>
-            <span className="text-amber-700 block">Margin</span>
-            <span className="font-bold text-green-700">{profitMargin.toFixed(1)}%</span>
+            <span className="text-amber-700 block text-xs font-medium">Margin</span>
+            <span className="font-bold text-[#4CAF50]">{profitMargin.toFixed(1)}%</span>
           </div>
         </div>
       </div>
 
       {/* Profit Split Panel (Internal Only) */}
-      <div className="mt-4 md:mt-6 p-4 md:p-6 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl">
-        <div className="flex items-center gap-2 text-emerald-800 mb-4">
+      <div className="mt-4 md:mt-6 p-6 bg-gradient-to-r from-[#4CAF50]/5 to-green-50/50 border border-[#4CAF50]/30 rounded-lg">
+        <div className="flex items-center gap-2 text-[#374151] mb-4">
           <span className="text-lg">💰</span>
           <span className="font-semibold text-sm md:text-base">Profit Split (50/50)</span>
         </div>
-        <div className="space-y-2 text-xs md:text-sm">
-          <div className="flex justify-between">
-            <span className="text-gray-700">Sell Price:</span>
-            <span className="font-semibold text-gray-900">{formatCurrency(sellPrice)}</span>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between py-2 border-b border-[#E5E7EB]">
+            <span className="text-[#6B7280]">Sell Price:</span>
+            <span className="font-semibold text-[#1F2937]">{formatCurrency(sellPrice)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-700">Total Cost:</span>
-            <span className="font-semibold text-gray-900">-{formatCurrency(totalCost)}</span>
+          <div className="flex justify-between py-2 border-b border-[#E5E7EB]">
+            <span className="text-[#6B7280]">Total Cost:</span>
+            <span className="font-semibold text-[#1F2937]">-{formatCurrency(totalCost)}</span>
           </div>
-          <div className="border-t border-emerald-200 my-2"></div>
-          <div className="flex justify-between">
-            <span className="text-gray-700 font-medium">Net Profit:</span>
-            <span className="font-bold text-gray-900">{formatCurrency(grossProfit)}</span>
+          <div className="flex justify-between py-3">
+            <span className="text-[#374151] font-medium">Net Profit:</span>
+            <span className="font-bold text-[#1F2937]">{formatCurrency(grossProfit)}</span>
           </div>
-          <div className="mt-3 space-y-1">
+          <div className="space-y-2 pt-2 border-t border-[#E5E7EB]">
             <div className="flex justify-between items-center">
-              <span className="text-gray-700">Sales Commission:</span>
+              <span className="text-[#6B7280]">Sales Commission:</span>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900">{formatCurrency(salesCommission)}</span>
-                <span className="text-gray-500 text-xs">(50%)</span>
+                <span className="font-semibold text-[#1F2937]">{formatCurrency(salesCommission)}</span>
+                <span className="text-[#6B7280] text-xs">(50%)</span>
               </div>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-700">Owner Profit:</span>
+              <span className="text-[#6B7280]">Owner Profit:</span>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900">{formatCurrency(ownerProfit)}</span>
-                <span className="text-gray-500 text-xs">(50%)</span>
+                <span className="font-semibold text-[#1F2937]">{formatCurrency(ownerProfit)}</span>
+                <span className="text-[#6B7280] text-xs">(50%)</span>
               </div>
             </div>
           </div>
-          <div className="border-t border-emerald-200 my-2"></div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-700 font-medium">TRUE Owner Margin:</span>
+          <div className="flex justify-between items-center pt-3 border-t border-[#E5E7EB]">
+            <span className="text-[#374151] font-medium">TRUE Owner Margin:</span>
             <div className="flex items-center gap-2">
               <span className={`font-bold text-lg ${marginColor}`}>
                 {trueOwnerMargin.toFixed(1)}%

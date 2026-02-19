@@ -251,3 +251,10 @@
 ### Overnight Charge Fix
 - Added "overnight" to flat fee detection in 3 locations (useEstimateCalculation.ts, RoofScopeEstimator.tsx)
 - Fixed "overnights" plural typo to "overnight" singular
+
+## 2/19/2026 - Shareable Review Page Links (24-Hour Expiration)
+- share_tokens table: token, estimate_id, expires_at; 24hr expiry
+- POST /api/share: authenticated; saves estimate (customer_info JSONB), creates share_token; returns shareUrl
+- Client sends Authorization: Bearer <session.access_token> for RLS
+- Share page (/share/[token]): interactive review with sliders, collapsible sections, FinancialSummary; no Re-upload/Download PDF
+- 410 for expired → ExpiredLinkPage; 404 → NotFoundPage
