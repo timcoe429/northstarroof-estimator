@@ -22,9 +22,12 @@ export function recalculateFinancials(
     financials;
   const totals = estimate.totals;
 
-  const materialsSchafer = totals.materials + (totals.schafer || 0);
-  const wasteAllowance = materialsSchafer * (wastePercent / 100);
-  const sundriesAmount = materialsSchafer * (SUNDRIES_PERCENT / 100);
+  const consumablesInMaterials = estimate.byCategory.materials.some((i) => i.id === 'consumables');
+  const baseMaterialsSchafer = consumablesInMaterials
+    ? totals.materials - (totals.consumables ?? 0) + (totals.schafer || 0)
+    : totals.materials + (totals.schafer || 0);
+  const wasteAllowance = baseMaterialsSchafer * (wastePercent / 100);
+  const sundriesAmount = baseMaterialsSchafer * (SUNDRIES_PERCENT / 100);
   const rawCost =
     totals.materials +
     totals.labor +
@@ -41,33 +44,40 @@ export function recalculateFinancials(
   const profitMargin =
     sellPrice > 0 ? (grossProfit / sellPrice) * 100 : 0;
 
-  // Update consumables line (sundries) with recalculated amount
-  const consumablesLine = estimate.byCategory.consumables?.[0] ?? {
+  // Update consumables line (sundries) — lives in materials, not separate category
+  const consumablesLine = estimate.byCategory.consumables?.[0] ?? estimate.byCategory.materials.find((i) => i.id === 'consumables') ?? {
     id: 'consumables',
     name: 'Consumables & Hardware',
+    proposalDescription: 'Nails, screws, caulk, sealant, caps, and miscellaneous fasteners required to complete the roofing installation.',
     unit: 'each',
     price: sundriesAmount,
     coverage: null,
     coverageUnit: null,
-    category: 'consumables' as const,
+    category: 'materials' as const,
     baseQuantity: 1,
     quantity: 1,
     total: sundriesAmount,
     wasteAdded: 0,
   };
-  const consumables = [{
+  const updatedConsumablesLine = {
     ...consumablesLine,
+    proposalDescription: consumablesLine.proposalDescription ?? 'Nails, screws, caulk, sealant, caps, and miscellaneous fasteners required to complete the roofing installation.',
+    category: 'materials' as const,
     price: sundriesAmount,
     total: sundriesAmount,
-  }];
+  };
+  const materialsWithoutConsumables = estimate.byCategory.materials.filter((i) => i.id !== 'consumables');
+  const materialsWithConsumables = [...materialsWithoutConsumables, updatedConsumablesLine];
+  const materialsTotal = estimate.totals.materials - (estimate.totals.consumables ?? 0) + sundriesAmount;
   const updatedTotals = {
     ...estimate.totals,
+    materials: materialsTotal,
     consumables: sundriesAmount,
   };
 
   return {
     ...estimate,
-    byCategory: { ...estimate.byCategory, consumables },
+    byCategory: { ...estimate.byCategory, materials: materialsWithConsumables, consumables: [] },
     totals: updatedTotals,
     baseCost,
     officeCostPercent: officePercent,

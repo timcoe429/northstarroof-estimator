@@ -372,8 +372,7 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     schafer: estimate.sectionHeaders?.schafer ?? 'Vendor Quote',
   };
 
-  // Section order: MATERIALS, CONSUMABLES, ACCESSORIES, LABOR, EQUIPMENT, OPTIONAL
-  const consumablesItems = estimate.byCategory.consumables || [];
+  // Section order: MATERIALS (includes consumables line), ACCESSORIES, LABOR, EQUIPMENT, OPTIONAL
   const accessoriesItems = groupItemsIntoKits(estimate.byCategory.accessories || []);
   const materialsItems = groupItemsIntoKits(estimate.byCategory.materials || []);
   const schaferItems = estimate.byCategory.schafer || [];
@@ -384,7 +383,6 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
   const allItems: Array<{ item: LineItem & { subtitle?: string }; section: string; isOptional?: boolean }> = [
     ...materialsItems.map((item) => ({ item, section: sectionHeaders.materials })),
     ...schaferItems.map((item) => ({ item, section: sectionHeaders.materials })),
-    ...consumablesItems.map((item) => ({ item, section: sectionHeaders.consumables })),
     ...accessoriesItems.map((item) => ({ item, section: sectionHeaders.accessories })),
     ...laborItems.map((item) => ({ item, section: sectionHeaders.labor })),
     ...equipmentItems.map((item) => ({ item, section: sectionHeaders.equipment })),
@@ -716,7 +714,7 @@ function drawSectionHeader(page: any, y: number, sectionName: string, boldFont: 
 
   // Section name — 12pt bold navy #003366, no background, no padding, no border
   const textY = headerBottom + SECTION_GAP_BELOW;
-  page.drawText(sectionName, {
+  page.drawText(sectionName.toUpperCase(), {
     x: TABLE_LEFT,
     y: textY,
     size: fontSize,

@@ -252,19 +252,23 @@ export function parseEstimateCSV(csvText: string): ParseResult {
 
   // Add consumables (sundries) as explicit line — 10% of materials + schafer
   const consumablesTotal = (totals.materials + totals.schafer) * (SUNDRIES_PERCENT / 100);
-  byCategory.consumables = [{
+  const consumablesLine: LineItem = {
     id: 'consumables',
     name: 'Consumables & Hardware',
+    proposalDescription: 'Nails, screws, caulk, sealant, caps, and miscellaneous fasteners required to complete the roofing installation.',
     unit: 'each',
     price: consumablesTotal,
     coverage: null,
     coverageUnit: null,
-    category: 'consumables',
+    category: 'materials',
     baseQuantity: 1,
     quantity: 1,
     total: consumablesTotal,
     wasteAdded: 0,
-  }];
+  };
+  byCategory.materials.push(consumablesLine);
+  byCategory.consumables = [];
+  totals.materials += consumablesTotal;
   totals.consumables = consumablesTotal;
 
   const customerInfo: CustomerInfo = {
@@ -274,9 +278,9 @@ export function parseEstimateCSV(csvText: string): ParseResult {
   };
 
   const rawCost = Object.values(totals).reduce((a, b) => a + b, 0);
-  const materialsSchafer = totals.materials + totals.schafer;
-  const sundriesAmount = materialsSchafer * (SUNDRIES_PERCENT / 100);
-  const wasteAllowance = materialsSchafer * (DEFAULT_WASTE / 100);
+  const baseMaterialsSchafer = (totals.materials - consumablesTotal) + totals.schafer;
+  const sundriesAmount = baseMaterialsSchafer * (SUNDRIES_PERCENT / 100);
+  const wasteAllowance = baseMaterialsSchafer * (DEFAULT_WASTE / 100);
   const baseCost = rawCost + wasteAllowance + sundriesAmount;
   const officeAllocation = baseCost * (DEFAULT_OFFICE / 100);
   const totalCost = baseCost + officeAllocation;

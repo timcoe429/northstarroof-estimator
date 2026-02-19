@@ -11,11 +11,13 @@ John Smith,123 Main St,Brava Field Tile,28,bundle,43.25,1211,materials,
     const result = parseEstimateCSV(csv);
     expect(result.success).toBe(true);
     expect(result.estimate).toBeDefined();
-    expect(result.estimate!.byCategory.materials).toHaveLength(1);
+    expect(result.estimate!.byCategory.materials).toHaveLength(2); // Brava Field Tile + Consumables & Hardware
     expect(result.estimate!.byCategory.materials[0].name).toBe('Brava Field Tile');
-    expect(result.estimate!.byCategory.consumables).toHaveLength(1);
-    expect(result.estimate!.byCategory.consumables![0].name).toBe('Consumables & Hardware');
-    expect(result.estimate!.byCategory.consumables![0].total).toBeCloseTo(121.1, 1); // 10% of 1211 materials
+    const consumablesLine = result.estimate!.byCategory.materials.find((i) => i.id === 'consumables');
+    expect(consumablesLine).toBeDefined();
+    expect(consumablesLine!.name).toBe('Consumables & Hardware');
+    expect(consumablesLine!.total).toBeCloseTo(121.1, 1); // 10% of 1211 materials
+    expect(result.estimate!.byCategory.consumables).toEqual([]);
     expect(result.estimate!.byCategory.labor).toHaveLength(1);
     expect(result.estimate!.byCategory.equipment).toHaveLength(1);
     expect(result.estimate!.customerInfo.name).toBe('John Smith');

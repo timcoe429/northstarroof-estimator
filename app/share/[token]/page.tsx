@@ -52,33 +52,38 @@ function savedQuoteToEstimate(q: SavedQuote): Estimate {
   const matTotal = allLineItems.filter((i: LineItem) => i.category === 'materials').reduce((s, i) => s + i.total, 0);
   const schaferTotal = allLineItems.filter((i: LineItem) => i.category === 'schafer').reduce((s, i) => s + i.total, 0);
   const consumablesAmount = q.sundries_amount ?? ((matTotal + schaferTotal) * ((q.sundries_percent || 10) / 100));
-  const consumablesLine = consumablesAmount > 0 ? [{
+  const consumablesLine = consumablesAmount > 0 ? {
     id: 'consumables',
     name: 'Consumables & Hardware',
+    proposalDescription: 'Nails, screws, caulk, sealant, caps, and miscellaneous fasteners required to complete the roofing installation.',
     unit: 'each',
     price: consumablesAmount,
     coverage: null,
     coverageUnit: null,
-    category: 'consumables' as const,
+    category: 'materials' as const,
     baseQuantity: 1,
     quantity: 1,
     total: consumablesAmount,
     wasteAdded: 0,
-  }] : [];
+  } : null;
+  const materialsItems = regularLineItems.filter((i: LineItem) => i.category === 'materials');
+  const materialsWithConsumables = consumablesLine
+    ? [...materialsItems, consumablesLine]
+    : materialsItems;
 
   return {
     lineItems: regularLineItems,
     optionalItems,
     byCategory: {
-      materials: regularLineItems.filter((i: LineItem) => i.category === 'materials'),
-      consumables: consumablesLine,
+      materials: materialsWithConsumables,
+      consumables: [],
       labor: regularLineItems.filter((i: LineItem) => i.category === 'labor'),
       equipment: regularLineItems.filter((i: LineItem) => i.category === 'equipment'),
       accessories: regularLineItems.filter((i: LineItem) => i.category === 'accessories'),
       schafer: regularLineItems.filter((i: LineItem) => i.category === 'schafer'),
     },
     totals: {
-      materials: matTotal,
+      materials: matTotal + consumablesAmount,
       consumables: consumablesAmount,
       labor: allLineItems.filter((i: LineItem) => i.category === 'labor').reduce((s, i) => s + i.total, 0),
       equipment: allLineItems.filter((i: LineItem) => i.category === 'equipment').reduce((s, i) => s + i.total, 0),

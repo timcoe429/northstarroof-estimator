@@ -42,9 +42,12 @@ export function validateEstimate(estimate: Estimate): ValidationResult {
     }
   }
 
+  const consumablesInMaterials = estimate.byCategory.materials.filter((i) => i.id === 'consumables');
   const computedTotals = {
     materials: estimate.byCategory.materials.reduce((s, i) => s + i.total, 0),
-    consumables: (estimate.byCategory.consumables || []).reduce((s, i) => s + i.total, 0),
+    consumables:
+      (estimate.byCategory.consumables || []).reduce((s, i) => s + i.total, 0) +
+      consumablesInMaterials.reduce((s, i) => s + i.total, 0),
     labor: estimate.byCategory.labor.reduce((s, i) => s + i.total, 0),
     equipment: estimate.byCategory.equipment.reduce((s, i) => s + i.total, 0),
     accessories: estimate.byCategory.accessories.reduce((s, i) => s + i.total, 0),
