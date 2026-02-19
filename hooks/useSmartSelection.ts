@@ -194,7 +194,7 @@ RULES:
 2. PRODUCT LINES: Only select ONE system (Brava OR DaVinci, never both)
 3. LABOR: Only select ONE crew. DEFAULT to Hugo (pick Hugo rate based on pitch). Only select Alfredo/Chris/Sergio if explicitly requested.
 4. SLOPE-AWARE: If pitch >= 8/12, use High Slope/Hinged H&R variants. If < 8/12, use regular H&R.
-5. TEAR-OFF: If mentioned, include Landfill Charge (NOT "Rolloff") and OSB. Calculate OSB as (total_squares * 3) sheets. Landfill Charge quantity = 1 on EVERY job.
+5. TEAR-OFF: If mentioned, include Debris Haulaway & Landfill and OSB. Calculate OSB as (total_squares * 3) sheets. Debris Haulaway & Landfill quantity = 1 on EVERY job.
 6. DELIVERY: If Brava selected, include Brava Delivery ($5,000 flat fee).
 7. UNDERLAYMENT — CRITICAL RULES:
    a) OC Titanium PSU 30 — ALWAYS select on EVERY roof (metal and non-metal), no exceptions
@@ -213,7 +213,7 @@ RULES:
    d) Metal roofs (with Schafer vendor quote): Do NOT select nails from price list — fasteners come from Schafer vendor quote
    e) Do NOT select Plasticap or other accessories — covered by Sundries %
 10. EQUIPMENT & FEES — Use exact names:
-   a) Landfill Charge (NOT "Rolloff") — $750, quantity 1 on EVERY job (always include)
+   a) Debris Haulaway & Landfill — $750, quantity 1 on EVERY job (always include; use trailer, NOT rolloff)
    b) Porto Potty — $600, quantity 1 on EVERY job (always include)
    c) Fuel Charge — $194, quantity 1 on EVERY job (always include)
    d) Overnight Charge — $387/night, quantity 1, auto-include when Hugo or Sergio labor crew is selected
@@ -227,21 +227,20 @@ RULES:
    a) Explicitly mentioned in job description (e.g., "need 5 tubes of sealant")
    b) Part of a vendor quote (vendor items always get selected)
    These are covered by the Sundries/Misc Materials percentage.
-13. ZERO QUANTITY RULE: Do NOT select items with 0 quantity EXCEPT flat-fee items (delivery, fuel, porto potty, landfill charge, overnights).
+13. ZERO QUANTITY RULE: Do NOT select items with 0 quantity EXCEPT flat-fee items (delivery, fuel, porto potty, debris haulaway & landfill, overnights).
 14. SPECIAL REQUESTS: If user mentions specific items (copper valleys, specific accessories), select those even if they override defaults.
 15. VENDOR ITEMS: Vendor items already have quantities from the quote. Do NOT infer quantities unless explicitly stated.
 
 EXPLICIT QUANTITIES:
 If the job description specifies an exact quantity for an item, extract it in the "explicitQuantities" object.
-- Look for patterns like "250 snowguards", "3 rolloffs", "2 dumpsters", "3 porto potties", "need 2 rolloffs"
+- Look for patterns like "250 snowguards", "3 porto potties", "2 debris haulaways"
 - Only extract when a NUMBER is directly stated with an item name
-- Use a partial item name as the key (e.g., "snowguard" for "Snowguard Install", "rolloff" or "dumpster" for "Rolloff", "porto" for "Porto Potty")
+- Use a partial item name as the key (e.g., "snowguard" for "Snowguard Install", "landfill" or "debris haulaway" for "Debris Haulaway & Landfill", "porto" for "Porto Potty")
 - Do NOT guess quantities - only extract when explicitly stated
-- Handle synonyms: "dumpster" and "rolloff" refer to the same item, "porto" and "porto potty" refer to the same item
+- Handle synonyms: "porto" and "porto potty" refer to the same item; "landfill" and "debris haulaway" refer to Debris Haulaway & Landfill
 - Examples:
   * "Also give us 250 snowguards" → {"snowguard": 250}
-  * "add 2 dumpsters" → {"rolloff": 2} or {"dumpster": 2} (both work)
-  * "need 2 rolloffs" → {"rolloff": 2}
+  * "need 2 debris haulaways" → {"debris haulaway": 2} or {"landfill": 2}
   * "3 porto potties" → {"porto": 3} or {"porto potty": 3}
   * "add snowguards" → NO explicit quantity (don't include in explicitQuantities)
   * "Brava tile" → NO explicit quantity
@@ -290,8 +289,8 @@ Only return the JSON, no other text.`;
         if (result.explicitQuantities && typeof result.explicitQuantities === 'object') {
           // Synonym mapping for better matching
           const synonymMap: Record<string, string[]> = {
-            'dumpster': ['rolloff', 'dumpster'],
-            'rolloff': ['rolloff', 'dumpster'],
+            'debris haulaway': ['debris haulaway', 'landfill'],
+            'landfill': ['debris haulaway', 'landfill'],
             'porto': ['porto', 'porto potty', 'portable'],
             'porto potty': ['porto', 'porto potty', 'portable'],
             'portable': ['porto', 'porto potty', 'portable'],
@@ -337,7 +336,7 @@ Only return the JSON, no other text.`;
           const qty = updatedQuantities[id] ?? 0;
           if (item?.isVendorItem) return true;
           const name = item?.name?.toLowerCase() || '';
-          if (name.includes('delivery') || name.includes('rolloff') || name.includes('dumpster') || name.includes('overnight')) return true;
+          if (name.includes('delivery') || name.includes('landfill') || name.includes('debris haulaway') || name.includes('overnight')) return true;
           return qty > 0;
         });
 
@@ -351,13 +350,13 @@ Only return the JSON, no other text.`;
         if (Array.isArray(result.warnings)) {
           const warnings = [...result.warnings];
           if (isTearOff && measurements) {
-            const rolloffQty = Math.ceil((measurements.total_squares || 0) / 15);
-            warnings.push(`Rolloff quantity calculated as ${rolloffQty} based on ${measurements.total_squares || 0} squares tear-off`);
+            const debrisQty = Math.ceil((measurements.total_squares || 0) / 15);
+            warnings.push(`Debris haulaway quantity calculated as ${debrisQty} based on ${measurements.total_squares || 0} squares tear-off`);
           }
           setSmartSelectionWarnings(warnings);
         } else if (isTearOff && measurements) {
-          const rolloffQty = Math.ceil((measurements.total_squares || 0) / 15);
-          setSmartSelectionWarnings([`Rolloff quantity calculated as ${rolloffQty} based on ${measurements.total_squares || 0} squares tear-off`]);
+          const debrisQty = Math.ceil((measurements.total_squares || 0) / 15);
+          setSmartSelectionWarnings([`Debris haulaway quantity calculated as ${debrisQty} based on ${measurements.total_squares || 0} squares tear-off`]);
         }
       } else {
         throw new Error('Could not parse smart selection response');

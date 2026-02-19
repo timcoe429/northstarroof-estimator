@@ -1,12 +1,13 @@
-import { Package, Users, Truck, Wrench } from 'lucide-react';
+import { Package, Users, Truck, Wrench, Box } from 'lucide-react';
 
-// Category definitions with icons
+// Category definitions with icons — display order: materials, consumables, accessories, labor, equipment, schafer
 export const CATEGORIES = {
   materials: { label: 'Materials', icon: Package, color: 'blue' },
+  consumables: { label: 'Consumables & Hardware', icon: Box, color: 'gray' },
+  accessories: { label: 'Accessories', icon: Wrench, color: 'purple' },
   labor: { label: 'Labor', icon: Users, color: 'green' },
   equipment: { label: 'Equipment & Fees', icon: Truck, color: 'orange' },
-  accessories: { label: 'Accessories', icon: Wrench, color: 'purple' },
-  schafer: { label: 'Schafer', icon: Package, color: 'blue' },
+  schafer: { label: 'Vendor Quote', icon: Package, color: 'blue' },
 };
 
 // Unit types for calculations
@@ -122,7 +123,8 @@ export const descriptionMap: Record<string, string> = {
   "Snowfence Install": "Installation labor for snow fence system, per linear foot.",
   
   // EQUIPMENT & FEES
-  "Rolloff": "30-yard roll-off dumpster for roofing debris removal and disposal.",
+  "Debris Haulaway & Landfill": "Trailer haulaway and landfill disposal for roofing debris.",
+  "Landfill Charge": "Trailer haulaway and landfill disposal for roofing debris.", // Alias, prefer Debris Haulaway & Landfill
   "Porto Potty": "Portable restroom rental for duration of project.",
   "Fuel Charge": "Fuel surcharge for material delivery to project site.",
   "Aspen Reprographic": "Permit application drawings and documentation services.",

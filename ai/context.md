@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A roofing estimate calculator that extracts measurements from RoofScope/EagleView screenshots using AI and builds accurate estimates with materials, labor, equipment, and accessories. Users can paste price sheets to auto-populate pricing, configure financial controls (waste %, office overhead %, profit margin %), and generate professional PDF proposals.
+A roofing estimate calculator that builds estimates from CSV uploads. Users upload a CSV with line items (materials, labor, equipment, accessories), configure financial sliders (margin %, waste %, office %, tax %), and generate professional PDF proposals. Share links allow viewing saved estimates.
 
 ## Tech Stack
 
@@ -51,23 +51,23 @@ Roofing contractors who need to:
 - Generate professional proposals with financial controls
 - Save and manage multiple estimates
 
-## Vendor Quote Workflow
+## CSV Estimate Workflow
 
-- **Schafer Quotes**: Required for metal roofs. Uploaded quote is the ONLY source of truth for pricing and quantities. All quote items are extracted exactly as quoted. Quote items are read-only in estimate builder (can deselect but cannot edit quantity/price).
-- **Other Vendors** (TRA, Rocky Mountain): Quotes can be uploaded and items selected into estimates. Items can be edited if needed.
+- CSV columns: Name, Address, Description (or Item), Quantity, Unit, Unit Price, Total, Category, Notes (optional), Building (ignored)
+- Categories: MATERIALS, LABOR, EQUIPMENT & FEES, ACCESSORIES. Notes "optional" routes to optionalItems.
+- Financials: margin 20–60% (default 40%), waste 0–20%, office 5–15%, tax 0–20%, sundries fixed at 10%.
 
 ## Track Architecture (Added 2/16/2026)
 
 ### Track 1: Single-Building (PRODUCTION)
 - Current working app on main branch
-- Upload → Extracted → Estimate flow
-- All bug fixes and improvements go here first
+- CSV Upload → Review (with live sliders) → PDF flow
+- Home (/) redirects to /estimate
 - Must always be deployable
 
 ### Track 2: Multi-Building (DEVELOPMENT)
 - Feature branches only (e.g., feature/multi-building)
-- Setup → Build (with tabs) → Review flow
-- Previous work preserved on branch: backup-multi-building-work
+- CSV supports Building column (ignored for now)
 - Will be re-implemented with additive-only approach
 - Must not modify any Track 1 code paths
 

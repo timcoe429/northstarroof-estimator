@@ -1,5 +1,6 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import type { Estimate } from '@/types';
+import type { Estimate, LineItem } from '@/types';
+import { groupItemsIntoKits } from '@/lib/kitGrouping';
 
 // Content safe zone constants (72 points = 1 inch)
 const PAGE_WIDTH = 612; // Letter size
@@ -536,11 +537,22 @@ interface PageContent {
 // Generate line item pages using two-pass approach
 async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]> {
   const pages: PDFDocument[] = [];
-  
-  // Calculate effective multiplier that makes line items sum to finalPrice (includes sales tax)
-  const rawTotal = Object.values(estimate.totals).reduce((sum, t) => sum + t, 0);
-  const effectiveMultiplier = rawTotal > 0 ? estimate.finalPrice / rawTotal : 1;
-  
+
+  // Cost-tier-based margin: higher-cost items get higher multipliers
+  const HIGH_COST_THRESHOLD = 5000;   // $5k+ items: ~65% markup
+  const MEDIUM_COST_THRESHOLD = 1000; // $1k-$5k: ~35% markup
+  const MULTIPLIERS = {
+    HIGH_COST: 1.65,    // $5k+ items (GAF, labor)
+    MEDIUM_COST: 1.35,  // $1k-$5k (accessories, consumables)
+    LOW_COST: 1.10,     // <$1k (equipment, small items)
+  };
+
+  const getTierMultiplier = (itemBaseTotal: number): number => {
+    if (itemBaseTotal >= HIGH_COST_THRESHOLD) return MULTIPLIERS.HIGH_COST;
+    if (itemBaseTotal >= MEDIUM_COST_THRESHOLD) return MULTIPLIERS.MEDIUM_COST;
+    return MULTIPLIERS.LOW_COST;
+  };
+
   // Get custom section headers or use defaults
   const sectionHeaders = estimate.sectionHeaders || {
     materials: 'Materials',
@@ -549,24 +561,44 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     accessories: 'Accessories',
     schafer: 'Vendor Quote',
   };
-  
-  // Combine materials and accessories into MATERIALS section
-  const materialsItems = [...estimate.byCategory.materials, ...estimate.byCategory.accessories];
+
+  // Section order: MATERIALS, CONSUMABLES, ACCESSORIES, LABOR, EQUIPMENT, OPTIONAL
+  // Apply kit grouping to accessories
+  const consumablesItems = estimate.byCategory.consumables || [];
+  const accessoriesItems = groupItemsIntoKits(estimate.byCategory.accessories || []);
+  const materialsItems = estimate.byCategory.materials;
+  const schaferItems = estimate.byCategory.schafer || [];
   const laborItems = estimate.byCategory.labor;
   const equipmentItems = estimate.byCategory.equipment;
   const optionalItems = estimate.optionalItems || [];
-  
-  // All items grouped by section (FOUR sections including optional)
-  const allItems: Array<{ item: typeof materialsItems[0]; section: string; isOptional?: boolean }> = [
-    ...materialsItems.map(item => ({ item, section: sectionHeaders.materials.toUpperCase() })),
-    ...laborItems.map(item => ({ item, section: sectionHeaders.labor.toUpperCase() })),
-    ...equipmentItems.map(item => ({ item, section: sectionHeaders.equipment.toUpperCase() })),
-    ...optionalItems.map(item => ({ item, section: 'OPTIONAL ITEMS (Not Included in Quote Total)', isOptional: true })),
+
+  const allItems: Array<{ item: LineItem & { subtitle?: string }; section: string; isOptional?: boolean }> = [
+    ...materialsItems.map((item) => ({ item, section: sectionHeaders.materials.toUpperCase() })),
+    ...schaferItems.map((item) => ({ item, section: sectionHeaders.materials.toUpperCase() })),
+    ...consumablesItems.map((item) => ({ item, section: 'CONSUMABLES & HARDWARE' })),
+    ...accessoriesItems.map((item) => ({ item, section: sectionHeaders.accessories.toUpperCase() })),
+    ...laborItems.map((item) => ({ item, section: sectionHeaders.labor.toUpperCase() })),
+    ...equipmentItems.map((item) => ({ item, section: sectionHeaders.equipment.toUpperCase() })),
+    ...optionalItems.map((item) => ({ item, section: 'OPTIONAL ITEMS (Not Included in Quote Total)', isOptional: true })),
   ];
-  
+
   if (allItems.length === 0) {
     return pages;
   }
+
+  // Precompute tiered sum for non-optional items; scale so total = finalPrice
+  let tieredSum = 0;
+  const tierMultipliers: number[] = [];
+  allItems.forEach((entry, idx) => {
+    if (entry.isOptional) {
+      tierMultipliers[idx] = 1;
+      return;
+    }
+    const m = getTierMultiplier(entry.item.total);
+    tierMultipliers[idx] = m;
+    tieredSum += entry.item.total * m;
+  });
+  const scaleFactor = tieredSum > 0 ? estimate.finalPrice / tieredSum : 1;
   
   // PASS 1: Track content for each page (without rendering)
   const pageContents: PageContent[] = [];
@@ -626,10 +658,9 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     }
     
     // Add item to current page content
-    // Optional items don't use effectiveMultiplier (they're not included in quote total)
-    const clientPrice = allItems[i].isOptional 
-      ? Math.round(item.total * 100) / 100
-      : Math.round(item.total * effectiveMultiplier * 100) / 100;
+    // Optional items at cost (1.0); non-optional use cost-tier multiplier + scale to hit finalPrice
+    const multiplier = allItems[i].isOptional ? 1 : tierMultipliers[i] * scaleFactor;
+    const clientPrice = Math.round(item.total * multiplier * 100) / 100;
     currentPageContent.items.push({
       item,
       section,

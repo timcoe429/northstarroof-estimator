@@ -25,7 +25,7 @@ export interface PriceItem {
   price: number;
   coverage: number | null;
   coverageUnit: string | null;
-  category: 'materials' | 'labor' | 'equipment' | 'accessories' | 'schafer';
+  category: 'materials' | 'consumables' | 'labor' | 'equipment' | 'accessories' | 'schafer';
 }
 
 export interface LineItem extends PriceItem {
@@ -59,6 +59,7 @@ export interface Estimate {
   optionalItems: LineItem[];
   byCategory: {
     materials: LineItem[];
+    consumables?: LineItem[];
     labor: LineItem[];
     equipment: LineItem[];
     accessories: LineItem[];
@@ -66,6 +67,7 @@ export interface Estimate {
   };
   totals: {
     materials: number;
+    consumables?: number;
     labor: number;
     equipment: number;
     accessories: number;

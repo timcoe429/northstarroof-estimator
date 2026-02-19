@@ -228,13 +228,13 @@ function applyEquipmentRules(
     appliedRules.push('Porta Potty - Always selected');
   }
 
-  // RULE: Dumpster/Landfill/Rolloff - Always auto-select with quantity 1
-  const dumpster = findItemByKeywords(availablePriceItems, [
-    'dumpster', 'rolloff', 'landfill', 'roll off'
+  // RULE: Debris Haulaway & Landfill - Always auto-select with quantity 1 (trailer for debris, NOT rolloff)
+  const debrisLandfill = findItemByKeywords(availablePriceItems, [
+    'debris haulaway', 'landfill'
   ]);
-  if (dumpster) {
-    selectedIds.push(dumpster.id);
-    appliedRules.push('Dumpster/Landfill charge - Always selected');
+  if (debrisLandfill && !debrisLandfill.name.toLowerCase().includes('rolloff')) {
+    selectedIds.push(debrisLandfill.id);
+    appliedRules.push('Debris Haulaway & Landfill - Always selected');
   }
 
   // RULE: Overnights - Auto-select when Sergio or Hugo is selected as labor

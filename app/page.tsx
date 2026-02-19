@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import RoofScopeEstimator from '@/components/RoofScopeEstimator';
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -12,6 +11,8 @@ export default function Home() {
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
+    } else if (!loading && user) {
+      router.replace('/estimate');
     }
   }, [user, loading, router]);
 
@@ -26,9 +27,5 @@ export default function Home() {
     );
   }
 
-  if (!user) {
-    return null; // Will redirect to login
-  }
-
-  return <RoofScopeEstimator />;
+  return null; // Redirecting
 }

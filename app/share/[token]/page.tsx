@@ -33,33 +33,48 @@ export default function SharePage() {
         const optionalItems = allLineItems.filter((item: any) => item.isOptional === true);
         const regularLineItems = allLineItems.filter((item: any) => !item.isOptional);
         
+        const matTotal = (savedQuote.line_items || []).filter((i: any) => i.category === 'materials').reduce((s: number, i: any) => s + i.total, 0);
+        const schaferTotal = (savedQuote.line_items || []).filter((i: any) => i.category === 'schafer').reduce((s: number, i: any) => s + i.total, 0);
+        const consumablesAmount = savedQuote.sundries_amount ?? ((matTotal + schaferTotal) * ((savedQuote.sundries_percent || 10) / 100));
+        const consumablesLine = consumablesAmount > 0 ? [{
+          id: 'consumables',
+          name: 'Consumables & Hardware',
+          unit: 'each',
+          price: consumablesAmount,
+          coverage: null,
+          coverageUnit: null,
+          category: 'consumables' as const,
+          baseQuantity: 1,
+          quantity: 1,
+          total: consumablesAmount,
+          wasteAdded: 0,
+        }] : [];
+
         // Convert SavedQuote to Estimate format
         const convertedEstimate: Estimate = {
           lineItems: regularLineItems,
           optionalItems: optionalItems,
           byCategory: {
-            materials: regularLineItems.filter(item => item.category === 'materials'),
-            labor: regularLineItems.filter(item => item.category === 'labor'),
-            equipment: regularLineItems.filter(item => item.category === 'equipment'),
-            accessories: regularLineItems.filter(item => item.category === 'accessories'),
-            schafer: regularLineItems.filter(item => item.category === 'schafer'),
+            materials: regularLineItems.filter((item: any) => item.category === 'materials'),
+            consumables: consumablesLine,
+            labor: regularLineItems.filter((item: any) => item.category === 'labor'),
+            equipment: regularLineItems.filter((item: any) => item.category === 'equipment'),
+            accessories: regularLineItems.filter((item: any) => item.category === 'accessories'),
+            schafer: regularLineItems.filter((item: any) => item.category === 'schafer'),
           },
           totals: {
-            materials: (savedQuote.line_items || [])
-              .filter(item => item.category === 'materials')
-              .reduce((sum, item) => sum + item.total, 0),
+            materials: matTotal,
+            consumables: consumablesAmount,
             labor: (savedQuote.line_items || [])
-              .filter(item => item.category === 'labor')
-              .reduce((sum, item) => sum + item.total, 0),
+              .filter((item: any) => item.category === 'labor')
+              .reduce((sum: number, item: any) => sum + item.total, 0),
             equipment: (savedQuote.line_items || [])
-              .filter(item => item.category === 'equipment')
-              .reduce((sum, item) => sum + item.total, 0),
+              .filter((item: any) => item.category === 'equipment')
+              .reduce((sum: number, item: any) => sum + item.total, 0),
             accessories: (savedQuote.line_items || [])
-              .filter(item => item.category === 'accessories')
-              .reduce((sum, item) => sum + item.total, 0),
-            schafer: (savedQuote.line_items || [])
-              .filter(item => item.category === 'schafer')
-              .reduce((sum, item) => sum + item.total, 0),
+              .filter((item: any) => item.category === 'accessories')
+              .reduce((sum: number, item: any) => sum + item.total, 0),
+            schafer: schaferTotal,
           },
           baseCost: savedQuote.base_cost,
           officeCostPercent: savedQuote.office_percent,

@@ -11,11 +11,11 @@ These rules apply to EVERY estimate regardless of roof system.
 
 ## Equipment & Fees (Always Include)
 - **Porto Potty** ΓÇö $600, quantity 1 per job. Covers delivery ($150) + pickup ($150) + monthly rental.
-- **Landfill Charge** ΓÇö $750 each, quantity 1 on EVERY job (not just tear-offs)
-  - This is a flat fee for landfill disposal, included on all jobs
+- **Debris Haulaway & Landfill** ΓÇö $750 each, quantity 1 on EVERY job (not just tear-offs)
+  - Trailer haulaway and landfill disposal; use trailer for debris, NOT rolloff dumpster
 - **Fuel Charge** ($194) ΓÇö 1 per job
 - **Aspen Reprographic** ($55/ea) ΓÇö For permit drawings. Include if permits mentioned.
-- **IMPORTANT**: Landfill Charge, Porto Potty, and Fuel Charge are ALWAYS included on every job
+- **IMPORTANT**: Debris Haulaway & Landfill, Porto Potty, and Fuel Charge are ALWAYS included on every job
 
 ## Accessories Rule
 - Do NOT select items from the accessories category (nails, plasticap, coil screws, caulk, sealant, spray paint)
@@ -40,7 +40,7 @@ These rules apply to EVERY estimate regardless of roof system.
 
 ## Tear-Off Rules
 - When tear-off is part of the job:
-  - Include **Landfill Charge** at $750 ΓÇö quantity 1 per job
+  - Include **Debris Haulaway & Landfill** at $750 ΓÇö quantity 1 per job
   - Include **7/16" OSB** at $24.35/sheet ΓÇö quantity = total_squares ├ù 3
   - Include **2X4 Toe Boards** for OSHA safety
 
@@ -72,7 +72,7 @@ Formula:
 - Eave/Drip quantity: eave_length / coverage
 - Rake quantity: rake_length / coverage
 - Ridge/H&R quantity: (ridge_length + hip_length) / coverage
-- Flat fee items (delivery, fuel, porto, rolloff): quantity = 1 unless specified
+- Flat fee items (delivery, fuel, porto, debris haulaway): quantity = 1 unless specified
 
 ## Common Accessories (All Systems)
 - **4in1 Pipe Jack** ($16/ea) ΓÇö for 1.5" to 3" pipe penetrations

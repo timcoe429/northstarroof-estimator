@@ -49,7 +49,7 @@ Keep each labor item as its own line. Do NOT group labor items together.
 ## Equipment & Fees
 
 Keep each equipment item as its own line. Do NOT group equipment.
-- "Rolloff Dumpster" (not just "Rolloff")
+- "Debris Haulaway & Landfill" (trailer haulaway, not rolloff)
 - "Porto Potty"
 - "Crane Rental" if applicable
 - Each stays separate
@@ -83,8 +83,8 @@ Within each category, sort by price highest first. The client sees the big items
 | Heat Tape Installation | $2,627 |
 | Snow Fence Installation | $1,410 |
 | **EQUIPMENT & FEES** | |
-| Rolloff Dumpster | $480 |
-| Porto Potty | $550 |
+| Debris Haulaway & Landfill | $750 |
+| Porto Potty | $600 |
 
 ### Bad proposal (too lumped):
 | Item | Price |

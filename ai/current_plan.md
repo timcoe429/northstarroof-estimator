@@ -1,26 +1,18 @@
 # Current Plan — Updated 2/16/2026
 
 ## What's Complete (Track 1: Single-Building)
-- ✅ PDF deterministic — no AI organizer, individual items, first click every time
-- ✅ Smart selection loads knowledge files from data/knowledge/ via API route
-- ✅ Knowledge files fixed: no copper default, no Sharkskin, SolarHide standard, Hugo default crew
-- ✅ Split multiplier: equipment gets office overhead only, materials+labor get full markup
-- ✅ Optional items (heat tape, snow guard, skylight, snow fence) in separate PDF section
-- ✅ Deterministic kit grouping: aluminum flashing kit, fasteners kit with subtitles
-- ✅ Equipment names fixed in DB: Landfill Charge ($750), Porto Potty ($600), Overnight Charge ($387), Snow Guard ($7)
-- ✅ Overnight Charge flat fee detection fixed (was getting qty 0)
-- ✅ Landfill Charge, Porto Potty, Fuel Charge always included
-- ✅ Cover letter AI mentions specific roof system
-- ✅ Track isolation architecture with guardrails in CLAUDE.md
-- ✅ Backup branch preserved: backup-multi-building-work
+- ✅ **Phase 3 (Feb 2026)**: CSV upload flow replaces RoofScope/vendor flow
+  - CSV parser (lib/csvParser.ts): Name, Address, Description, Quantity, Unit Price, Total, Category, Notes
+  - Estimate validator (lib/estimateValidator.ts): line totals, category sums, warnings
+  - Recalculate financials (lib/recalculateFinancials.ts): margin, waste, office, tax
+  - app/estimate/page.tsx: upload → review with 4 sliders → PDF download
+  - Home (/) redirects to /estimate
+  - Old components removed: RoofScopeEstimator, UploadStep, ReviewStep, EstimateBuilder, CalculatedAccessories, PriceListPanel
+- ✅ FinancialSummary, CollapsibleSection, EstimateView (for share) retained
+- ✅ PDF generation via generateProposalPDF (unchanged)
 
 ## Known Issues (Minor — Not Blocking)
-- Hip & Ridge metal trim not always auto-selected (add to knowledge file if needed)
-- Brava Solids quantity may be high for some jobs (29 bundles on 31 sq roof)
-- Nails still being selected despite "no accessories" rule (currently grouped into kit, acceptable)
-- Overnight Charge auto-add for Hugo/Sergio depends on AI following prompt (works most of the time)
-- Decimal places on PDF prices (e.g., $23,496.89 instead of $23,497)
-- Kit grouping doesn't include Schafer vendor kits yet (needed for metal roof jobs)
+- Decimal places on PDF prices (e.g., $23,496.89 vs $23,497)
 
 ## STABLE FALLBACK POINT
 Current commit on main is 95% working for single-building estimates. 
@@ -29,7 +21,5 @@ Tag this deployment in Vercel as stable.
 
 ## What's Next
 1. Multi-building (Track 2) — feature branch only, additive code, does not touch Track 1
-2. Schafer vendor kit grouping for metal roof PDFs
-3. Share button functionality
-4. Decimal cleanup on PDF prices
-5. Deterministic post-processor for smart selection (guarantee overnight, landfill, etc.)
+2. Share button on estimate page (save + share flow)
+3. Decimal cleanup on PDF prices

@@ -48,24 +48,30 @@ const isFastener = (name: string): boolean => {
          n.includes('fastener');
 };
 
+// Flashing items for Custom Flashing Kit (eave, rake, valley, step, hip, ridge)
+const isFlashingForCustomKit = (name: string): boolean => {
+  const n = name.toLowerCase();
+  return ['eave', 'rake', 'valley', 'step', 'hip', 'ridge', 'd-style', 'headwall', 'pitch change', 'flat sheet'].some(
+    (kw) => n.includes(kw)
+  );
+};
+
 export const groupItemsIntoKits = (items: LineItem[]): GroupedLineItem[] => {
   const standalone: LineItem[] = [];
   const aluminumFlashing: LineItem[] = [];
   const copperFlashing: LineItem[] = [];
   const fasteners: LineItem[] = [];
   
-  // Sort items into categories
+  // Sort items into categories — prefer Custom Flashing Kit (all flashing) over aluminum/copper split
+  const flashingItems: LineItem[] = [];
   items.forEach(item => {
     if (isStandaloneItem(item)) {
       standalone.push(item);
-    } else if (isCopperFlashing(item.name)) {
-      copperFlashing.push(item);
-    } else if (isAluminumFlashing(item.name)) {
-      aluminumFlashing.push(item);
+    } else if (isFlashingForCustomKit(item.name)) {
+      flashingItems.push(item);
     } else if (isFastener(item.name)) {
       fasteners.push(item);
     } else {
-      // Items that don't match any kit stay standalone
       standalone.push(item);
     }
   });
@@ -77,37 +83,17 @@ export const groupItemsIntoKits = (items: LineItem[]): GroupedLineItem[] => {
     grouped.push({ ...item, isKit: false });
   });
   
-  // Add Aluminum Flashing Kit
-  if (aluminumFlashing.length > 0) {
-    const totalPrice = aluminumFlashing.reduce((sum, item) => sum + item.total, 0);
-    const subtitle = `Includes: ${aluminumFlashing.map(item => 
-      `${item.name} (${formatCurrency(item.total)})`
-    ).join(', ')}`;
-    
+  // Add Custom Flashing Kit (groups all flashing: eave, rake, valley, step, hip, ridge)
+  if (flashingItems.length > 0) {
+    const totalPrice = flashingItems.reduce((sum, item) => sum + item.total, 0);
+    const subtitle = `Includes: ${flashingItems.map((i) => i.name).join(', ')}`;
     grouped.push({
-      ...aluminumFlashing[0],
-      name: 'Custom Fabricated Aluminum Flashing — Eave, Rake, Valley & Step pieces',
+      ...flashingItems[0],
+      name: 'Custom Flashing Kit',
       total: totalPrice,
       isKit: true,
       subtitle,
-      kitItems: aluminumFlashing,
-    });
-  }
-  
-  // Add Copper Flashing Kit
-  if (copperFlashing.length > 0) {
-    const totalPrice = copperFlashing.reduce((sum, item) => sum + item.total, 0);
-    const subtitle = `Includes: ${copperFlashing.map(item => 
-      `${item.name} (${formatCurrency(item.total)})`
-    ).join(', ')}`;
-    
-    grouped.push({
-      ...copperFlashing[0],
-      name: 'Custom Fabricated Copper Flashing — Eave, Rake, Valley & Step pieces',
-      total: totalPrice,
-      isKit: true,
-      subtitle,
-      kitItems: copperFlashing,
+      kitItems: flashingItems,
     });
   }
   

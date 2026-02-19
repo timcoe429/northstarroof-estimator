@@ -397,7 +397,7 @@ export function EstimateView({
                     {sectionHeader} ({items.length} {items.length === 1 ? 'item' : 'items'})
                   </h3>
                 </div>
-                <span className="font-bold text-sm">{formatCurrency(estimate.totals[catKey])}</span>
+                <span className="font-bold text-sm">{formatCurrency(estimate.totals[catKey as keyof typeof estimate.totals] ?? 0)}</span>
               </button>
 
               {isExpanded && (
