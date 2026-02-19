@@ -26,6 +26,8 @@ import { useCustomItems } from '@/hooks/useCustomItems';
 import { useProjectManager } from '@/hooks/useProjectManager';
 import { useBuildings } from '@/hooks/useBuildings';
 import { useMultiBuildingSmartSelection } from '@/hooks/useMultiBuildingSmartSelection';
+import { assembleMultiBuildingCalculation, type MultiBuildingCalculationResult } from '@/lib/calculateMultiBuilding';
+import { EQUIPMENT_RULES } from '@/types/equipment';
 import { PriceListPanel, EstimateBuilder, FinancialSummary, UploadStep, ReviewStep, EstimateView, CalculatedAccessories, SetupStep, BuildStep } from '@/components/estimator';
 
 export default function RoofScopeEstimator() {
@@ -70,6 +72,8 @@ export default function RoofScopeEstimator() {
   const [roofScopeImages, setRoofScopeImages] = useState<string[]>([]);
   const [lastDetection, setLastDetection] = useState<{ structures: AIDetectedStructure[]; summary: string; confidence: string } | null>(null);
   const [aiStatus, setAiStatus] = useState<string | null>(null);
+  const [multiBuildingBreakdown, setMultiBuildingBreakdown] = useState<MultiBuildingCalculationResult['buildingSubtotals'] | null>(null);
+  const [pendingMultiBuildingEstimate, setPendingMultiBuildingEstimate] = useState(false);
 
   // Initialize AI Project Manager
   const projectManager = useProjectManager(savedEstimateId ?? null);
@@ -478,6 +482,42 @@ export default function RoofScopeEstimator() {
     }
   }, [calculateEstimateHook, calcValidationWarnings, sectionHeaders, manualOverrides, triggerOrganization]);
 
+  const handleMultiBuildingEstimate = useCallback(() => {
+    const result = assembleMultiBuildingCalculation({
+      buildings: buildingsHook.buildings,
+      allSelectableItems,
+      equipmentRules: EQUIPMENT_RULES,
+      priceItems: priceItems.priceItems,
+      vendorQuoteItems: vendorQuotes.vendorQuoteItems ?? [],
+      vendorItemMap: vendorQuotes.vendorItemMap,
+      vendorAdjustedPriceMap: vendorQuotes.vendorAdjustedPriceMap,
+    });
+    setSelectedItems(result.combinedSelectedItems);
+    setItemQuantities(result.combinedItemQuantities);
+    setMultiBuildingBreakdown(result.buildingSubtotals);
+    setPendingMultiBuildingEstimate(true);
+  }, [
+    buildingsHook.buildings,
+    allSelectableItems,
+    priceItems.priceItems,
+    vendorQuotes.vendorQuoteItems,
+    vendorQuotes.vendorItemMap,
+    vendorQuotes.vendorAdjustedPriceMap,
+  ]);
+
+  useEffect(() => {
+    if (pendingMultiBuildingEstimate && buildingsHook.buildings.length > 1) {
+      calculateEstimate();
+      setPendingMultiBuildingEstimate(false);
+    }
+  }, [pendingMultiBuildingEstimate, buildingsHook.buildings.length, calculateEstimate]);
+
+  useEffect(() => {
+    if (buildingsHook.buildings.length <= 1) {
+      setMultiBuildingBreakdown(null);
+    }
+  }, [buildingsHook.buildings.length]);
+
   // Calculate quantities for ALL items when measurements change
   // Skip recalculation when loading a saved quote to prevent overwriting restored quantities
   useEffect(() => {
@@ -796,6 +836,8 @@ export default function RoofScopeEstimator() {
     setSavedEstimateId(undefined);
     setShareToken(null);
     setShareEnabled(false);
+    setMultiBuildingBreakdown(null);
+    setPendingMultiBuildingEstimate(false);
     vendorQuotes.setVendorQuotes([]);
     vendorQuotes.setVendorQuoteItems([]);
     smartSelection.setJobDescription('');
@@ -971,11 +1013,31 @@ export default function RoofScopeEstimator() {
     };
   });
 
+  const totalSquares = buildingsHook.getTotalSquares();
+  const autoEquipment =
+    buildingsHook.buildings.length > 1
+      ? EQUIPMENT_RULES.map((rule) => {
+          const priceItem = priceItems.priceItems.find((p) => p.name === rule.itemName);
+          const qty =
+            rule.ruleType === 'per-60-squares'
+              ? Math.ceil(totalSquares / 60)
+              : rule.defaultQty;
+          const unitPrice = priceItem?.price ?? 0;
+          return {
+            name: rule.itemName,
+            quantity: qty,
+            unitPrice,
+            total: qty * unitPrice,
+            isAutoCalculated: true,
+          };
+        }).filter((e) => e.unitPrice > 0)
+      : [];
+
   const jobLevelProps = {
-    totalSquares: buildingsHook.getTotalSquares(),
+    totalSquares,
     laborRate: 650,
-    laborTotal: buildingsHook.getTotalSquares() * 650,
-    equipmentItems: [] as { name: string; quantity: number; unitPrice: number; total: number; isAutoCalculated: boolean }[],
+    laborTotal: totalSquares * 650,
+    equipmentItems: buildingsHook.buildings.length > 1 ? autoEquipment : [] as { name: string; quantity: number; unitPrice: number; total: number; isAutoCalculated: boolean }[],
     onEquipmentQuantityChange: (_itemName: string, _qty: number) => { /* Phase 4 */ },
     vendorQuoteItems: vendorQuotes.vendorQuoteItems ?? [],
     vendorTotal: vendorQuotes.vendorTaxFeesTotal ?? 0,
@@ -1386,7 +1448,11 @@ export default function RoofScopeEstimator() {
                 onUpdateItem={() => {}}
                 onRegenerateBuildingSelection={() => {}}
                 jobLevelProps={jobLevelProps}
-                onGenerateEstimate={calculateEstimate}
+                onGenerateEstimate={
+                  buildingsHook.buildings.length > 1
+                    ? handleMultiBuildingEstimate
+                    : calculateEstimate
+                }
                 isCalculating={false}
               />
             ) : (

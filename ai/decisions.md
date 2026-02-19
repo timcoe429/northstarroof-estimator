@@ -251,3 +251,16 @@
 ### Overnight Charge Fix
 - Added "overnight" to flat fee detection in 3 locations (useEstimateCalculation.ts, RoofScopeEstimator.tsx)
 - Fixed "overnights" plural typo to "overnight" singular
+
+## 2/18/2026 — Multi-Building Session
+
+- Use existing Measurements type inside BuildingEstimate (no separate BuildingMeasurements)
+- Equipment item names verified against price_items DB table: Porto Potty, Fuel Charge, Overnight Charge, Brava Delivery, Landfill Charge, Aspen Reprographic
+- Collapsible accordion sections (not tabs) to avoid state-swapping race conditions
+- Dual rendering during development: multi-building gets new BuildStep, single-building keeps proven old path
+- Smart selection auto-runs sequentially on Build step entry (not parallel, not manual)
+- Per-building smart selection needs calculateItemQuantities for coverage-based materials
+- Structure detection results feed into building cards on Setup step (moved from old Build step display)
+- Job description per building derived from roofSystem + quickOptions (not user-typed)
+- assembleMultiBuildingCalculation combines all items into top-level state, then existing calculateEstimate runs
+- pendingMultiBuildingEstimate flag + useEffect avoids stale closure when setting state then calculating
