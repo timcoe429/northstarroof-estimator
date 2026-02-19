@@ -290,7 +290,7 @@ async function generateIntroductionPage(intro: SimpleIntro): Promise<PDFDocument
 
 // Page content data structure for two-pass approach
 interface PageContent {
-  items: Array<{ item: any; section: string; descLines: string[]; price: number; isOptional?: boolean }>;
+  items: Array<{ item: any; section: string; itemName: string; itemDescription: string; price: number; isOptional?: boolean }>;
 }
 
 // Generate line item pages using two-pass approach
@@ -372,10 +372,12 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     const { item, section } = allItems[i];
     const sectionChanged = currentSection !== section;
     
-    const description = (item as LineItem & { proposalDescription?: string }).proposalDescription ?? item.name;
+    const itemName = item.name;
+    const itemDescription = (item as LineItem & { proposalDescription?: string }).proposalDescription ?? '';
+    const displayText = itemDescription ? `${itemName} — ${itemDescription}` : itemName;
     const maxDescWidth = DESC_COLUMN_WIDTH - ROW_PADDING * 2;
     const sectionHeaderHeight = sectionChanged ? 12 + SECTION_GAP_ABOVE + SECTION_GAP_BELOW : 0;
-    const itemHeight = calculateRowHeight(description, font, 11, maxDescWidth, (item as { subtitle?: string }).subtitle);
+    const itemHeight = calculateRowHeight(displayText, font, 11, maxDescWidth, (item as { subtitle?: string }).subtitle);
     const spaceNeeded = sectionHeaderHeight + itemHeight;
     
     // Determine bottom margin: if this is the last item and would fit on current page,
@@ -422,7 +424,8 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     currentPageContent.items.push({
       item,
       section,
-      descLines: wordWrap(description, font, 11, maxDescWidth),
+      itemName,
+      itemDescription,
       price: clientPrice,
       isOptional: allItems[i].isOptional || false,
     });
@@ -444,13 +447,11 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     const template = await loadPDFTemplate('/templates/blank-page-estimate.pdf');
     const pageFont = await template.embedFont(StandardFonts.Helvetica);
     const pageBoldFont = await template.embedFont(StandardFonts.HelveticaBold);
+    const pageObliqueFont = await template.embedFont(StandardFonts.HelveticaOblique);
     const pages_array = template.getPages();
     const page = pages_array[0];
     
-    // Start from top of content area (no table header)
     let yPos = CONTENT_Y_END;
-    
-    // Draw page content
     let lastSection = '';
     
     for (let idx = 0; idx < pageContent.items.length; idx++) {
@@ -460,16 +461,11 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
         yPos = drawSectionHeader(page, yPos, contentItem.section, pageBoldFont);
         lastSection = contentItem.section;
       }
-      
-      const description = (contentItem.item as LineItem & { proposalDescription?: string }).proposalDescription ?? contentItem.item.name;
-      const priceText = formatCurrency(contentItem.price);
       const subtitle = (contentItem.item as any).subtitle;
-      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false, subtitle, idx);
-      
+      const newYPos = drawLineItemRow(page, yPos, contentItem.itemName, contentItem.itemDescription, formatCurrency(contentItem.price), pageFont, pageBoldFont, pageObliqueFont, isFirstInSection, contentItem.isOptional || false, subtitle, idx);
       if (newYPos < REGULAR_PAGE_BOTTOM_MARGIN) break;
       yPos = newYPos;
     }
-    
     pages.push(template);
   }
   
@@ -479,13 +475,11 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
     const template = await loadPDFTemplate('/templates/blank-page-estimate-with-total.pdf');
     const pageFont = await template.embedFont(StandardFonts.Helvetica);
     const pageBoldFont = await template.embedFont(StandardFonts.HelveticaBold);
+    const pageObliqueFont = await template.embedFont(StandardFonts.HelveticaOblique);
     const pages_array = template.getPages();
     const page = pages_array[0];
     
-    // Start from top of content area (no table header)
     let yPos = CONTENT_Y_END;
-    
-    // Draw page content
     let lastSection = '';
     
     for (let idx = 0; idx < lastPageContent.items.length; idx++) {
@@ -495,12 +489,8 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
         yPos = drawSectionHeader(page, yPos, contentItem.section, pageBoldFont);
         lastSection = contentItem.section;
       }
-      
-      const description = (contentItem.item as LineItem & { proposalDescription?: string }).proposalDescription ?? contentItem.item.name;
-      const priceText = formatCurrency(contentItem.price);
       const subtitle = (contentItem.item as any).subtitle;
-      const newYPos = drawLineItemRow(page, yPos, description, priceText, pageFont, isFirstInSection, contentItem.isOptional || false, subtitle, idx);
-      
+      const newYPos = drawLineItemRow(page, yPos, contentItem.itemName, contentItem.itemDescription, formatCurrency(contentItem.price), pageFont, pageBoldFont, pageObliqueFont, isFirstInSection, contentItem.isOptional || false, subtitle, idx);
       if (newYPos < QUOTE_PAGE_BOTTOM_MARGIN) break;
       yPos = newYPos;
     }
@@ -579,13 +569,16 @@ function drawTableHeader(page: any, y: number, font: any, boldFont: any): number
   return headerBottom; // Return Y position for next row
 }
 
-// Helper function to draw a line item row
+// Helper function to draw a line item row — format: **Name** — *Description* (bold name, oblique description)
 function drawLineItemRow(
-  page: any, 
-  y: number, 
-  description: string, 
-  price: string, 
-  font: any, 
+  page: any,
+  y: number,
+  itemName: string,
+  itemDescription: string,
+  priceText: string,
+  font: any,
+  boldFont: any,
+  obliqueFont: any,
   isFirstInSection: boolean = false,
   isOptional: boolean = false,
   subtitle?: string,
@@ -594,131 +587,75 @@ function drawLineItemRow(
   const maxDescWidth = DESC_COLUMN_WIDTH - ROW_PADDING * 2;
   const fontSize = 11;
   const subtitleFontSize = 9;
-  
-  const lines = wordWrap(description, font, fontSize, maxDescWidth);
+  const displayText = itemDescription ? `${itemName} — ${itemDescription}` : itemName;
+  const lines = wordWrap(displayText, font, fontSize, maxDescWidth);
   let textHeight = lines.length * (fontSize + 5);
-  
   if (subtitle) {
     const subtitleLines = wordWrap(subtitle, font, subtitleFontSize, maxDescWidth);
     textHeight += subtitleLines.length * (subtitleFontSize + 4) + 8;
   }
-  
   const rowHeight = Math.max(ROW_HEIGHT_SINGLE, textHeight + ROW_PADDING_VERTICAL * 2);
-  
   const rowBottom = y - rowHeight;
-  
-  // Alternating row background (every other row light gray)
+
   if (rowIndex % 2 === 1 && !isOptional) {
-    page.drawRectangle({
-      x: TABLE_LEFT,
-      y: rowBottom,
-      width: TABLE_WIDTH,
-      height: rowHeight,
-      color: rgb(0.976, 0.976, 0.976), // #f9f9f9
-    });
+    page.drawRectangle({ x: TABLE_LEFT, y: rowBottom, width: TABLE_WIDTH, height: rowHeight, color: rgb(0.976, 0.976, 0.976) });
   }
-  
   if (isFirstInSection) {
-    page.drawRectangle({
-      x: TABLE_LEFT,
-      y: y,  // Top of this row
-      width: TABLE_WIDTH,
-      height: BORDER_WIDTH,
-      color: BORDER_COLOR,
-    });
+    page.drawRectangle({ x: TABLE_LEFT, y, width: TABLE_WIDTH, height: BORDER_WIDTH, color: BORDER_COLOR });
   }
-  
-  // Row background (white/transparent - no fill needed)
-  
-  // Border - bottom of row
-  page.drawRectangle({
-    x: TABLE_LEFT,
-    y: rowBottom,
-    width: TABLE_WIDTH,
-    height: BORDER_WIDTH,
-    color: BORDER_COLOR,
-  });
-  
-  // Border - left side
-  page.drawRectangle({
-    x: TABLE_LEFT,
-    y: rowBottom,
-    width: BORDER_WIDTH,
-    height: rowHeight,
-    color: BORDER_COLOR,
-  });
-  
-  // Border - right side
-  page.drawRectangle({
-    x: TABLE_RIGHT - BORDER_WIDTH,
-    y: rowBottom,
-    width: BORDER_WIDTH,
-    height: rowHeight,
-    color: BORDER_COLOR,
-  });
-  
-  // Border - vertical divider
-  page.drawRectangle({
-    x: PRICE_COLUMN_LEFT - BORDER_WIDTH / 2,
-    y: rowBottom,
-    width: BORDER_WIDTH,
-    height: rowHeight,
-    color: BORDER_COLOR,
-  });
-  
+  page.drawRectangle({ x: TABLE_LEFT, y: rowBottom, width: TABLE_WIDTH, height: BORDER_WIDTH, color: BORDER_COLOR });
+  page.drawRectangle({ x: TABLE_LEFT, y: rowBottom, width: BORDER_WIDTH, height: rowHeight, color: BORDER_COLOR });
+  page.drawRectangle({ x: TABLE_RIGHT - BORDER_WIDTH, y: rowBottom, width: BORDER_WIDTH, height: rowHeight, color: BORDER_COLOR });
+  page.drawRectangle({ x: PRICE_COLUMN_LEFT - BORDER_WIDTH / 2, y: rowBottom, width: BORDER_WIDTH, height: rowHeight, color: BORDER_COLOR });
+
   let totalTextHeight = lines.length * (fontSize + 5) - 5;
   if (subtitle) {
-    const subtitleLines = wordWrap(subtitle, font, subtitleFontSize, maxDescWidth);
-    totalTextHeight += subtitleLines.length * (subtitleFontSize + 4) + 8;
+    totalTextHeight += wordWrap(subtitle, font, subtitleFontSize, maxDescWidth).length * (subtitleFontSize + 4) + 8;
   }
-  
   const centerY = rowBottom + (rowHeight / 2);
   const textStartY = centerY + (totalTextHeight / 2) - fontSize;
   let textY = textStartY;
-  
-  // Use lighter gray color for optional items
   const textColor = isOptional ? rgb(0.5, 0.5, 0.5) : rgb(0, 0, 0);
-  
-  for (const line of lines) {
-    page.drawText(line, {
-      x: DESC_COLUMN_LEFT + ROW_PADDING,
-      y: textY,
-      size: fontSize,
-      font: font,
-      color: textColor,
-    });
-    textY -= (fontSize + 5);
+
+  const sep = ' — ';
+  let seenSeparator = false;
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const line = lines[lineIdx];
+    let x = DESC_COLUMN_LEFT + ROW_PADDING;
+    if (itemDescription && line.includes(sep)) {
+      seenSeparator = true;
+      const [before, after] = line.split(sep);
+      if (before) {
+        page.drawText(before, { x, y: textY, size: fontSize, font: boldFont, color: textColor });
+        x += boldFont.widthOfTextAtSize(before, fontSize);
+      }
+      page.drawText(sep, { x, y: textY, size: fontSize, font, color: textColor });
+      x += font.widthOfTextAtSize(sep, fontSize);
+      if (after) {
+        page.drawText(after, { x, y: textY, size: fontSize, font: obliqueFont, color: textColor });
+      }
+    } else if (itemDescription) {
+      page.drawText(line, { x, y: textY, size: fontSize, font: seenSeparator ? obliqueFont : boldFont, color: textColor });
+    } else {
+      page.drawText(line, { x, y: textY, size: fontSize, font: boldFont, color: textColor });
+    }
+    textY -= fontSize + 5;
   }
-  
+
   if (subtitle) {
     textY -= 8;
-    const subtitleLines = wordWrap(subtitle, font, subtitleFontSize, maxDescWidth);
-    for (const line of subtitleLines) {
-      page.drawText(line, {
-        x: DESC_COLUMN_LEFT + ROW_PADDING + 10,
-        y: textY,
-        size: subtitleFontSize,
-        font: font,
-        color: rgb(0.5, 0.5, 0.5),
-      });
-      textY -= (subtitleFontSize + 4);
+    for (const line of wordWrap(subtitle, font, subtitleFontSize, maxDescWidth)) {
+      page.drawText(line, { x: DESC_COLUMN_LEFT + ROW_PADDING + 10, y: textY, size: subtitleFontSize, font, color: rgb(0.5, 0.5, 0.5) });
+      textY -= subtitleFontSize + 4;
     }
   }
-  
-  // Price text - vertically centered
-  if (price) {
-    const priceWidth = font.widthOfTextAtSize(price, fontSize);
+
+  if (priceText) {
+    const priceWidth = font.widthOfTextAtSize(priceText, fontSize);
     const priceY = rowBottom + (rowHeight / 2) - (fontSize / 2) + 2;
-    page.drawText(price, {
-      x: PRICE_COLUMN_RIGHT - ROW_PADDING - priceWidth,
-      y: priceY,
-      size: fontSize,
-      font: font,
-      color: textColor,
-    });
+    page.drawText(priceText, { x: PRICE_COLUMN_RIGHT - ROW_PADDING - priceWidth, y: priceY, size: fontSize, font, color: textColor });
   }
-  
-  return rowBottom; // Return Y position for next row
+  return rowBottom;
 }
 
 // Helper function to draw section header row — clean navy text, no background/padding/border
@@ -747,8 +684,10 @@ export async function generateProposalPDF(estimate: Estimate, aiSuggestions?: st
   const importantLinksPDF = await loadPDFTemplate('/templates/important-links.pdf');
   const referencesPDF = await loadPDFTemplate('/templates/references.pdf');
   
-  // Generate introduction page
-  const intro = await generateIntroductionLetter(estimate);
+  // Generate introduction page — use custom intro from CSV if present, otherwise AI
+  const intro = estimate.introLetterText
+    ? parseIntroLetter(estimate.introLetterText)
+    : await generateIntroductionLetter(estimate);
   const introPDF = await generateIntroductionPage(intro);
   
   // Generate line item pages (effective multiplier calculated inside)

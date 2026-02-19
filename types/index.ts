@@ -33,6 +33,7 @@ export interface LineItem extends PriceItem {
   quantity: number;
   total: number;
   wasteAdded: number;
+  proposalDescription?: string;
   isCustomItem?: boolean;
   isOptional?: boolean;
   manualOverrides?: {
@@ -98,6 +99,7 @@ export interface Estimate {
   measurements: Measurements;
   customerInfo: CustomerInfo;
   generatedAt: string;
+  introLetterText?: string;
 }
 
 export interface SavedQuote {

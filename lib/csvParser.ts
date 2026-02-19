@@ -78,6 +78,13 @@ function normalizeCategory(value: string): Category {
 }
 
 /**
+ * Check if category is Intro (case-insensitive) — not a line item, used for PDF intro letter
+ */
+function isIntroCategory(value: string): boolean {
+  return value.toLowerCase().trim() === 'intro';
+}
+
+/**
  * Check if item is optional from Notes column
  */
 function isOptionalFromNotes(notes: string): boolean {
@@ -158,6 +165,7 @@ export function parseEstimateCSV(csvText: string): ParseResult {
 
   const lineItems: LineItem[] = [];
   const optionalItems: LineItem[] = [];
+  const introLetterParts: string[] = [];
   let customerName = '';
   let customerAddress = '';
 
@@ -177,14 +185,23 @@ export function parseEstimateCSV(csvText: string): ParseResult {
       customerAddress = getCell('address');
     }
 
-    let name = getCell('description') || getCell('item') || 'Unnamed Item';
-    if (shouldSkipItem(name)) continue; // Skip Rolloff (use trailer, not rolloff)
-    name = normalizeItemName(name);
+    const categoryRaw = getCell('category');
+    if (isIntroCategory(categoryRaw)) {
+      const desc = getCell('description') || getCell('item') || '';
+      if (desc.trim()) introLetterParts.push(desc.trim());
+      continue;
+    }
+
+    const itemCol = getCell('item');
+    const descCol = getCell('description');
+    const name = normalizeItemName(itemCol || descCol || 'Unnamed Item');
+    if (shouldSkipItem(name)) continue;
+    const proposalDescription = itemCol && descCol ? descCol.trim() : '';
     const quantity = toNum(getCell('quantity'));
     const unit = getCell('unit') || 'each';
     const price = toNum(getCell('unitprice'));
     const total = toNum(getCell('total'));
-    const category = normalizeCategory(getCell('category'));
+    const category = normalizeCategory(categoryRaw);
     const isOptional = isOptionalFromNotes(getCell('notes'));
 
     const item: LineItem = {
@@ -200,6 +217,7 @@ export function parseEstimateCSV(csvText: string): ParseResult {
       total: total || quantity * (price || 0),
       wasteAdded: 0,
       isOptional,
+      ...(proposalDescription ? { proposalDescription } : {}),
     };
 
     if (isOptional) {
@@ -290,6 +308,7 @@ export function parseEstimateCSV(csvText: string): ParseResult {
     measurements: MINIMAL_MEASUREMENTS,
     customerInfo,
     generatedAt: new Date().toLocaleString(),
+    ...(introLetterParts.length > 0 ? { introLetterText: introLetterParts.join('\n\n') } : {}),
   };
 
   return { success: true, estimate };
