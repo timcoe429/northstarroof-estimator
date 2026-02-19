@@ -573,7 +573,7 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
   // Section order: MATERIALS, CONSUMABLES, ACCESSORIES, LABOR, EQUIPMENT, OPTIONAL
   const consumablesItems = estimate.byCategory.consumables || [];
   const accessoriesItems = groupItemsIntoKits(estimate.byCategory.accessories || []);
-  const materialsItems = estimate.byCategory.materials;
+  const materialsItems = groupItemsIntoKits(estimate.byCategory.materials || []);
   const schaferItems = estimate.byCategory.schafer || [];
   const laborItems = estimate.byCategory.labor;
   const equipmentItems = estimate.byCategory.equipment;
