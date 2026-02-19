@@ -28,6 +28,12 @@ Tag this deployment in Vercel as stable.
 - **Introduction letter**: New format — Dear Homeowner, 2–3 paragraphs (no bullets), under 200 words; job details (address, material, scope, pitch, squares) from estimate; Kind regards signature block
 - **Files changed**: lib/generateProposal.ts, lib/constants.ts (D-Style Eave, RMSG Yeti Snowguard, Airhawk updated to new format)
 
+## Completed 2/19/2026: Intro Letter CSV + Line Item Display
+- **Intro category**: CSV rows with Category "Intro" (case-insensitive) — Description stored as introLetterText, skipped from line items; used directly for PDF intro when present (AI fallback otherwise)
+- **Item/Description columns**: Item → name, Description → proposalDescription; always parse both
+- **Line item PDF format**: "Item Name — Description" with Name in HelveticaBold, Description in HelveticaOblique; no trailing dash when description empty
+- **Files**: lib/csvParser.ts, types/index.ts (introLetterText on Estimate, proposalDescription on LineItem), lib/generateProposal.ts
+
 ## Completed 2/19/2026: Shareable Review Page Links (24-Hour Expiration)
 - **share_tokens** table: estimate_id, token, expires_at, accessed_at; 24hr expiry
 - POST /api/share: saves estimate + creates share_token; requires auth (Bearer token)

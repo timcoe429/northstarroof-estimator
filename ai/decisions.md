@@ -259,6 +259,11 @@
 - Share page (/share/[token]): interactive review with sliders, collapsible sections, FinancialSummary; no Re-upload/Download PDF
 - 410 for expired → ExpiredLinkPage; 404 → NotFoundPage
 
+## 2/19/2026 - Intro Letter from CSV + Line Item Name — Description
+- **Intro category in CSV**: Category "Intro" rows store Description as estimate.introLetterText; excluded from line items and totals; PDF uses custom intro when present, AI otherwise
+- **Item/Description columns**: Standard format — Item column → name, Description column → proposalDescription; parse both always
+- **PDF line item format**: "Item Name — Description" with name in bold, description in italic (HelveticaOblique)
+
 ## 2/19/2026 - Proposal Description and Intro Letter
 - **Proposal descriptions**: Check descriptionMap first (exact/case-insensitive), then batch AI for unmatched. Format: "Generic Name — One sentence" (15–30 words). Avoid model numbers/SKUs in descriptions.
 - **Intro letter**: Simplified from structured (GREETING, BODY_PARA, BULLET) to plain letter: Dear Homeowner, 2–3 paragraphs, no bullets, under 200 words. Job details pulled from estimate (address, material, scopeItems, pitch, totalSquares). Fixed Kind regards signature block.
