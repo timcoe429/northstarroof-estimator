@@ -61,22 +61,22 @@ export const buildClientViewSections = ({
   const materials = [
     ...nonVendorMaterials.map(item => ({
       name: item.name,
-      description: item.name,
+      description: (item as LineItem).proposalDescription || item.name,
       total: item.total,
     })),
     ...nonVendorAccessories.map(item => ({
       name: item.name,
-      description: item.name,
+      description: (item as LineItem).proposalDescription || item.name,
       total: item.total,
     })),
     ...vendorMaterials.map(item => ({
       name: item.name,
-      description: item.name,
+      description: (item as LineItem).proposalDescription || item.name,
       total: item.total,
     })),
     ...vendorAccessories.map(item => ({
       name: item.name,
-      description: item.name,
+      description: (item as LineItem).proposalDescription || item.name,
       total: item.total,
     })),
   ];
@@ -87,19 +87,19 @@ export const buildClientViewSections = ({
   const equipment = [
     ...nonVendorEquipment.map(item => ({
       name: item.name,
-      description: item.name,
+      description: (item as LineItem).proposalDescription || item.name,
       total: item.total,
     })),
     ...groupedEquipment.map(group => ({
       name: group.name,
-      description: group.name,
+      description: (group as { proposalDescription?: string }).proposalDescription || group.name,
       total: group.total,
     })),
   ];
 
   const labor = nonVendorLabor.map(item => ({
     name: item.name,
-    description: item.name,
+    description: (item as LineItem).proposalDescription || item.name,
     total: item.total,
   }));
 

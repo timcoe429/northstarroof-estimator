@@ -13,7 +13,7 @@ import { formatCurrency } from '@/lib/estimatorUtils';
 import { groupItemsIntoKits } from '@/lib/kitGrouping';
 import { CollapsibleSection } from '@/components/estimator/CollapsibleSection';
 import { FinancialSummary } from '@/components/estimator/FinancialSummary';
-import type { Estimate } from '@/types';
+import type { Estimate, LineItem } from '@/types';
 import { CATEGORIES } from '@/lib/constants';
 
 const SLIDER_CONFIGS = [
@@ -435,7 +435,13 @@ export default function EstimatePage() {
                                     className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFB]'}
                                   >
                                     <td className="px-6 py-4 text-sm font-medium text-[#1F2937]">
-                                      {item.name}
+                                      <span className="font-semibold">{item.name}</span>
+                                      {(item as LineItem).proposalDescription && (
+                                        <>
+                                          <span> — </span>
+                                          <span className="italic">{(item as LineItem).proposalDescription}</span>
+                                        </>
+                                      )}
                                       {(item as { subtitle?: string }).subtitle && (
                                         <p className="text-xs text-[#6B7280] font-normal mt-1">
                                           {(item as { subtitle?: string }).subtitle}
@@ -474,7 +480,15 @@ export default function EstimatePage() {
                                   key={item.id}
                                   className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFB]'}
                                 >
-                                  <td className="px-6 py-4 text-sm text-[#6B7280]">{item.name}</td>
+                                  <td className="px-6 py-4 text-sm text-[#6B7280]">
+                                    <span className="font-semibold">{item.name}</span>
+                                    {(item as LineItem).proposalDescription && (
+                                      <>
+                                        <span> — </span>
+                                        <span className="italic">{(item as LineItem).proposalDescription}</span>
+                                      </>
+                                    )}
+                                  </td>
                                   <td className="px-6 py-4 text-right text-sm font-semibold text-[#6B7280] whitespace-nowrap">
                                     {formatCurrency(item.total)}
                                   </td>

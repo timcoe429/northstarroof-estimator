@@ -57,62 +57,6 @@ const isFlashingForCustomKit = (name: string): boolean => {
 };
 
 export const groupItemsIntoKits = (items: LineItem[]): GroupedLineItem[] => {
-  const standalone: LineItem[] = [];
-  const aluminumFlashing: LineItem[] = [];
-  const copperFlashing: LineItem[] = [];
-  const fasteners: LineItem[] = [];
-  
-  // Sort items into categories — prefer Custom Flashing Kit (all flashing) over aluminum/copper split
-  const flashingItems: LineItem[] = [];
-  items.forEach(item => {
-    if (isStandaloneItem(item)) {
-      standalone.push(item);
-    } else if (isFlashingForCustomKit(item.name)) {
-      flashingItems.push(item);
-    } else if (isFastener(item.name)) {
-      fasteners.push(item);
-    } else {
-      standalone.push(item);
-    }
-  });
-  
-  const grouped: GroupedLineItem[] = [];
-  
-  // Add standalone items
-  standalone.forEach(item => {
-    grouped.push({ ...item, isKit: false });
-  });
-  
-  // Add Custom Flashing Kit (groups all flashing: eave, rake, valley, step, hip, ridge)
-  if (flashingItems.length > 0) {
-    const totalPrice = flashingItems.reduce((sum, item) => sum + item.total, 0);
-    const subtitle = `Includes: ${flashingItems.map((i) => i.name).join(', ')}`;
-    grouped.push({
-      ...flashingItems[0],
-      name: 'Custom Flashing Kit',
-      total: totalPrice,
-      isKit: true,
-      subtitle,
-      kitItems: flashingItems,
-    });
-  }
-  
-  // Add Fasteners Kit
-  if (fasteners.length > 0) {
-    const totalPrice = fasteners.reduce((sum, item) => sum + item.total, 0);
-    const subtitle = `Includes: ${fasteners.map(item => 
-      `${item.name} (${formatCurrency(item.total)})`
-    ).join(', ')}`;
-    
-    grouped.push({
-      ...fasteners[0],
-      name: 'Fasteners & Hardware Kit',
-      total: totalPrice,
-      isKit: true,
-      subtitle,
-      kitItems: fasteners,
-    });
-  }
-  
-  return grouped;
+  // Kit grouping disabled — all items show as individual line items
+  return items.map(item => ({ ...item, isKit: false }));
 };

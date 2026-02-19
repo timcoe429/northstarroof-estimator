@@ -263,7 +263,13 @@ export default function SharePage() {
                           {displayItems.map((item, idx) => (
                             <tr key={item.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFB]'}>
                               <td className="px-6 py-4 text-sm font-medium text-[#1F2937]">
-                                {item.name}
+                                <span className="font-semibold">{item.name}</span>
+                                {(item as LineItem).proposalDescription && (
+                                  <>
+                                    <span> — </span>
+                                    <span className="italic">{(item as LineItem).proposalDescription}</span>
+                                  </>
+                                )}
                                 {(item as { subtitle?: string }).subtitle && (
                                   <p className="text-xs text-[#6B7280] font-normal mt-1">{(item as { subtitle?: string }).subtitle}</p>
                                 )}
@@ -297,7 +303,15 @@ export default function SharePage() {
                     <tbody className="divide-y divide-[#E5E7EB]">
                       {est.optionalItems.map((item, idx) => (
                         <tr key={item.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFB]'}>
-                          <td className="px-6 py-4 text-sm text-[#6B7280]">{item.name}</td>
+                          <td className="px-6 py-4 text-sm text-[#6B7280]">
+                            <span className="font-semibold">{item.name}</span>
+                            {(item as LineItem).proposalDescription && (
+                              <>
+                                <span> — </span>
+                                <span className="italic">{(item as LineItem).proposalDescription}</span>
+                              </>
+                            )}
+                          </td>
                           <td className="px-6 py-4 text-right text-sm font-semibold text-[#6B7280] whitespace-nowrap">
                             {formatCurrency(item.total)}
                           </td>

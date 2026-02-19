@@ -88,26 +88,55 @@ function extractNotableItems(estimate: Estimate): string[] {
   return items;
 }
 
-// Intro letter format: greeting + body paragraphs (no bullets)
+// Intro letter format: greeting + body paragraphs + bullet points
 interface SimpleIntro {
   greeting: string;
   bodyParagraphs: string[];
+  bulletPoints: string[];
 }
 
 function parseIntroLetter(text: string): SimpleIntro {
   const trimmed = text.trim();
-  const lines = trimmed.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const lines = trimmed.split(/\n/).map((l) => l.trim());
   const greeting = lines[0]?.toLowerCase().includes('dear') ? lines[0] : 'Dear Homeowner,';
   const bodyStart = lines[0]?.toLowerCase().includes('dear') ? 1 : 0;
-  const bodyLines: string[] = [];
+  const bodyParagraphs: string[] = [];
+  const bulletPoints: string[] = [];
+  let currentParagraph: string[] = [];
+  const flushParagraph = () => {
+    if (currentParagraph.length > 0) {
+      bodyParagraphs.push(currentParagraph.join(' ').trim());
+      currentParagraph = [];
+    }
+  };
   for (let i = bodyStart; i < lines.length; i++) {
-    if (lines[i].toLowerCase().includes('kind regards') || lines[i].toLowerCase().includes('omiah travis')) break;
-    bodyLines.push(lines[i]);
+    const line = lines[i];
+    if (line.toLowerCase().includes('kind regards') || line.toLowerCase().includes('omiah travis')) break;
+    const isBullet = /^\s*[•\-]\s*(.+)$/.test(line) || line.startsWith('•') || line.startsWith('-');
+    if (isBullet) {
+      flushParagraph();
+      const bulletText = line.replace(/^\s*[•\-]\s*/, '').trim();
+      if (bulletText) bulletPoints.push(bulletText);
+    } else if (line) {
+      currentParagraph.push(line);
+    } else {
+      // Blank line — paragraph break
+      flushParagraph();
+    }
   }
-  const bodyText = bodyLines.join(' ').trim();
-  const bodyParagraphs = bodyText ? bodyText.split(/\s{2,}/).filter(Boolean) : [];
-  if (bodyParagraphs.length === 0 && bodyText) bodyParagraphs.push(bodyText);
-  return { greeting, bodyParagraphs };
+  flushParagraph();
+  // Fallback: if nothing parsed, use legacy double-space split
+  if (bodyParagraphs.length === 0 && bulletPoints.length === 0) {
+    const bodyText = trimmed.split(/\n+/).slice(bodyStart).join(' ').replace(/\s+/g, ' ').trim();
+    const idx = bodyText.toLowerCase().indexOf('kind regards');
+    const beforeSig = idx >= 0 ? bodyText.slice(0, idx).trim() : bodyText;
+    if (beforeSig) {
+      const paras = beforeSig.split(/\s{2,}/).filter(Boolean);
+      if (paras.length > 0) bodyParagraphs.push(...paras);
+      else bodyParagraphs.push(beforeSig);
+    }
+  }
+  return { greeting, bodyParagraphs, bulletPoints };
 }
 
 // Generate introduction letter using AI — new format: Dear Homeowner, 2-3 paragraphs, no bullets, under 200 words
@@ -167,6 +196,7 @@ Return ONLY the letter text. No other text.`;
         'Thank you for the opportunity to provide an estimate for your roofing project. This proposal includes a detailed breakdown of materials, labor, and equipment.',
         'We have carefully selected quality components to ensure a durable, professional installation suited to our mountain environment.',
       ],
+      bulletPoints: [],
     };
   }
 }
@@ -226,49 +256,69 @@ function formatCurrency(amount: number): string {
   return '$' + amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-// Generate introduction page
+// Intro letter page layout constants
+const INTRO_LEFT_MARGIN = 72;   // 1 inch - generous margins
+const INTRO_RIGHT_MARGIN = 72;  // 1 inch
+const INTRO_CONTENT_WIDTH = PAGE_WIDTH - INTRO_LEFT_MARGIN - INTRO_RIGHT_MARGIN; // 468pt
+const INTRO_FONT_SIZE = 11;
+const INTRO_LINE_HEIGHT = 15;   // 11pt + 4pt leading
+const INTRO_PARAGRAPH_GAP = 18; // space between paragraphs
+const INTRO_BULLET_GAP = 10;    // space between bullet items
+const INTRO_BODY_TO_SIGNATURE_GAP = 40; // minimum gap between letter body and signature block
+
+// Generate introduction page — professional letter layout with paragraphs and bullets
 async function generateIntroductionPage(intro: SimpleIntro): Promise<PDFDocument> {
   const template = await loadPDFTemplate('/templates/thank-you.pdf');
   const pages = template.getPages();
   const page = pages[0];
-  
+
   const font = await template.embedFont(StandardFonts.Helvetica);
   const boldFont = await template.embedFont(StandardFonts.HelveticaBold);
-  
-  const maxLineWidth = 500;
-  const textX = CONTENT_X_START + 50; // Start a bit indented
-  
-  // Calculate total content height (greeting + body paragraphs + signature)
-  let totalHeight = 0;
-  const greetingLines = wordWrap(intro.greeting, font, 11, maxLineWidth);
-  totalHeight += greetingLines.length * (11 + 2) + 20;
-  for (const para of intro.bodyParagraphs) {
-    const paraLines = wordWrap(para, font, 11, maxLineWidth);
-    totalHeight += paraLines.length * (11 + 2) + 12;
-  }
-  totalHeight += 20;
-  totalHeight += 11 + 8; // "Kind regards,"
-  totalHeight += 11 + 2 + 11 + 12 + 10 + 4 + 10;
-  
-  const availableHeight = CONTENT_Y_END - CONTENT_Y_START;
-  let y = CONTENT_Y_END - ((availableHeight - totalHeight) / 2);
-  
+
+  const maxLineWidth = INTRO_CONTENT_WIDTH;
+  const textX = INTRO_LEFT_MARGIN;
+
+  // Start from top of content area — page feels full, not centered/floating
+  let y = CONTENT_Y_END - 36; // 0.5 inch from top
+
+  // Greeting
+  const greetingLines = wordWrap(intro.greeting, font, INTRO_FONT_SIZE, maxLineWidth);
   for (const line of greetingLines) {
-    page.drawText(line, { x: textX, y, size: 11, font, color: rgb(0, 0, 0) });
-    y -= 11 + 2;
+    page.drawText(line, { x: textX, y, size: INTRO_FONT_SIZE, font, color: rgb(0, 0, 0) });
+    y -= INTRO_LINE_HEIGHT;
   }
-  y -= 20 - 2;
-  
+  y -= INTRO_PARAGRAPH_GAP;
+
+  // Body paragraphs
   for (const para of intro.bodyParagraphs) {
-    const paraLines = wordWrap(para, font, 11, maxLineWidth);
+    const paraLines = wordWrap(para, font, INTRO_FONT_SIZE, maxLineWidth);
     for (const line of paraLines) {
-      page.drawText(line, { x: textX, y, size: 11, font, color: rgb(0, 0, 0) });
-      y -= 11 + 2;
+      page.drawText(line, { x: textX, y, size: INTRO_FONT_SIZE, font, color: rgb(0, 0, 0) });
+      y -= INTRO_LINE_HEIGHT;
     }
-    y -= 12 - 2;
+    y -= INTRO_PARAGRAPH_GAP;
   }
-  y -= 20 - 2;
-  
+
+  // Bullet points — indented with bullet character, continuation lines align with text
+  const bulletChar = '• ';
+  const bulletCharWidth = font.widthOfTextAtSize(bulletChar, INTRO_FONT_SIZE);
+  const bulletContinuationX = textX + bulletCharWidth;
+  for (const bullet of intro.bulletPoints) {
+    const fullLine = bulletChar + bullet;
+    const bulletLines = wordWrap(fullLine, font, INTRO_FONT_SIZE, maxLineWidth);
+    for (let i = 0; i < bulletLines.length; i++) {
+      const line = bulletLines[i];
+      const drawX = i === 0 ? textX : bulletContinuationX;
+      page.drawText(line, { x: drawX, y, size: INTRO_FONT_SIZE, font, color: rgb(0, 0, 0) });
+      y -= INTRO_LINE_HEIGHT;
+    }
+    y -= INTRO_BULLET_GAP;
+  }
+
+  // Minimum 40pt gap between letter body and signature block
+  y -= INTRO_BODY_TO_SIGNATURE_GAP;
+
+  // Signature block — unchanged
   page.drawText('Kind regards,', { x: textX, y, size: 11, font, color: rgb(0, 0, 0) });
   y -= 11 + 8;
   page.drawText('Omiah Travis', { x: textX, y, size: 11, font: boldFont, color: rgb(0, 0, 0) });
@@ -284,7 +334,7 @@ async function generateIntroductionPage(intro: SimpleIntro): Promise<PDFDocument
     font,
     color: rgb(0, 0, 0),
   });
-  
+
   return template;
 }
 
