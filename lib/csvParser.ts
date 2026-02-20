@@ -16,7 +16,7 @@ const DEFAULT_OFFICE = 10;
 const DEFAULT_TAX = 10;
 
 /**
- * Parse a CSV row handling quoted fields with commas
+ * Parse a CSV row handling quoted fields with commas (RFC 4180: "" escapes a quote)
  */
 function parseCSVRow(line: string): string[] {
   const result: string[] = [];
@@ -26,10 +26,14 @@ function parseCSVRow(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
     if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (inQuotes) {
-      current += char;
-    } else if (char === ',') {
+      if (inQuotes && line[i + 1] === '"') {
+        // Escaped quote — emit one " and skip next
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (!inQuotes && char === ',') {
       result.push(current.trim());
       current = '';
     } else {
@@ -273,8 +277,8 @@ export function parseEstimateCSV(csvText: string): ParseResult {
   totals.materials += consumablesTotal;
   totals.consumables = consumablesTotal;
 
-  // Build buildings: group materials-only lineItems by building value (order: names first, Project last)
-  const materialsItems = lineItems.filter((item) => item.category === 'materials');
+  // Build buildings: group materials-only by building value (exclude consumables, labor, equipment, accessories, schafer)
+  const materialsItems = byCategory.materials.filter((item) => item.id !== 'consumables');
   const buildingOrder: string[] = [];
   const seen = new Set<string>();
   for (const item of materialsItems) {
