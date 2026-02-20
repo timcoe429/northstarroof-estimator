@@ -273,10 +273,11 @@ export function parseEstimateCSV(csvText: string): ParseResult {
   totals.materials += consumablesTotal;
   totals.consumables = consumablesTotal;
 
-  // Build buildings: group lineItems by building value (order: names first, Project last)
+  // Build buildings: group materials-only lineItems by building value (order: names first, Project last)
+  const materialsItems = lineItems.filter((item) => item.category === 'materials');
   const buildingOrder: string[] = [];
   const seen = new Set<string>();
-  for (const item of lineItems) {
+  for (const item of materialsItems) {
     const b = (item.building ?? '').trim();
     const key = b || 'Project';
     if (!seen.has(key)) {
@@ -290,7 +291,7 @@ export function parseEstimateCSV(csvText: string): ParseResult {
     buildingOrder.push('Project');
   }
   const buildingMap = new Map<string, LineItem[]>();
-  for (const item of lineItems) {
+  for (const item of materialsItems) {
     const key = (item.building ?? '').trim() || 'Project';
     if (!buildingMap.has(key)) buildingMap.set(key, []);
     buildingMap.get(key)!.push(item);
