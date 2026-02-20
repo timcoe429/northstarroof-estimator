@@ -1,4 +1,4 @@
-import type { Estimate, LineItem, Measurements, CustomerInfo } from '@/types';
+import type { Estimate, LineItem, Measurements, CustomerInfo, BuildingGroup } from '@/types';
 
 const VALID_CATEGORIES = ['materials', 'labor', 'equipment', 'accessories', 'schafer'] as const;
 type Category = (typeof VALID_CATEGORIES)[number];
@@ -203,6 +203,7 @@ export function parseEstimateCSV(csvText: string): ParseResult {
     const total = toNum(getCell('total'));
     const category = normalizeCategory(categoryRaw);
     const isOptional = isOptionalFromNotes(getCell('notes'));
+    const building = getCell('building') || '';
 
     const item: LineItem = {
       id: `csv_${i}`,
@@ -217,6 +218,7 @@ export function parseEstimateCSV(csvText: string): ParseResult {
       total: total || quantity * (price || 0),
       wasteAdded: 0,
       isOptional,
+      building,
       ...(proposalDescription ? { proposalDescription } : {}),
     };
 
@@ -271,6 +273,37 @@ export function parseEstimateCSV(csvText: string): ParseResult {
   totals.materials += consumablesTotal;
   totals.consumables = consumablesTotal;
 
+  // Build buildings: group lineItems by building value (order: names first, Project last)
+  const buildingOrder: string[] = [];
+  const seen = new Set<string>();
+  for (const item of lineItems) {
+    const b = (item.building ?? '').trim();
+    const key = b || 'Project';
+    if (!seen.has(key)) {
+      seen.add(key);
+      buildingOrder.push(key);
+    }
+  }
+  const projectIdx = buildingOrder.findIndex((k) => k.toLowerCase() === 'project');
+  if (projectIdx >= 0) {
+    buildingOrder.splice(projectIdx, 1);
+    buildingOrder.push('Project');
+  }
+  const buildingMap = new Map<string, LineItem[]>();
+  for (const item of lineItems) {
+    const key = (item.building ?? '').trim() || 'Project';
+    if (!buildingMap.has(key)) buildingMap.set(key, []);
+    buildingMap.get(key)!.push(item);
+  }
+  const buildings: BuildingGroup[] = buildingOrder.map((name) => {
+    const items = buildingMap.get(name) ?? [];
+    return {
+      name,
+      items,
+      subtotal: items.reduce((s, i) => s + i.total, 0),
+    };
+  });
+
   const customerInfo: CustomerInfo = {
     name: customerName,
     address: customerAddress,
@@ -312,6 +345,7 @@ export function parseEstimateCSV(csvText: string): ParseResult {
     measurements: MINIMAL_MEASUREMENTS,
     customerInfo,
     generatedAt: new Date().toLocaleString(),
+    buildings,
     ...(introLetterParts.length > 0 ? { introLetterText: introLetterParts.join('\n\n') } : {}),
   };
 

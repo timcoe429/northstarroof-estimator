@@ -36,6 +36,7 @@ export interface LineItem extends PriceItem {
   proposalDescription?: string;
   isCustomItem?: boolean;
   isOptional?: boolean;
+  building?: string;
   manualOverrides?: {
     quantity?: boolean;
     price?: boolean;
@@ -47,6 +48,12 @@ export interface GroupedLineItem extends LineItem {
   isKit: boolean;
   subtitle?: string;
   kitItems?: LineItem[];
+}
+
+export interface BuildingGroup {
+  name: string;
+  items: LineItem[];
+  subtotal: number;
 }
 
 export interface CustomerInfo {
@@ -100,6 +107,7 @@ export interface Estimate {
   customerInfo: CustomerInfo;
   generatedAt: string;
   introLetterText?: string;
+  buildings?: BuildingGroup[];
 }
 
 export interface SavedQuote {
