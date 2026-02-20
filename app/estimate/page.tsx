@@ -429,30 +429,115 @@ export default function EstimatePage() {
                           <div className="mt-2 rounded-lg border border-[#E5E7EB] overflow-hidden bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
                             <table className="w-full">
                               <tbody className="divide-y divide-[#E5E7EB]">
-                                {displayItems.map((item, idx) => (
-                                  <tr
-                                    key={item.id}
-                                    className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFB]'}
-                                  >
-                                    <td className="px-6 py-4 text-sm font-medium text-[#1F2937]">
-                                      <span className="font-semibold">{item.name}</span>
-                                      {(item as LineItem).proposalDescription && (
-                                        <>
-                                          <span> — </span>
-                                          <span className="italic">{(item as LineItem).proposalDescription}</span>
-                                        </>
-                                      )}
-                                      {(item as { subtitle?: string }).subtitle && (
-                                        <p className="text-xs text-[#6B7280] font-normal mt-1">
-                                          {(item as { subtitle?: string }).subtitle}
-                                        </p>
-                                      )}
-                                    </td>
-                                    <td className="px-6 py-4 text-right text-sm font-semibold text-[#1F2937] whitespace-nowrap">
-                                      {formatCurrency(item.total)}
-                                    </td>
-                                  </tr>
-                                ))}
+                                {cat === 'materials' &&
+                                recalculatedEstimate.buildings &&
+                                recalculatedEstimate.buildings.length > 1 ? (
+                                  <>
+                                    {recalculatedEstimate.buildings.map((building, bIdx) => (
+                                      <React.Fragment key={building.name}>
+                                        <tr>
+                                          <td
+                                            colSpan={2}
+                                            className={`text-sm font-semibold text-gray-500 uppercase tracking-wide px-4 ${
+                                              bIdx === 0 ? 'pt-0 pb-1' : 'pt-4 pb-1'
+                                            }`}
+                                          >
+                                            {building.name}
+                                          </td>
+                                        </tr>
+                                        {building.items.map((item, idx) => (
+                                          <tr
+                                            key={item.id}
+                                            className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFB]'}
+                                          >
+                                            <td className="px-6 py-4 text-sm font-medium text-[#1F2937]">
+                                              <span className="font-semibold">{item.name}</span>
+                                              {(item as LineItem).proposalDescription && (
+                                                <>
+                                                  <span> — </span>
+                                                  <span className="italic">{(item as LineItem).proposalDescription}</span>
+                                                </>
+                                              )}
+                                              {(item as { subtitle?: string }).subtitle && (
+                                                <p className="text-xs text-[#6B7280] font-normal mt-1">
+                                                  {(item as { subtitle?: string }).subtitle}
+                                                </p>
+                                              )}
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-sm font-semibold text-[#1F2937] whitespace-nowrap">
+                                              {formatCurrency(item.total)}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                        <tr>
+                                          <td
+                                            colSpan={2}
+                                            className="text-sm text-gray-500 text-right px-4 py-1 border-t border-gray-100"
+                                          >
+                                            {building.name} Subtotal: {formatCurrency(building.subtotal)}
+                                          </td>
+                                        </tr>
+                                      </React.Fragment>
+                                    ))}
+                                    {(() => {
+                                      const buildingItemIds = new Set(
+                                        recalculatedEstimate.buildings!.flatMap((b) => b.items.map((i) => i.id))
+                                      );
+                                      const orphanMaterials = (recalculatedEstimate.byCategory.materials ?? []).filter(
+                                        (m) => !buildingItemIds.has(m.id)
+                                      );
+                                      return orphanMaterials.map((item, idx) => (
+                                        <tr
+                                          key={item.id}
+                                          className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFB]'}
+                                        >
+                                          <td className="px-6 py-4 text-sm font-medium text-[#1F2937]">
+                                            <span className="font-semibold">{item.name}</span>
+                                            {(item as LineItem).proposalDescription && (
+                                              <>
+                                                <span> — </span>
+                                                <span className="italic">{(item as LineItem).proposalDescription}</span>
+                                              </>
+                                            )}
+                                            {(item as { subtitle?: string }).subtitle && (
+                                              <p className="text-xs text-[#6B7280] font-normal mt-1">
+                                                {(item as { subtitle?: string }).subtitle}
+                                              </p>
+                                            )}
+                                          </td>
+                                          <td className="px-6 py-4 text-right text-sm font-semibold text-[#1F2937] whitespace-nowrap">
+                                            {formatCurrency(item.total)}
+                                          </td>
+                                        </tr>
+                                      ));
+                                    })()}
+                                  </>
+                                ) : (
+                                  displayItems.map((item, idx) => (
+                                    <tr
+                                      key={item.id}
+                                      className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFB]'}
+                                    >
+                                      <td className="px-6 py-4 text-sm font-medium text-[#1F2937]">
+                                        <span className="font-semibold">{item.name}</span>
+                                        {(item as LineItem).proposalDescription && (
+                                          <>
+                                            <span> — </span>
+                                            <span className="italic">{(item as LineItem).proposalDescription}</span>
+                                          </>
+                                        )}
+                                        {(item as { subtitle?: string }).subtitle && (
+                                          <p className="text-xs text-[#6B7280] font-normal mt-1">
+                                            {(item as { subtitle?: string }).subtitle}
+                                          </p>
+                                        )}
+                                      </td>
+                                      <td className="px-6 py-4 text-right text-sm font-semibold text-[#1F2937] whitespace-nowrap">
+                                        {formatCurrency(item.total)}
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
                               </tbody>
                             </table>
                           </div>
