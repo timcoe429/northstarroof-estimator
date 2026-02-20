@@ -430,26 +430,6 @@ export default function EstimatePage() {
                             <table className="w-full">
                               <tbody className="divide-y divide-[#E5E7EB]">
                                 {cat === 'materials' &&
-                                  (() => {
-                                    const isMultiBuilding = !!(
-                                      recalculatedEstimate.buildings &&
-                                      recalculatedEstimate.buildings.length > 1
-                                    );
-                                    console.log(
-                                      'DEBUG buildings:',
-                                      JSON.stringify(
-                                        recalculatedEstimate.buildings?.map((b) => ({
-                                          name: b.name,
-                                          count: b.items.length,
-                                        })),
-                                        null,
-                                        2
-                                      )
-                                    );
-                                    console.log('DEBUG isMultiBuilding:', isMultiBuilding);
-                                    return null;
-                                  })()}
-                                {cat === 'materials' &&
                                 recalculatedEstimate.buildings &&
                                 recalculatedEstimate.buildings.length > 1 ? (
                                   <>
