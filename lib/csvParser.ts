@@ -77,6 +77,9 @@ function normalizeCategory(value: string): Category {
   const v = value.toLowerCase().trim();
   if (v === 'material' || v === 'mats') return 'materials';
   if (v === 'vendor' || v === 'schafer') return 'schafer';
+  if (v === 'equipment & fees' || v === 'equipment and fees' || v === 'equipment') return 'equipment';
+  if (v === 'accessories' || v === 'accessory') return 'accessories';
+  if (v === 'labor') return 'labor';
   if (VALID_CATEGORIES.includes(v as Category)) return v as Category;
   return 'materials'; // default
 }
@@ -278,7 +281,8 @@ export function parseEstimateCSV(csvText: string): ParseResult {
   totals.consumables = consumablesTotal;
 
   // Build buildings: group materials-only by building value (exclude consumables, labor, equipment, accessories, schafer)
-  const materialsItems = byCategory.materials.filter((item) => item.id !== 'consumables');
+  const materialsItems = byCategory.materials
+    .filter((item) => item.id !== 'consumables' && item.category === 'materials');
   const buildingOrder: string[] = [];
   const seen = new Set<string>();
   for (const item of materialsItems) {
