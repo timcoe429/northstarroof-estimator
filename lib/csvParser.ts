@@ -281,8 +281,19 @@ export function parseEstimateCSV(csvText: string): ParseResult {
   totals.consumables = consumablesTotal;
 
   // Build buildings: group materials-only by building value (exclude consumables, labor, equipment, accessories, schafer)
+  const isBogusBuilding = (b: string) => (b || '').toLowerCase().trim() === 'step';
+  const isNonMaterialName = (name: string) => {
+    const n = name.toLowerCase().trim();
+    return n === 'introduction letter' || n === 'unnamed item';
+  };
   const materialsItems = byCategory.materials
-    .filter((item) => item.id !== 'consumables' && item.category === 'materials');
+    .filter(
+      (item) =>
+        item.id !== 'consumables' &&
+        item.category === 'materials' &&
+        !isBogusBuilding(item.building ?? '') &&
+        !isNonMaterialName(item.name)
+    );
   const buildingOrder: string[] = [];
   const seen = new Set<string>();
   for (const item of materialsItems) {
