@@ -22,7 +22,7 @@ Tag this deployment in Vercel as stable.
 ## What's Next
 1. Tim to update Claude project Instructions file with rule: Description field must use literal `\n\n` not real newlines
 2. Regenerate 501 W Main St CSV and retest
-3. Phase 3: PDF generation with multi-building layout
+3. ~~Phase 3: PDF generation with multi-building layout~~ Done 2/21/2026
 4. Decimal cleanup on PDF prices
 
 ## Multi-Building (Track 2) — Status 2/20/2026
@@ -30,6 +30,7 @@ Tag this deployment in Vercel as stable.
 ### Complete
 - Phase 1: Data model (BuildingGroup type, building field on LineItem)
 - Phase 2: UI display with building headers and per-building subtotals
+- Phase 3: PDF per-building material sections (generateProposal.ts branches when buildings.length > 1; building headers, orphan materials, then accessories/labor/equipment flat)
 - Pre-existing build errors fixed (deleted dead RoofScopeEstimator.tsx)
 - CSV parser: RFC 4180 quote handling (parseCSVRow); real newlines in quoted fields still break parsing
 - Buildings array filtered to materials only (excludes consumables, equipment, intro/unnamed items)

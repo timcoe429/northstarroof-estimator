@@ -273,6 +273,11 @@
 - **Why**: Real newlines inside quoted CSV fields break the parser into fake rows. Single-building CSVs already do this correctly; multi-building intro letter was using real newlines.
 - **Impact**: Claude project Instructions must specify: Description field must use literal `\n\n` for paragraph breaks, not real newline characters.
 
+## 2/21/2026 - Multi-Building PDF Per-Building Sections
+- **Feature**: When estimate.buildings.length > 1, PDF renders one materials section per building with building name headers (Cabin 2, Cabin 3, etc.)
+- **Implementation**: generateProposal.ts generateLineItemPages branches; multi-building path iterates estimate.buildings, groupItemsIntoKits per building.items, appends orphan materials (consumables), then schafer, accessories, labor, equipment flat
+- **Single-building**: Unchanged — existing flat allItems when buildings missing or length ≤ 1
+
 ## 2/20/2026 - Share Link Bug Fixes
 - **Bug 1 (path-only URL):** createShareableLink ran server-side where window was undefined; baseUrl fell back to ''. Fixed: use NEXT_PUBLIC_URL with fallback to https://estimator.northstarroof.com. NEXT_PUBLIC_URL must be set in Vercel.
 - **Bug 2 (Estimate Not Found):** estimates RLS blocked anon reads. Added policy estimates_select_via_share_token allowing SELECT when valid non-expired share_tokens row exists (migration 20260220).
