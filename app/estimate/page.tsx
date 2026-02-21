@@ -727,7 +727,7 @@ export default function EstimatePage() {
                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowShareModal(false)}>
                     <div className="bg-white rounded-xl p-6 max-w-lg w-full shadow-xl" onClick={(e) => e.stopPropagation()}>
                       <h3 className="text-lg font-bold text-[#1F2937] mb-2">Share with Owner</h3>
-                      <p className="text-sm text-[#6B7280] mb-4">Owner can view &amp; adjust estimate for 24 hours. PDF is emailed separately.</p>
+                      <p className="text-sm text-[#6B7280] mb-4">Owner can view &amp; adjust estimate for 14 days. PDF is emailed separately.</p>
                       <div className="flex gap-2 mb-4">
                         <input
                           readOnly
@@ -742,7 +742,7 @@ export default function EstimatePage() {
                           {copied ? 'Copied' : 'Copy'}
                         </button>
                       </div>
-                      <p className="text-xs text-[#6B7280]">Expires in 24 hours</p>
+                      <p className="text-xs text-[#6B7280]">Expires in 14 days</p>
                       <button
                         onClick={() => setShowShareModal(false)}
                         className="mt-4 w-full py-2 border-2 border-[#E5E7EB] rounded-lg font-medium hover:bg-[#F8FAFB] transition-colors"

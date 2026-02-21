@@ -24,7 +24,7 @@ function ExpiredLinkPage() {
       <div className="p-8 text-center max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200">
         <h1 className="text-2xl font-bold text-gray-900 mb-4">Link Expired</h1>
         <p className="text-gray-600 mb-2">
-          This estimate link has expired (24-hour limit).
+          This estimate link has expired (14-day limit).
         </p>
         <p className="text-gray-500 text-sm">
           Contact Northstar Roofing to request a new link.
@@ -215,7 +215,7 @@ export default function SharePage() {
       <div className="max-w-5xl mx-auto px-6 py-12">
         <div className="mb-8 p-4 bg-blue-50 border border-[#0066CC]/20 rounded-lg">
           <p className="text-sm text-[#003366]">
-            <strong>Shared Estimate:</strong> View &amp; adjust financials for 24 hours. PDF is emailed separately.
+            <strong>Shared Estimate:</strong> View &amp; adjust financials for 14 days. PDF is emailed separately.
           </p>
         </div>
 

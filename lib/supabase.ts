@@ -595,7 +595,7 @@ export async function createShareableLink(
   const saved = await saveQuote(estimate, quoteName, userId, companyId, undefined, client);
 
   const token = generateRandomToken(32);
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
   const { error } = await client.from('share_tokens').insert({
     estimate_id: saved.id,
