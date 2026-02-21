@@ -374,20 +374,52 @@ async function generateLineItemPages(estimate: Estimate): Promise<PDFDocument[]>
 
   // Section order: MATERIALS (includes consumables line), ACCESSORIES, LABOR, EQUIPMENT, OPTIONAL
   const accessoriesItems = groupItemsIntoKits(estimate.byCategory.accessories || []);
-  const materialsItems = groupItemsIntoKits(estimate.byCategory.materials || []);
   const schaferItems = estimate.byCategory.schafer || [];
   const laborItems = estimate.byCategory.labor;
   const equipmentItems = estimate.byCategory.equipment;
   const optionalItems = estimate.optionalItems || [];
 
-  const allItems: Array<{ item: LineItem & { subtitle?: string }; section: string; isOptional?: boolean }> = [
-    ...materialsItems.map((item) => ({ item, section: sectionHeaders.materials })),
-    ...schaferItems.map((item) => ({ item, section: sectionHeaders.materials })),
-    ...accessoriesItems.map((item) => ({ item, section: sectionHeaders.accessories })),
-    ...laborItems.map((item) => ({ item, section: sectionHeaders.labor })),
-    ...equipmentItems.map((item) => ({ item, section: sectionHeaders.equipment })),
-    ...optionalItems.map((item) => ({ item, section: 'OPTIONAL ITEMS (Not Included in Quote Total)', isOptional: true })),
-  ];
+  let allItems: Array<{ item: LineItem & { subtitle?: string }; section: string; isOptional?: boolean }>;
+
+  if (estimate.buildings && estimate.buildings.length > 1) {
+    // Multi-building: per-building material sections, then orphans, schafer, accessories, labor, equipment
+    const buildingItemIds = new Set(estimate.buildings.flatMap((b) => b.items.map((i) => i.id)));
+    const orphanMaterials = (estimate.byCategory.materials ?? []).filter((m) => !buildingItemIds.has(m.id));
+    const orphanGrouped = groupItemsIntoKits(orphanMaterials);
+
+    const materialEntries: Array<{ item: LineItem & { subtitle?: string }; section: string; isOptional?: boolean }> = [];
+    for (const building of estimate.buildings) {
+      const grouped = groupItemsIntoKits(building.items);
+      for (const item of grouped) {
+        materialEntries.push({ item, section: building.name });
+      }
+    }
+    for (const item of orphanGrouped) {
+      materialEntries.push({ item, section: sectionHeaders.materials });
+    }
+    for (const item of schaferItems) {
+      materialEntries.push({ item, section: sectionHeaders.materials });
+    }
+
+    allItems = [
+      ...materialEntries,
+      ...accessoriesItems.map((item) => ({ item, section: sectionHeaders.accessories })),
+      ...laborItems.map((item) => ({ item, section: sectionHeaders.labor })),
+      ...equipmentItems.map((item) => ({ item, section: sectionHeaders.equipment })),
+      ...optionalItems.map((item) => ({ item, section: 'OPTIONAL ITEMS (Not Included in Quote Total)', isOptional: true })),
+    ];
+  } else {
+    // Single-building: existing flat layout
+    const materialsItems = groupItemsIntoKits(estimate.byCategory.materials || []);
+    allItems = [
+      ...materialsItems.map((item) => ({ item, section: sectionHeaders.materials })),
+      ...schaferItems.map((item) => ({ item, section: sectionHeaders.materials })),
+      ...accessoriesItems.map((item) => ({ item, section: sectionHeaders.accessories })),
+      ...laborItems.map((item) => ({ item, section: sectionHeaders.labor })),
+      ...equipmentItems.map((item) => ({ item, section: sectionHeaders.equipment })),
+      ...optionalItems.map((item) => ({ item, section: 'OPTIONAL ITEMS (Not Included in Quote Total)', isOptional: true })),
+    ];
+  }
 
   if (allItems.length === 0) {
     return pages;
